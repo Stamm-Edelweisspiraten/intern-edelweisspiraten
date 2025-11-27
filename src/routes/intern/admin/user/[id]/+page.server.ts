@@ -32,16 +32,22 @@ export const actions: Actions = {
         const id = form.get("id") as string;
         const name = form.get("name") as string;
         const email = form.get("email") as string;
-        const memberId = form.get("memberId") as string;
+
+        // WICHTIG: memberId korrekt auslesen
+        let memberId = form.get("memberId") as string | null;
+
+        // Wenn leer → Member entfernen
+        if (!memberId || memberId.trim() === "") {
+            memberId = null;
+        }
 
         await updateUser(id, {
             name,
             email,
-            memberId: memberId || null
+            memberId
         });
 
-        return {
-            success: true
-        };
+        return { success: true };
     }
 };
+

@@ -138,6 +138,19 @@
                     </ul>
                 {/if}
             </div>
+            {#if memberId}
+                <button
+                        type="button"
+                        class="mt-2 text-red-600 text-sm underline"
+                        on:click={() => {
+            memberId = "";
+            search = "";
+        }}
+                >
+                    ❌ Mitglied entfernen
+                </button>
+            {/if}
+
 
             <!-- Hidden input für das Backend -->
             <input type="hidden" name="memberId" value={memberId} />
