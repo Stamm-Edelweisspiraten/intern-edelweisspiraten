@@ -36,6 +36,7 @@ export interface Member {
     entryDate: string;
     updatedAt: string;
     updatedBy: string;
+    inviteCode?: string;
 }
 
 
@@ -50,6 +51,12 @@ export async function createMember(member: Omit<Member, "_id" | "updatedAt"> & {
     };
 
     const res = await db.collection("members").insertOne(payload);
+
+    const memberId = res.insertedId.toString();
+
+    // 2. Invite-Code erzeugen & speichern
+    const code = await assignInviteCode(memberId);
+
     return { ...payload, _id: res.insertedId };
 }
 
@@ -141,14 +148,24 @@ export async function addUserToMember(memberId: string, userId: string) {
 }
 
 
-// -----------------------------------------------------
-//  UNLINK USER FROM MEMBER
-// -----------------------------------------------------
-/*export async function removeUserFromMember(memberId: string, userId: string) {
+export function generateInviteCode(): string {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "";
+
+    for (let i = 0; i < 6; i++) {
+        code += chars[Math.floor(Math.random() * chars.length)];
+    }
+
+    return code;
+}
+
+export async function assignInviteCode(memberId: string) {
+    const inviteCode = generateInviteCode();
+
     await db.collection("members").updateOne(
         { _id: new ObjectId(memberId) },
-        { $pull: { users: { $eq: userId } } }
+        { $set: { inviteCode } }
     );
-    return true;
+
+    return inviteCode;
 }
- */

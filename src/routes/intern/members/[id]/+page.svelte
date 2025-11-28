@@ -37,6 +37,42 @@
     function removeNumber(i: number) {
         numbers = numbers.filter((_, idx) => idx !== i);
     }
+
+    // Für User-Suche
+    let userSearch = "";
+    let showUserList = false;
+    let filteredUsers = data.allUsers;
+
+    // Member-ID
+    const memberId = data.member.id;
+    let displayMember = "";
+
+    // User-IDs initial
+    let memberUserIds = Array.isArray(data.member.userIds)
+        ? [...data.member.userIds]
+        : [];
+
+    // Autocomplete filtern
+    $: filteredUsers = (data.allUsers ?? []).filter(u =>
+        (u.name ?? "").toLowerCase().includes(userSearch.toLowerCase()) ||
+        (u.email ?? "").toLowerCase().includes(userSearch.toLowerCase()) ||
+        (u.id ?? "").toLowerCase().includes(userSearch.toLowerCase())
+    );
+
+    // User zuordnen
+    function addUser(uid: string) {
+        if (!memberUserIds.includes(uid)) {
+            memberUserIds = [...memberUserIds, uid];
+        }
+        userSearch = "";
+        showUserList = false;
+    }
+
+    // Entfernen
+    function removeUser(uid: string) {
+        memberUserIds = memberUserIds.filter(id => id !== uid);
+    }
+
 </script>
 
 
@@ -251,6 +287,105 @@
             </div>
 
         </form>
+
+    {/if}
+</div>
+
+<!-- ============================= -->
+<!--   USER-ZUORDNUNG (Autocomplete)   -->
+<!-- ============================= -->
+<div class="max-w-3xl mx-auto mt-12 p-8 bg-white rounded-2xl shadow-xl border border-gray-200">
+
+    <h2 class="text-2xl font-semibold mb-4 text-gray-900">
+        Benutzerzuordnung (User ↔ Mitglied)
+    </h2>
+
+    {#if mode === "edit"}
+
+        <form method="post" action="?/update-users" class="space-y-6">
+
+            <input type="hidden" name="memberId" value={memberId} />
+            <input type="hidden" name="userIds" value={JSON.stringify(memberUserIds)} />
+
+            <!-- User Autocomplete -->
+            <div class="relative">
+                <label class="block text-sm font-medium text-gray-600 mb-1">User hinzufügen</label>
+
+                <input
+                        type="text"
+                        placeholder="Name, E-Mail oder User-ID eingeben..."
+                        bind:value={userSearch}
+                        on:focus={() => showUserList = true}
+                        class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
+                           focus:ring-2 focus:ring-blue-500 outline-none transition"
+                />
+
+                {#if showUserList && filteredUsers.length > 0}
+                    <ul class="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg
+                               max-h-60 overflow-auto">
+
+                        {#each filteredUsers as u}
+                            <!-- nur User anzeigen die noch NICHT zugeordnet sind -->
+                            {#if !memberUserIds.includes(u.id)}
+                                <li
+                                        class="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+                                        on:click={() => addUser(u.id)}
+                                >
+                                    <strong>{u.name}</strong>
+                                    <span class="text-gray-500 ml-2">({u.email})</span>
+                                </li>
+                            {/if}
+                        {/each}
+                    </ul>
+                {/if}
+            </div>
+
+            <!-- Zugeordnete User -->
+            <div class="space-y-3 mt-4">
+                {#if memberUserIds.length > 0}
+                    {#each memberUserIds as uid}
+                        {#each (data.allUsers ?? []).filter(u => u.id === uid) as u}
+                            <div class="flex justify-between items-center bg-white border rounded-lg px-4 py-3 shadow-sm">
+                                <span>{u.name} ({u.email})</span>
+                                <button
+                                        type="button"
+                                        on:click={() => removeUser(uid)}
+                                        class="px-3 py-2 bg-red-100 text-red-700 rounded-lg"
+                                >
+                                    ✕ Entfernen
+                                </button>
+                            </div>
+                        {/each}
+                    {/each}
+                {:else}
+                    <p class="text-gray-500">Noch keine Benutzer zugeordnet.</p>
+                {/if}
+            </div>
+
+            <!-- Speichern -->
+            <button
+                    type="submit"
+                    class="mt-4 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow"
+            >
+                💾 Benutzer-Zuordnung speichern
+            </button>
+
+        </form>
+
+    {:else}
+
+        <!-- View Mode -->
+        {#if (data.member.userIds ?? []).length > 0}
+            <ul class="list-disc ml-5">
+                {#each (data.member.userIds ?? []) as uid}
+                    {#each (data.allUsers ?? []).filter(u => u.id === uid) as u}
+                        <li>{u.name} ({u.email})</li>
+                    {/each}
+                {/each}
+            </ul>
+        {:else}
+            — Keine Benutzer zugeordnet —
+        {/if}
 
     {/if}
 </div>

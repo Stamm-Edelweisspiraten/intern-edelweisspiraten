@@ -1,7 +1,7 @@
 import { db } from "$lib/server/mongo";
 import { AUTHENTIK_TOKEN, AUTHENTIK_URL } from '$env/static/private';
 import { ObjectId } from "mongodb";
-import * as crypto from "node:crypto"; // ESM-kompatibel
+import * as crypto from "node:crypto";
 
 import { welcomeTemplate } from "$lib/server/emailTemplates/welcome";
 
@@ -88,7 +88,7 @@ export async function createUser({ name, email, groups }: {
         name,
         email,
         groups,
-        memberId: null,
+        memberId: [],
         authentikId: null,
         createdAt: new Date()
     });
@@ -197,3 +197,30 @@ export async function getUser(id: string) {
 export async function getAllUsers() {
     return await db.collection("users").find().toArray();
 }
+
+export async function assignMemberToUser(userId: string, memberId: string) {
+    const mongoId = new ObjectId(userId);
+
+    const result = await db.collection("users").updateOne(
+        { _id: mongoId },
+        {
+            $addToSet: { memberIds: memberId }
+        }
+    );
+
+    return result.modifiedCount > 0;
+}
+
+export async function removeMemberFromUser(userId: string, memberId: string) {
+    const mongoId = new ObjectId(userId);
+
+    const result = await db.collection("users").updateOne(
+        { _id: mongoId },
+        {
+            $pull: { memberIds: memberId }
+        }
+    );
+
+    return result.modifiedCount > 0;
+}
+

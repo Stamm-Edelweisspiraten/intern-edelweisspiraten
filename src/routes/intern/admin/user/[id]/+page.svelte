@@ -6,30 +6,53 @@
     let email = data.user.email;
     const mode = data.scope === "edit" ? "edit" : "view";
 
-    // Felder aus User
-    let memberId = data.user.memberId ?? "";
+    // Mehrere Member pro User
+    let memberIds = Array.isArray(data.user.memberIds)
+        ? [...data.user.memberIds]
+        : [];
+
     let displayMember = "";
 
-    // Autocomplete State
-    let search = "";
-    let showList = false;
-    let suggestions: any[] = [];
+    // Member-Autocomplete
+    let memberSearch = "";
+    let memberShowList = false;
+    let memberSuggestions: any[] = [];
 
-    $: if (search.length > 0) {
-        suggestions = data.members.filter((m) =>
-            (m.firstname + " " + m.lastname).toLowerCase().includes(search.toLowerCase()) ||
-            m.id.toLowerCase().includes(search.toLowerCase())
-        );
-    } else {
-        suggestions = [];
-    }
+    // Autocomplete Filter
+    $: memberSuggestions =
+        memberSearch.length > 0
+            ? data.members.filter((m) =>
+                (m.firstname + " " + m.lastname)
+                    .toLowerCase()
+                    .includes(memberSearch.toLowerCase()) ||
+                m.id.toLowerCase().includes(memberSearch.toLowerCase())
+            )
+            : [];
 
-    $: if (memberId && search === "") {
-        const m = data.members.find(mem => mem.id === memberId);
-        if (m) {
-            displayMember = `${m.id} (${m.firstname} ${m.lastname})`;
+    // Autocomplete-Anzeige für bestehenden Wert
+    $: memberSearch === "" && memberIds.length === 1
+        ? (() => {
+            const m = data.members.find(mem => mem.id === memberIds[0]);
+            if (m) {
+                displayMember = `${m.id} (${m.firstname} ${m.lastname})`;
+            }
+        })()
+        : null;
+
+    function addMemberToUser(id: string) {
+        id = String(id);
+        if (!memberIds.includes(id)) {
+            memberIds = [...memberIds, id];
         }
     }
+
+    // Entfernen
+    function removeMemberFromUser(id: string) {
+        id = String(id);
+        memberIds = memberIds.filter(m => m !== id);
+    }
+
+
 </script>
 
 
@@ -104,58 +127,6 @@
                 />
             </div>
 
-            <!-- Member-ID Autocomplete -->
-            <div class="relative">
-                <label class="block text-sm font-medium text-gray-600 mb-1">Member</label>
-
-                <input
-                        type="text"
-                        placeholder="Member ID oder Name eingeben..."
-                        bind:value={search}
-                        on:focus={() => showList = true}
-                        class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
-               focus:ring-2 focus:ring-blue-500 outline-none transition"
-                />
-
-                {#if showList && suggestions.length > 0}
-                    <ul
-                            class="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg
-                   max-h-60 overflow-auto"
-                    >
-                        {#each suggestions as m}
-                            <li
-                                    class="px-4 py-2 hover:bg-blue-50 cursor-pointer"
-                                    on:click={() => {
-                        memberId = m.id;
-                        search = `${m.id} (${m.firstname} ${m.lastname})`;
-                        showList = false;
-                    }}
-                            >
-                                <strong>{m.firstname} {m.lastname}</strong>
-                                <span class="text-gray-500 text-sm ml-2">({m.id})</span>
-                            </li>
-                        {/each}
-                    </ul>
-                {/if}
-            </div>
-            {#if memberId}
-                <button
-                        type="button"
-                        class="mt-2 text-red-600 text-sm underline"
-                        on:click={() => {
-            memberId = "";
-            search = "";
-        }}
-                >
-                    ❌ Mitglied entfernen
-                </button>
-            {/if}
-
-
-            <!-- Hidden input für das Backend -->
-            <input type="hidden" name="memberId" value={memberId} />
-
-
             <div>
                 <label class="block text-sm font-medium text-gray-600 mb-1">User-ID</label>
                 <input
@@ -187,3 +158,109 @@
 
     {/if}
 </div>
+
+<!-- ============================= -->
+<!--   MEMBER-ZUORDNUNG (Autocomplete)   -->
+<!-- ============================= -->
+<div class="max-w-3xl mx-auto mt-12 p-8 bg-white rounded-2xl shadow-xl border border-gray-200">
+
+    <h2 class="text-2xl font-semibold mb-4 text-gray-900">
+        Mitgliederzuordnung (User ↔ Mitglied)
+    </h2>
+
+    {#if mode === "edit"}
+
+        <form method="post" action="?/update-members" class="space-y-6">
+
+            <input type="hidden" name="userId" value={data.user.id} />
+            <input type="hidden" name="memberIds" value={JSON.stringify(memberIds)} />
+
+            <!-- Member Autocomplete -->
+            <div class="relative">
+                <label class="block text-sm font-medium text-gray-600 mb-1">
+                    Member hinzufügen
+                </label>
+
+                <input
+                        type="text"
+                        placeholder="Name oder Member-ID eingeben..."
+                        bind:value={memberSearch}
+                        on:focus={() => memberShowList = true}
+                        class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
+                           focus:ring-2 focus:ring-blue-500 outline-none transition"
+                />
+
+                {#if memberShowList && memberSuggestions.length > 0}
+                    <ul
+                            class="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg
+                               max-h-60 overflow-auto"
+                    >
+                        {#each memberSuggestions as m}
+                            {#if !memberIds.includes(m.id)}
+                                <li
+                                        class="px-4 py-2 hover:bg-blue-50 cursor-pointer"
+                                        role="button"
+                                        tabindex="0"
+                                        on:click={() => addMemberToUser(m.id)}
+                                        on:keydown={(e) => e.key === "Enter" && addMemberToUser(m.id)}
+                                >
+                                    <strong>{m.firstname} {m.lastname}</strong>
+                                    <span class="text-gray-500 ml-2">({m.id})</span>
+                                </li>
+                            {/if}
+                        {/each}
+                    </ul>
+                {/if}
+            </div>
+
+            <!-- Zugeordnete Member -->
+            <div class="space-y-3 mt-4">
+                {#if memberIds.length > 0}
+                    {#each memberIds as id}
+                        {#each data.members.filter(m => m.id === id) as m}
+                            <div class="flex justify-between items-center bg-white border rounded-lg px-4 py-3 shadow-sm">
+                                <span>{m.firstname} {m.lastname} ({m.id})</span>
+                                <button
+                                        type="button"
+                                        on:click={() => removeMemberFromUser(id)}
+                                        class="px-3 py-2 bg-red-100 text-red-700 rounded-lg"
+                                >
+                                    ✕ Entfernen
+                                </button>
+                            </div>
+                        {/each}
+                    {/each}
+                {:else}
+                    <p class="text-gray-500">Keine Mitglieder zugeordnet.</p>
+                {/if}
+            </div>
+
+            <!-- Speichern -->
+            <button
+                    type="submit"
+                    class="mt-4 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow"
+            >
+                💾 Mitglieder-Zuordnung speichern
+            </button>
+
+        </form>
+
+    {:else}
+
+        <!-- VIEW MODE -->
+        {#if (data.user.memberIds ?? []).length > 0}
+            <ul class="list-disc ml-5">
+                {#each (data.user.memberIds ?? []) as id}
+                    {#each data.members.filter(m => m.id === id) as m}
+                        <li>{m.firstname} {m.lastname} ({m.id})</li>
+                    {/each}
+                {/each}
+            </ul>
+        {:else}
+            — Keine Mitglieder zugeordnet —
+        {/if}
+
+    {/if}
+</div>
+
+

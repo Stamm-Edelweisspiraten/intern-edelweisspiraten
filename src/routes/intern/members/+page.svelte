@@ -139,6 +139,15 @@
                             </button>
                         </form>
 
+                        <!-- Beitritts PDF -->
+                        <a
+                                href={`/intern/members/${m.id}/invite.pdf`}
+                                class="px-3 py-2 rounded-lg bg-red-400 hover:bg-red-500 transition text-red-700 shadow-sm"
+                        >
+                            📄
+                        </a>
+
+
                     </td>
 
                 </tr>

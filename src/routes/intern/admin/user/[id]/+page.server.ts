@@ -1,6 +1,9 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { getUser, updateUser } from "$lib/server/userService";
 import { getAllMembers } from "$lib/server/memberService";
+import {fail} from "@sveltejs/kit";
+import {db} from "$lib/server/mongo";
+import { ObjectId } from "mongodb";
 
 export const load: PageServerLoad = async ({ params, url }) => {
     const user = await getUser(params.id);
@@ -19,7 +22,8 @@ export const load: PageServerLoad = async ({ params, url }) => {
             name: user.name,
             email: user.email,
             memberId: user.memberId,
-            createdAt: user.createdAt
+            createdAt: user.createdAt,
+            memberIds: user.memberIds ?? []
         },
         members
     };
@@ -48,6 +52,24 @@ export const actions: Actions = {
         });
 
         return { success: true };
+    },
+
+    "update-members": async ({ request }) => {
+        const form = await request.formData();
+
+        const userId = form.get("userId")?.toString();
+        const memberIds = JSON.parse(form.get("memberIds")?.toString() ?? "[]");
+
+        if (!userId) return fail(400, { error: "User-ID fehlt" });
+
+        // 1. Alle Member von User entfernen
+        await db.collection("users").updateOne(
+            { _id: new ObjectId(userId) },
+            { $set: { memberIds: memberIds } }
+        );
+
+        return { success: true };
     }
+
 };
 
