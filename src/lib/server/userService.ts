@@ -1,9 +1,9 @@
-import { db } from "$lib/server/mongo";
-import { AUTHENTIK_TOKEN, AUTHENTIK_URL } from '$env/static/private';
-import { ObjectId } from "mongodb";
+import {db} from "$lib/server/mongo";
+import {AUTHENTIK_TOKEN, AUTHENTIK_URL} from '$env/static/private';
+import {ObjectId} from "mongodb";
 import * as crypto from "node:crypto";
 
-import { welcomeTemplate } from "$lib/server/emailTemplates/welcome";
+import {welcomeTemplate} from "$lib/server/emailTemplates/welcome";
 
 
 // -----------------------------------------------------
@@ -41,14 +41,14 @@ async function patchAuthentikUser(pk: number, data: Record<string, any>) {
 //  Helper: Gruppen vollständig setzen
 // -----------------------------------------------------
 export async function setAuthentikUserGroups(pk: number, groups: string[]) {
-    return await patchAuthentikUser(pk, { groups });
+    return await patchAuthentikUser(pk, {groups});
 }
 
 
 // -----------------------------------------------------
 //  Authentik User erstellen (OHNE Passwort!)
 // -----------------------------------------------------
-async function createAuthentikUser({ username, email, name }: {
+async function createAuthentikUser({username, email, name}: {
     username: string, email: string, name: string
 }) {
     const res = await fetch(`${AUTHENTIK_URL}/api/v3/core/users/`, {
@@ -77,29 +77,49 @@ async function createAuthentikUser({ username, email, name }: {
 // -----------------------------------------------------
 //  CREATE USER (Mongo + Authentik + Passwort + E-Mail)
 // -----------------------------------------------------
-export async function createUser({ name, email, groups }: {
-    name: string, email: string, groups: string[]
+export async function createUser({
+                                     name,
+                                     email,
+                                     type = "parent",
+                                     groups,
+                                     password: providedPassword
+                                 }: {
+    name: string,
+    email: string,
+    type: string,
+    groups: string[],
+    password?: string | null
 }) {
 
-    const { sendEmail } = await import("$lib/server/emailService");
+    const {sendEmail} = await import("$lib/server/emailService");
 
-    // 1) Mongo speichern
+    // ----------------------------------------------------
+    // 1) ZUERST MONGO USER ANLEGEN
+    // ----------------------------------------------------
     const mongoRes = await db.collection("users").insertOne({
         name,
         email,
+        type,
         groups,
-        memberId: [],
+        memberIds: [],
         authentikId: null,
         createdAt: new Date()
     });
 
-    // 2) Authentik User anlegen (OHNE Passwort)
-    const akUser = await createAuthentikUser({ username: email, email, name });
+    // ----------------------------------------------------
+    // 2) AUTHENTIK USER OHNE PASSWORT ERZEUGEN
+    // ----------------------------------------------------
+    const akUser = await createAuthentikUser({
+        username: email,
+        email,
+        name
+    });
 
-    // 3) Passwort generieren
-    const password = generatePassword();
+    // ----------------------------------------------------
+    // 3) PASSWORT SETZEN (entweder übergeben oder generiert)
+    // ----------------------------------------------------
+    const finalPassword = providedPassword || generatePassword();
 
-    // 4) Passwort korrekt setzen (richtiger Authentik Endpoint)
     const pwRes = await fetch(`${AUTHENTIK_URL}/api/v3/core/users/${akUser.pk}/set_password/`, {
         method: "POST",
         headers: {
@@ -107,37 +127,65 @@ export async function createUser({ name, email, groups }: {
             "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            password: password
+            password: finalPassword
         })
     });
 
     if (!pwRes.ok) {
-        const errTxt = await pwRes.text();
-        console.error("AUTHENTIK SET PASSWORD ERROR:", errTxt);
+        const err = await pwRes.text();
+        console.error("AUTHENTIK SET PASSWORD ERROR:", err);
         throw new Error("Authentik password setup failed");
     }
 
-    // 5) Gruppen vollständig setzen
+    // ----------------------------------------------------
+    // 4) GRUPPEN SETZEN
+    // ----------------------------------------------------
     await setAuthentikUserGroups(akUser.pk, groups);
 
-    // 6) authentikId zurück in Mongo
+    // ----------------------------------------------------
+    // 5) AUTHENTIK-ID in Mongo speichern
+    // ----------------------------------------------------
     await db.collection("users").updateOne(
-        { _id: mongoRes.insertedId },
-        { $set: { authentikId: akUser.pk } }
+        {_id: mongoRes.insertedId},
+        {$set: {authentikId: akUser.pk}}
     );
 
-    // 7) Willkommensmail senden
-    await sendEmail({
-        to: email,
-        subject: "Willkommen bei den Edelweißpiraten!",
-        html: welcomeTemplate(name, password),
-        text: `Hallo ${name},\nDein Passwort lautet: ${password}\nBitte ändere es nach dem Login.`
-    });
+    // ----------------------------------------------------
+    // 6) E-MAIL SENDEN
+    // ----------------------------------------------------
 
+    if (providedPassword) {
+        // 📧 Wenn Passwort selbst gewählt wurde → ohne Passwort
+        await sendEmail({
+            to: email,
+            subject: "Dein Benutzerkonto wurde erstellt",
+            html: `
+                <p>Hallo ${name},</p>
+                <p>dein Benutzerkonto wurde erfolgreich erstellt.</p>
+                <p>Du kannst dich jetzt mit deiner E-Mail-Adresse und deinem gewählten Passwort einloggen.</p>
+                <p>Viele Grüße<br>Edelweißpiraten Bremen</p>
+            `,
+            text: `Hallo ${name}, dein Konto wurde erstellt. Du kannst dich ab jetzt einloggen.`
+        });
+
+    } else {
+        // 📧 Wenn Passwort generiert wurde → Passwort mitsenden
+        await sendEmail({
+            to: email,
+            subject: "Dein Benutzerkonto wurde erstellt – Zugangsdaten",
+            html: welcomeTemplate(name, finalPassword),
+            text: `Hallo ${name},\nDein Passwort lautet: ${finalPassword}\nBitte ändere es nach dem Login.`
+        });
+    }
+
+    // ----------------------------------------------------
+    // 7) Rückgabe
+    // ----------------------------------------------------
     return {
         mongoId: mongoRes.insertedId,
         authentikId: akUser.pk,
-        password
+        password: finalPassword,
+        passwordWasGenerated: !providedPassword
     };
 }
 
@@ -147,12 +195,12 @@ export async function createUser({ name, email, groups }: {
 // -----------------------------------------------------
 export async function updateUser(id: string, data: any) {
     const mongoId = new ObjectId(id);
-    const user = await db.collection("users").findOne({ _id: mongoId });
+    const user = await db.collection("users").findOne({_id: mongoId});
 
     if (!user) throw new Error("User not found locally");
 
     // Mongo Update
-    await db.collection("users").updateOne({ _id: mongoId }, { $set: data });
+    await db.collection("users").updateOne({_id: mongoId}, {$set: data});
 
     // Authentik Update
     const akPatchData: Record<string, any> = {};
@@ -172,18 +220,45 @@ export async function updateUser(id: string, data: any) {
 // -----------------------------------------------------
 export async function deleteUser(id: string) {
     const mongoId = new ObjectId(id);
-    const user = await db.collection("users").findOne({ _id: mongoId });
+    const user = await db.collection("users").findOne({_id: mongoId});
 
     if (!user) return;
 
+    // -------------------------------------------
+    // 1) Authentik → User löschen
+    // -------------------------------------------
     if (user.authentikId) {
-        await fetch(`${AUTHENTIK_URL}/api/v3/core/users/${user.authentikId}/`, {
+        const res = await fetch(`${AUTHENTIK_URL}/api/v3/core/users/${user.authentikId}/`, {
             method: "DELETE",
-            headers: { "Authorization": `Bearer ${AUTHENTIK_TOKEN}` }
+            headers: {
+                "Authorization": `Bearer ${AUTHENTIK_TOKEN}`
+            }
         });
+
+        if (!res.ok) {
+            console.error("AUTHENTIK DELETE ERROR:", res.status, await res.text());
+        }
     }
 
-    return await db.collection("users").deleteOne({ _id: mongoId });
+
+    // -------------------------------------------
+    // 2) Member ↔ User Verknüpfungen lösen
+    // -------------------------------------------
+    await db.collection("members").updateMany(
+        {users: id},                     // alle Mitglieder, wo dieser User eingetragen ist
+        {$pull: {users: id}}           // diesen User aus "users" entfernen
+    );
+
+    // Falls du auch memberIds auf Userseite nutzt, sicherheitshalber:
+    await db.collection("members").updateMany(
+        {userIds: id},                   // falls noch altes Feld genutzt wurde
+        {$pull: {userIds: id}}
+    );
+
+    // -------------------------------------------
+    // 3) MongoDB → User löschen
+    // -------------------------------------------
+    return await db.collection("users").deleteOne({_id: mongoId});
 }
 
 
@@ -191,7 +266,7 @@ export async function deleteUser(id: string) {
 //  GETTERS
 // -----------------------------------------------------
 export async function getUser(id: string) {
-    return await db.collection("users").findOne({ _id: new ObjectId(id) });
+    return await db.collection("users").findOne({_id: new ObjectId(id)});
 }
 
 export async function getAllUsers() {
@@ -202,9 +277,9 @@ export async function assignMemberToUser(userId: string, memberId: string) {
     const mongoId = new ObjectId(userId);
 
     const result = await db.collection("users").updateOne(
-        { _id: mongoId },
+        {_id: mongoId},
         {
-            $addToSet: { memberIds: memberId }
+            $addToSet: {memberIds: memberId}
         }
     );
 
@@ -215,9 +290,9 @@ export async function removeMemberFromUser(userId: string, memberId: string) {
     const mongoId = new ObjectId(userId);
 
     const result = await db.collection("users").updateOne(
-        { _id: mongoId },
+        {_id: mongoId},
         {
-            $pull: { memberIds: memberId }
+            $pull: {memberIds: memberId}
         }
     );
 

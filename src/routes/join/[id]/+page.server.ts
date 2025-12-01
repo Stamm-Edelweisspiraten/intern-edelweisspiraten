@@ -30,7 +30,7 @@ export const load: PageServerLoad = async ({ params }) => {
 };
 
 export const actions: Actions = {
-    default: async ({ request, params }) => {
+    default: async ({ request, params, cookies  }) => {
         const form = await request.formData();
         const code = form.get("code")?.toString() ?? "";
         const memberId = params.id;
@@ -43,6 +43,12 @@ export const actions: Actions = {
         if (member.inviteCode !== code) {
             return fail(400, { error: "Ungültiger Einladungscode" });
         }
+
+        cookies.set(`join_verified_${memberId}`, "yes", {
+            path: "/",
+            httpOnly: false,
+            maxAge: 60 * 30 // 30 Minuten gültig
+        });
 
         throw redirect(303, `/join/${memberId}/register`);
     }

@@ -44,6 +44,18 @@
 
         <!-- COMING SOON -->
         <a
+                href="/intern/admin/groups"
+                class="p-8 bg-white rounded-2xl shadow-md border border-gray-200
+                   hover:shadow-lg hover:-translate-y-1 transition block"
+        >
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">👥 Gruppen</h2>
+            <p class="text-gray-600 text-sm">
+                Meuten und Sippen verwalten.
+            </p>
+        </a>
+
+        <!-- COMING SOON -->
+        <a
                 href="#"
                 class="p-8 bg-gray-50 rounded-2xl shadow-inner border border-gray-200
                    cursor-not-allowed opacity-60 block"
