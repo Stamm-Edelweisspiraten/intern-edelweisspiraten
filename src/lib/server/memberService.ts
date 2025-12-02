@@ -25,14 +25,14 @@ export interface Member {
     _id?: ObjectId;
     firstname: string;
     lastname: string;
-    birthday: string; // ISO String (Frontend parsed)
+    birthday: string;
     address: MemberAddress;
     stand: string;
     status: string;
     emails: MemberEmail[];
     numbers: MemberNumber[];
-    group: string;
-    users: string[]; // Liste von verknüpften UserIDs
+    group: string;      // Gruppen-ID
+    users: string[];
     entryDate: string;
     updatedAt: string;
     updatedBy: string;
@@ -43,7 +43,20 @@ export interface Member {
 // -----------------------------------------------------
 //  CREATE MEMBER
 // -----------------------------------------------------
-export async function createMember(member: Omit<Member, "_id" | "updatedAt"> & { updatedBy: string }) {
+export async function createMember(member: {
+    birthday: string;
+    emails: { label: string; email: string }[];
+    firstname: string;
+    address: { zip: string; city: string; street: string };
+    updatedBy: string;
+    entryDate: string;
+    numbers: { label: string; number: string }[];
+    groups: any;
+    stand: string;
+    users: any[];
+    lastname: string;
+    status: string
+}) {
 
     const payload = {
         ...member,
@@ -54,8 +67,8 @@ export async function createMember(member: Omit<Member, "_id" | "updatedAt"> & {
 
     const memberId = res.insertedId.toString();
 
-    // 2. Invite-Code erzeugen & speichern
-    const code = await assignInviteCode(memberId);
+    // Invite Code erzeugen
+    await assignInviteCode(memberId);
 
     return { ...payload, _id: res.insertedId };
 }
@@ -108,7 +121,7 @@ export async function deleteMember(id: string) {
 
 
 // -----------------------------------------------------
-//  SEARCH MEMBERS (Name, Gruppe, Status, Email, User-ID)
+//  SEARCH MEMBERS
 // -----------------------------------------------------
 export async function searchMembers(query: string) {
     if (!query || query.trim().length === 0) {
@@ -148,6 +161,9 @@ export async function addUserToMember(memberId: string, userId: string) {
 }
 
 
+// -----------------------------------------------------
+//  INVITE CODE
+// -----------------------------------------------------
 export function generateInviteCode(): string {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let code = "";
@@ -168,4 +184,70 @@ export async function assignInviteCode(memberId: string) {
     );
 
     return inviteCode;
+}
+
+
+// -----------------------------------------------------
+//  GROUP → MEMBER METHODS
+// -----------------------------------------------------
+
+/**
+ * Setzt die Gruppe eines Members
+ */
+export async function setMemberGroup(memberId: string, groupId: string) {
+    await db.collection("members").updateOne(
+        { _id: new ObjectId(memberId) },
+        {
+            $set: {
+                group: groupId,
+                updatedAt: new Date().toISOString()
+            }
+        }
+    );
+    return true;
+}
+
+
+/**
+ * Entfernt die Gruppe eines Members
+ */
+export async function removeMemberGroup(memberId: string) {
+    await db.collection("members").updateOne(
+        { _id: new ObjectId(memberId) },
+        {
+            $set: {
+                group: "",
+                updatedAt: new Date().toISOString()
+            }
+        }
+    );
+    return true;
+}
+
+
+/**
+ * Holt alle Mitglieder einer Gruppe
+ */
+export async function getMembersByGroup(groupId: string) {
+    return await db.collection("members")
+        .find({ group: groupId })
+        .toArray();
+}
+
+
+/**
+ * Entfernt eine Gruppe aus ALLEN Mitgliedern (z. B. beim Löschen der Gruppe)
+ */
+export async function unlinkGroupFromAllMembers(groupId: string) {
+    await db.collection("members").updateMany(
+        { group: groupId },
+        {
+            $set: {
+                group: "",
+                updatedAt: new Date().toISOString()
+            }
+        }
+    );
+
+    return true;
 }

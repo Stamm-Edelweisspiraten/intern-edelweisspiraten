@@ -1,5 +1,6 @@
 import { db } from "$lib/server/mongo";
 import { ObjectId } from "mongodb";
+import { unlinkGroupFromAllMembers } from "$lib/server/memberService";
 
 export interface Group {
     id?: string;
@@ -58,8 +59,14 @@ export async function updateGroup(id: string, data: {
 // -----------------------------------------------------
 // DELETE GROUP
 // -----------------------------------------------------
+
 export async function deleteGroup(id: string) {
     const mongoId = new ObjectId(id);
+
+    // 1) Gruppe aus allen Membern entfernen
+    await unlinkGroupFromAllMembers(id);
+
+    // 2) Gruppe löschen
     return await db.collection("groups").deleteOne({ _id: mongoId });
 }
 
