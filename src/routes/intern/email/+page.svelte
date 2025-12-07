@@ -4,12 +4,12 @@
 
     let subject = "";
     let bodyHtml = "";
-    let replyTo = data.group.replyTo ?? "";
+    let replyTo = data.replyToDefault ?? "";
     let sending = false;
     let successMsg = "";
     let errorMsg = "";
     let editorReady = false;
-    let selectedFiles: File[] = [];
+    let selectedFiles: { file: File; url: string }[] = [];
     const editorId = "group-mail-editor";
     let quillInstance: any = null;
 
@@ -78,6 +78,7 @@
             quillInstance.off("text-change");
             quillInstance = null;
         }
+        selectedFiles.forEach(({ url }) => URL.revokeObjectURL(url));
     });
 
     const submit = async (event: SubmitEvent) => {
@@ -92,8 +93,12 @@
             form.set("subject", subject);
             form.set("bodyHtml", currentHtml);
             form.set("replyTo", replyTo);
-            form.set("groupId", data.group.id);
-            selectedFiles.forEach((file) => form.append("attachments", file));
+            if (data.group?.id) form.set("groupId", data.group.id);
+            if (data.mode === "members") {
+                const ids = data.members.map((m: any) => m.id).join(",");
+                form.set("memberIds", ids);
+            }
+            selectedFiles.forEach(({ file }) => form.append("attachments", file));
 
             const res = await fetch("?/sendMail", {
                 method: "POST",
@@ -106,6 +111,7 @@
             successMsg = `Mail an ${json.sent} Empfaenger gesendet.`;
             subject = "";
             bodyHtml = "";
+            selectedFiles.forEach(({ url }) => URL.revokeObjectURL(url));
             selectedFiles = [];
             if (quillInstance) quillInstance.setText("");
         } catch (err: any) {
@@ -120,9 +126,13 @@
     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
             <p class="text-sm text-gray-500">E-Mail</p>
-            <h1 class="text-3xl font-bold text-gray-900 mt-1">{data.group.name}</h1>
+            <h1 class="text-3xl font-bold text-gray-900 mt-1">
+                {data.mode === "group" ? data.group.name : "Ausgewählte Mitglieder"}
+            </h1>
             <p class="text-gray-600 mt-2">
-                {data.group.description || "Keine Beschreibung"} · Treffen: {data.group.meeting_time || "k.A."}
+                {data.mode === "group"
+                    ? `${data.group.description || "Keine Beschreibung"} · Treffen: ${data.group.meeting_time || "k.A."}`
+                    : "Versende eine Nachricht an die ausgewählten Mitglieder."}
             </p>
         </div>
         <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm w-full sm:w-72">
@@ -134,13 +144,26 @@
                 <span>E-Mail Empfaenger</span>
                 <span class="font-semibold text-gray-900">{recipients.length}</span>
             </div>
+            {#if data.mode === "group"}
+                <div class="mt-3 text-xs text-gray-500">
+                    Gruppe: {data.group.name}
+                </div>
+            {:else}
+                <div class="mt-3 text-xs text-gray-500">
+                    Ausgewählte Mitglieder
+                </div>
+            {/if}
         </div>
     </div>
 
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
         <div class="flex items-center justify-between">
             <h2 class="text-xl font-semibold text-gray-900">Empfaenger</h2>
-            <a href={`/intern/groups/${data.group.id}`} class="text-sm text-blue-600 hover:underline">Zur Gruppe</a>
+            {#if data.mode === "group"}
+                <a href={`/intern/groups/${data.group.id}`} class="text-sm text-blue-600 hover:underline">Zur Gruppe</a>
+            {:else}
+                <a href={`/intern/members`} class="text-sm text-blue-600 hover:underline">Zur Mitgliederliste</a>
+            {/if}
         </div>
         <div class="divide-y divide-gray-200">
             {#each data.members as m}
@@ -198,14 +221,38 @@
                         class="w-full text-sm text-gray-700"
                         on:change={(e) => {
                             const target = e.target as HTMLInputElement;
-                            selectedFiles = target.files ? Array.from(target.files) : [];
+                            if (selectedFiles.length > 0) {
+                                selectedFiles.forEach(({ url }) => URL.revokeObjectURL(url));
+                            }
+                            selectedFiles = target.files
+                                ? Array.from(target.files).map((file) => ({
+                                    file,
+                                    url: URL.createObjectURL(file)
+                                }))
+                                : [];
                         }}
                 />
                 {#if selectedFiles.length > 0}
-                    <p class="text-xs text-gray-600 mt-1">
-                        {selectedFiles.length} Datei{selectedFiles.length === 1 ? "" : "en"} ausgewaehlt:
-                        {selectedFiles.map((f) => f.name).join(", ")}
-                    </p>
+                    <ul class="mt-2 space-y-2 text-sm text-gray-700">
+                        {#each selectedFiles as item, i}
+                            <li class="flex items-center gap-3">
+                                <span class="flex-1 truncate">{item.file.name}</span>
+                                <a class="text-blue-600 hover:underline" target="_blank" rel="noreferrer" href={item.url}>Ansehen</a>
+                                <button
+                                        type="button"
+                                        class="text-red-600 text-sm hover:underline"
+                                        on:click={() => {
+                                            const copy = [...selectedFiles];
+                                            const removed = copy.splice(i, 1);
+                                            removed.forEach(({ url }) => URL.revokeObjectURL(url));
+                                            selectedFiles = copy;
+                                        }}
+                                >
+                                    Entfernen
+                                </button>
+                            </li>
+                        {/each}
+                    </ul>
                 {/if}
             </div>
             <div class="flex items-center gap-3">

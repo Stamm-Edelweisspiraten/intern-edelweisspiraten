@@ -271,6 +271,19 @@ export async function getMembersByGroup(groupId: string) {
         .toArray();
 }
 
+/**
+ * Holt Mitglieder per ID-Liste
+ */
+export async function getMembersByIds(ids: string[]) {
+    if (!ids || ids.length === 0) return [];
+
+    const objectIds = ids.map((id) => new ObjectId(id));
+
+    return await db.collection("members")
+        .find({ _id: { $in: objectIds } })
+        .toArray();
+}
+
 
 /**
  * Entfernt eine Gruppe aus ALLEN Mitgliedern (z. B. beim Löschen der Gruppe)

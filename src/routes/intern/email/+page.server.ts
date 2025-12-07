@@ -1,29 +1,46 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { error, fail } from "@sveltejs/kit";
 import { getGroup } from "$lib/server/groupService";
-import { getMembersByGroup } from "$lib/server/memberService";
+import { getMembersByGroup, getMembersByIds } from "$lib/server/memberService";
 import { hasPermission } from "$lib/server/permissionService";
 
 export const load: PageServerLoad = async ({ url, locals }) => {
     const perms = locals.permissions ?? [];
-    if (!hasPermission(perms, "groups.view")) {
-        throw error(403, "Keine Berechtigung");
-    }
-
     const groupId = url.searchParams.get("group");
-    if (!groupId) {
-        throw error(400, "Keine Gruppe ausgewählt");
-    }
+    const memberIdsParam = url.searchParams.get("members");
 
-    const group = await getGroup(groupId);
-    if (!group) {
-        throw error(404, "Gruppe nicht gefunden");
-    }
+    let group = null;
+    let members: any[] = [];
+    let mode: "group" | "members" = "group";
 
-    const members = await getMembersByGroup(groupId);
+    if (groupId) {
+        if (!hasPermission(perms, "groups.view")) {
+            throw error(403, "Keine Berechtigung");
+        }
+        group = await getGroup(groupId);
+        if (!group) {
+            throw error(404, "Gruppe nicht gefunden");
+        }
+        members = await getMembersByGroup(groupId);
+        mode = "group";
+    } else if (memberIdsParam) {
+        if (!hasPermission(perms, "members.view")) {
+            throw error(403, "Keine Berechtigung");
+        }
+        const ids = memberIdsParam.split(",").map((id) => id.trim()).filter(Boolean);
+        if (ids.length === 0) {
+            throw error(400, "Keine Mitglieder ausgewählt");
+        }
+        members = await getMembersByIds(ids);
+        mode = "members";
+    } else {
+        throw error(400, "Keine Gruppe oder Mitglieder ausgewählt");
+    }
 
     return {
         group,
+        mode,
+        replyToDefault: locals.user?.userinfo?.email ?? group?.replyTo ?? "",
         members: members.map((m: any) => ({
             id: m._id.toString(),
             firstname: m.firstname,
@@ -35,19 +52,18 @@ export const load: PageServerLoad = async ({ url, locals }) => {
 
 export const actions: Actions = {
     sendMail: async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "groups.edit")) {
-            throw error(403, "Keine Berechtigung");
-        }
-
         const form = await request.formData();
         const subject = form.get("subject")?.toString() ?? "";
         const bodyHtml = form.get("bodyHtml")?.toString() ?? "";
         const replyToForm = form.get("replyTo")?.toString() ?? "";
         const groupId = form.get("groupId")?.toString() ?? "";
         const files = form.getAll("attachments");
+        const memberIdsParam = form.get("memberIds")?.toString() ?? "";
 
         if (!groupId) {
-            return fail(400, { error: "Keine Gruppe angegeben." });
+            if (!memberIdsParam) {
+                return fail(400, { error: "Keine Empfänger angegeben." });
+            }
         }
 
         const stripTags = (html: string) => html.replace(/<\/?[^>]+(>|$)/g, "");
@@ -57,12 +73,26 @@ export const actions: Actions = {
             return fail(400, { error: "Betreff und Nachricht sind Pflicht." });
         }
 
-        const group = await getGroup(groupId);
-        if (!group) {
-            throw error(404, "Gruppe nicht gefunden");
+        let group: any = null;
+        let members: any[] = [];
+
+        if (groupId) {
+            if (!hasPermission(locals.permissions ?? [], "groups.edit")) {
+                throw error(403, "Keine Berechtigung");
+            }
+            group = await getGroup(groupId);
+            if (!group) {
+                throw error(404, "Gruppe nicht gefunden");
+            }
+            members = await getMembersByGroup(groupId);
+        } else {
+            if (!hasPermission(locals.permissions ?? [], "members.edit")) {
+                throw error(403, "Keine Berechtigung");
+            }
+            const ids = memberIdsParam.split(",").map((id) => id.trim()).filter(Boolean);
+            members = await getMembersByIds(ids);
         }
 
-        const members = await getMembersByGroup(groupId);
         const emails = new Set<string>();
         members.forEach((m: any) => {
             (m.emails ?? []).forEach((e: any) => {
@@ -75,7 +105,7 @@ export const actions: Actions = {
         }
 
         const { sendEmail } = await import("$lib/server/emailService");
-        const reply = replyToForm || group.replyTo || "";
+        const reply = replyToForm || group?.replyTo || locals.user?.userinfo?.email || "";
 
         // Attachments aufbereiten
         const attachments: { filename?: string; content: Buffer; contentType?: string }[] = [];

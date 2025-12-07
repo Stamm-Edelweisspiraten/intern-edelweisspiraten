@@ -2,6 +2,7 @@
     export let data;
 
     let search = "";
+    let selected = new Set<string>();
     const groupMap = new Map(
         data.groups?.map((g) => [g.id, g.name]) ?? []
     );
@@ -31,15 +32,25 @@
 <div class="max-w-6xl mx-auto mt-12">
 
     <!-- Titel + Aktionen -->
-    <div class="flex justify-between items-center mb-8">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <h1 class="text-4xl font-bold text-gray-900">Mitgliederverwaltung</h1>
 
-        <a
-                href="/intern/members/create"
-                class="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition font-medium"
-        >
-            + Neues Mitglied
-        </a>
+        <div class="flex gap-3 flex-wrap">
+            <a
+                    href="/intern/members/create"
+                    class="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition font-medium"
+            >
+                + Neues Mitglied
+            </a>
+            <a
+                    class={`px-5 py-3 rounded-lg shadow transition font-medium ${selected.size > 0 ? "bg-green-600 hover:bg-green-700 text-white" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}
+                    aria-disabled={selected.size === 0}
+                    href={selected.size > 0 ? `/intern/email?members=${Array.from(selected).join(",")}` : undefined}
+                    on:click={(e) => { if (selected.size === 0) e.preventDefault(); }}
+            >
+                E-Mail an Auswahl ({selected.size})
+            </a>
+        </div>
     </div>
 
     <!-- SUCHFELD -->
@@ -58,6 +69,20 @@
         <table class="w-full text-left">
             <thead class="bg-gray-100 border-b border-gray-300">
             <tr>
+                <th class="px-4 py-4 text-sm font-semibold text-gray-700 w-12">
+                    <input type="checkbox"
+                           aria-label="Alle auswählen"
+                           on:change={(e) => {
+                               const checked = (e.target as HTMLInputElement).checked;
+                               if (checked) {
+                                   selected = new Set(filteredMembers.map((m: any) => m.id));
+                               } else {
+                                   selected = new Set();
+                               }
+                           }}
+                           checked={selected.size === filteredMembers.length && filteredMembers.length > 0}
+                    />
+                </th>
                 <th class="px-6 py-4 text-sm font-semibold text-gray-700">Name</th>
                 <th class="px-6 py-4 text-sm font-semibold text-gray-700">Gruppen</th>
                 <th class="px-6 py-4 text-sm font-semibold text-gray-700">Status</th>
@@ -71,6 +96,20 @@
 
             {#each filteredMembers as m}
                 <tr class="hover:bg-gray-50 transition">
+
+                    <td class="px-4 py-4">
+                        <input type="checkbox"
+                               aria-label="Mitglied auswählen"
+                               value={m.id}
+                               checked={selected.has(m.id)}
+                               on:change={(e) => {
+                                   const checked = (e.target as HTMLInputElement).checked;
+                                   const newSet = new Set(selected);
+                                   if (checked) newSet.add(m.id); else newSet.delete(m.id);
+                                   selected = newSet;
+                               }}
+                        />
+                    </td>
 
                     <!-- Name -->
                     <td class="px-6 py-4 font-medium text-gray-900">
