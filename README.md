@@ -1,58 +1,53 @@
-# Svelte library
+# Edelweisspiraten – Internes Portal
 
-Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).
+Modernes SvelteKit-Portal für Mitgliederverwaltung, Gruppen, Ämter und interne Kommunikation des Stamms Edelweisspiraten Bremen.
 
-Read more about creating a library [in the docs](https://svelte.dev/docs/kit/packaging).
+## Features
+- **Authentifizierung & Sessions**: Login/Logout, Session-Handling mit Berechtigungen.
+- **Mitgliederverwaltung**: Anlegen, Bearbeiten, Suchen; PDF-Einladungen; Mehrfach-E-Mail/Telefon.
+- **Gruppen**: Übersicht, Details, Mail an Gruppen, PDF-Export der Mitglieder (Querformat, Tabelle).
+- **Ämter**: Verwaltung mit Typen (Amt/Gruppenleiter), optionaler Gruppenbindung und E-Mail, Mehrfach-Mitglieder-Zuordnung.
+- **Admin-Bereich**: Benutzer, Berechtigungen, Gruppen, Ämter.
+- **Mailing**: E-Mail-Composer mit Quill, Anhänge, Reply-To-Auswahl (eigene Mail oder Amts-Mail), Mitglieder-/Gruppen-Selektor.
+- **Responsives UI**: Offcanvas/Fullscreen-Menü mobil, Karten-Ansichten für Mitglieder, konsistente helle Farbwelt.
 
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+## Schnellstart
+```bash
+npm install
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
+Standard: http://localhost:5173 (oder Port aus Logs).
 
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
+## Umgebung
+Erforderliche Variablen (siehe `.env`):
+- SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+- SESSION_SECRET
+- MongoDB-URL/DB (in `$lib/server/mongo`)
+- OAuth/OpenID Einstellungen (Login)
 
-## Building
+## Wichtige Routen
+- `/login`, `/logout`
+- `/intern` (geschützt)
+  - `/intern/dashboard`, `/intern/members`, `/intern/groups`, `/intern/email`
+  - `/intern/groups/[id]/members.pdf` (Gruppen-PDF)
+  - `/intern/members/[id]/invite.pdf` (Einladung)
+  - `/intern/admin/*` (Benutzer, Berechtigungen, Gruppen, Ämter)
 
-To build your library:
+## Technologie
+- SvelteKit, TypeScript, Tailwind-Basis
+- MongoDB als Datenspeicher
+- Nodemailer für Mailversand
+- pdfkit für PDF-Erzeugung
 
-```sh
-npm pack
-```
+## Entwicklung
+- `npm run dev` – Startet Dev-Server
+- `npm run build` – Produktionsbuild
+- `npm run preview` – Preview des Builds
 
-To create a production version of your showcase app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-
-## Publishing
-
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
-
-To publish your library to [npm](https://www.npmjs.com):
-
-```sh
-npm publish
-```
+## Tests
+Aktuell keine automatisierten Tests integriert. Bitte manuell Kernfunktionen prüfen:
+- Login/Logout
+- Mitglieder anlegen/bearbeiten, Einladungs-PDF
+- Gruppen-Mail und PDF-Export
+- Ämter anlegen/bearbeiten (Typ/Gruppe prüfen)
+- Reply-To-Auswahl und Versand im Mail-Composer
