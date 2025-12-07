@@ -11,9 +11,15 @@ export interface EmailOptions {
     subject: string;
     html?: string;
     text?: string;
+    replyTo?: string;
+    attachments?: {
+        filename?: string;
+        content: Buffer;
+        contentType?: string;
+    }[];
 }
 
-export async function sendEmail({ to, subject, html, text }: EmailOptions) {
+export async function sendEmail({ to, subject, html, text, replyTo, attachments }: EmailOptions) {
     const nodemailer: any = await import("nodemailer");
 
     // Transporter bauen
@@ -33,6 +39,8 @@ export async function sendEmail({ to, subject, html, text }: EmailOptions) {
         to,
         subject,
         html,
-        text
+        text,
+        replyTo,
+        attachments
     });
 }
