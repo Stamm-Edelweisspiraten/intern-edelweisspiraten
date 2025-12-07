@@ -38,11 +38,21 @@ export async function getPermissionsForUser(session: any): Promise<string[]> {
 
     // GroupPermissions aus DB holen (match via authentik-group-name)
     const groupEntries = await db.collection("groupPermissions")
-        .find({ groupPk: { $in: userGroups } })
+        .find({
+            $or: [
+                { groupPk: { $in: userGroups } },
+                { groupName: { $in: userGroups } }
+            ]
+        })
         .toArray();
 
     // flatten
-    const perms = groupEntries.flatMap(e => e.permissions ?? []);
+    let perms = groupEntries.flatMap(e => e.permissions ?? []);
+
+    // Fallback: ep-admin -> alles erlauben, falls keine expliziten Permissions gefunden
+    if (perms.length === 0 && userGroups.includes("ep-admin")) {
+        perms = ["*"];
+    }
 
     // debug
     console.log("User Groups:", userGroups);
@@ -83,10 +93,10 @@ export async function getPermissionsForGroup(groupPk: string) {
     return entry?.permissions ?? [];
 }
 
-export async function setPermissionsForGroup(groupPk: string, permissions: string[]) {
+export async function setPermissionsForGroup(groupPk: string, permissions: string[], groupName?: string) {
     await db.collection("groupPermissions").updateOne(
         { groupPk },
-        { $set: { groupPk, permissions } },
+        { $set: { groupPk, groupName, permissions } },
         { upsert: true }
     );
 }

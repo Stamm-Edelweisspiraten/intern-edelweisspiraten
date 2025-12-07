@@ -7,6 +7,7 @@
     let type = data.group?.type ?? "meute";
     let meeting_time = data.group?.meeting_time ?? "";
     let description = data.group?.description ?? "";
+    let replyTo = data.group?.replyTo ?? "";
 </script>
 
 <div class="max-w-3xl mx-auto mt-12">
@@ -52,6 +53,20 @@
             <input
                     name="meeting_time"
                     bind:value={meeting_time}
+                    required
+                    disabled={!editing}
+                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
+                    disabled:bg-gray-100 disabled:text-gray-500 disabled:border-gray-300"
+            />
+        </div>
+
+        <!-- Reply-To -->
+        <div>
+            <label class="font-medium">Reply-To (Pflicht für Mails)</label>
+            <input
+                    type="email"
+                    name="replyTo"
+                    bind:value={replyTo}
                     required
                     disabled={!editing}
                     class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white

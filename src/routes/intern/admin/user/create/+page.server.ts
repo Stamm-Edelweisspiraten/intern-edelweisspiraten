@@ -1,9 +1,14 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { AUTHENTIK_TOKEN, AUTHENTIK_URL } from "$env/static/private";
 import { createUser } from "$lib/server/userService";
-import { redirect } from "@sveltejs/kit";
+import { redirect, error } from "@sveltejs/kit";
+import { hasPermission } from "$lib/server/permissionService";
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async ({ locals }) => {
+    if (!hasPermission(locals.permissions ?? [], "user.create")) {
+        throw error(403, "Keine Berechtigung");
+    }
+
     // Authentik Gruppen laden
     const res = await fetch(`${AUTHENTIK_URL}/api/v3/core/groups/?page_size=1000`, {
         headers: {
@@ -19,7 +24,11 @@ export const load: PageServerLoad = async () => {
 };
 
 export const actions: Actions = {
-    createUser: async ({ request }) => {
+    createUser: async ({ request, locals }) => {
+        if (!hasPermission(locals.permissions ?? [], "user.create")) {
+            throw error(403, "Keine Berechtigung");
+        }
+
         const form = await request.formData();
 
         const name = form.get("name") as string;

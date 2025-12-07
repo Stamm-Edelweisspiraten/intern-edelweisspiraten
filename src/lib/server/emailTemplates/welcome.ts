@@ -1,4 +1,4 @@
-export function welcomeTemplate(name: string, password: string) {
+export function welcomeTemplate(name: string) {
     return `
 <!DOCTYPE html>
 <html lang="de" style="margin:0;padding:0;">
@@ -23,7 +23,7 @@ export function welcomeTemplate(name: string, password: string) {
                         <td align="center" style="padding-bottom:20px;">
                             <img
                                 src="https://edelweisspiraten-bremen.de/_app/immutable/assets/logo.968ba2ac.svg"
-                                alt="Edelweißpiraten Logo"
+                                alt="Edelweisspiraten Logo"
                                 width="80"
                                 style="display:block;margin:0 auto;"
                             />
@@ -39,26 +39,7 @@ export function welcomeTemplate(name: string, password: string) {
                     <tr>
                         <td style="font-size:16px;line-height:1.6;color:#4b5563;padding-bottom:24px;text-align:center;">
                             Dein Benutzerkonto wurde erfolgreich erstellt.<br />
-                            Hier sind deine Zugangsdaten:
-                        </td>
-                    </tr>
-
-                    <!-- Password Box -->
-                    <tr>
-                        <td align="center" style="padding-bottom:20px;">
-                            <div style="
-                                display:inline-block;
-                                background:#f3f4f6;
-                                border-radius:8px;
-                                padding:16px 24px;
-                                font-size:18px;
-                                font-weight:600;
-                                color:#111827;
-                                border:1px solid #e5e7eb;
-                                font-family:monospace;
-                            ">
-                                Passwort: ${password}
-                            </div>
+                            Bitte setze jetzt dein eigenes Passwort.
                         </td>
                     </tr>
 
@@ -68,14 +49,14 @@ export function welcomeTemplate(name: string, password: string) {
                             <a href="https://edelweisspiraten-bremen.de/login"
                                style="display:inline-block;padding:14px 28px;background:#2563eb;color:#ffffff;
                                       font-size:16px;font-weight:600;border-radius:8px;text-decoration:none;">
-                                Jetzt einloggen
+                                Zum Login
                             </a>
                         </td>
                     </tr>
 
                     <tr>
                         <td style="font-size:14px;line-height:1.6;color:#6b7280;text-align:center;padding-top:20px;">
-                            Bitte ändere dein Passwort nach dem ersten Login.<br />
+                            Nutze auf der Login-Seite die Funktion "Passwort vergessen", um ein neues Passwort zu setzen.<br />
                             Diese E-Mail wurde automatisch generiert.
                         </td>
                     </tr>

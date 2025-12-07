@@ -1,11 +1,16 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { getUser, updateUser } from "$lib/server/userService";
 import { getAllMembers } from "$lib/server/memberService";
-import {fail} from "@sveltejs/kit";
-import {db} from "$lib/server/mongo";
+import { fail, error } from "@sveltejs/kit";
+import { db } from "$lib/server/mongo";
 import { ObjectId } from "mongodb";
+import { hasPermission } from "$lib/server/permissionService";
 
-export const load: PageServerLoad = async ({ params, url }) => {
+export const load: PageServerLoad = async ({ params, url, locals }) => {
+    if (!hasPermission(locals.permissions ?? [], "user.view")) {
+        throw error(403, "Keine Berechtigung");
+    }
+
     const user = await getUser(params.id);
     if (!user) throw new Error("User not found");
 
@@ -30,7 +35,11 @@ export const load: PageServerLoad = async ({ params, url }) => {
 };
 
 export const actions: Actions = {
-    update: async ({ request }) => {
+    update: async ({ request, locals }) => {
+        if (!hasPermission(locals.permissions ?? [], "user.edit")) {
+            throw error(403, "Keine Berechtigung");
+        }
+
         const form = await request.formData();
 
         const id = form.get("id") as string;
@@ -40,7 +49,7 @@ export const actions: Actions = {
         // WICHTIG: memberId korrekt auslesen
         let memberId = form.get("memberId") as string | null;
 
-        // Wenn leer → Member entfernen
+        // Wenn leer -> Member entfernen
         if (!memberId || memberId.trim() === "") {
             memberId = null;
         }
@@ -54,7 +63,11 @@ export const actions: Actions = {
         return { success: true };
     },
 
-    "update-members": async ({ request }) => {
+    "update-members": async ({ request, locals }) => {
+        if (!hasPermission(locals.permissions ?? [], "user.edit")) {
+            throw error(403, "Keine Berechtigung");
+        }
+
         const form = await request.formData();
 
         const userId = form.get("userId")?.toString();
@@ -72,4 +85,3 @@ export const actions: Actions = {
     }
 
 };
-

@@ -31,12 +31,14 @@ export interface Member {
     status: string;
     emails: MemberEmail[];
     numbers: MemberNumber[];
-    group: string;      // Gruppen-ID
+    groups: string[];      // interne Gruppen-IDs
     users: string[];
     entryDate: string;
     updatedAt: string;
     updatedBy: string;
     inviteCode?: string;
+    inviteCodeExpiresAt?: string;
+    inviteCodeIssuedAt?: string;
 }
 
 
@@ -51,7 +53,7 @@ export async function createMember(member: {
     updatedBy: string;
     entryDate: string;
     numbers: { label: string; number: string }[];
-    groups: any;
+    groups: string[];
     stand: string;
     users: any[];
     lastname: string;
@@ -78,7 +80,16 @@ export async function createMember(member: {
 //  GET MEMBER BY ID
 // -----------------------------------------------------
 export async function getMember(id: string) {
-    return await db.collection("members").findOne({ _id: new ObjectId(id) });
+    const m = await db.collection("members").findOne({ _id: new ObjectId(id) });
+    if (!m) return null;
+    if (!m.groups || m.groups.length === 0) {
+        if (m.group) {
+            m.groups = [m.group];
+        } else {
+            m.groups = [];
+        }
+    }
+    return m;
 }
 
 
@@ -86,7 +97,17 @@ export async function getMember(id: string) {
 //  GET ALL MEMBERS
 // -----------------------------------------------------
 export async function getAllMembers() {
-    return await db.collection("members").find().toArray();
+    const list = await db.collection("members").find().toArray();
+    return list.map((m) => {
+        if (!m.groups || m.groups.length === 0) {
+            if (m.group) {
+                m.groups = [m.group];
+            } else {
+                m.groups = [];
+            }
+        }
+        return m;
+    });
 }
 
 
@@ -135,7 +156,7 @@ export async function searchMembers(query: string) {
             $or: [
                 { firstname: { $regex: q, $options: "i" } },
                 { lastname: { $regex: q, $options: "i" } },
-                { group: { $regex: q, $options: "i" } },
+                { groups: { $regex: q, $options: "i" } },
                 { status: { $regex: q, $options: "i" } },
                 { stand: { $regex: q, $options: "i" } },
                 { users: { $in: [q] } },
@@ -164,23 +185,39 @@ export async function addUserToMember(memberId: string, userId: string) {
 // -----------------------------------------------------
 //  INVITE CODE
 // -----------------------------------------------------
-export function generateInviteCode(): string {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+export async function generateInviteCode(): Promise<string> {
+    const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     let code = "";
 
-    for (let i = 0; i < 6; i++) {
-        code += chars[Math.floor(Math.random() * chars.length)];
+    // Kollisionen vermeiden
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+        code = "";
+        for (let i = 0; i < 10; i++) {
+            code += chars[Math.floor(Math.random() * chars.length)];
+        }
+
+        const existing = await db.collection("members").findOne({ inviteCode: code });
+        if (!existing) break;
     }
 
     return code;
 }
 
-export async function assignInviteCode(memberId: string) {
-    const inviteCode = generateInviteCode();
+export async function assignInviteCode(memberId: string, validityHours = 72) {
+    const inviteCode = await generateInviteCode();
+    const now = new Date();
+    const expires = new Date(now.getTime() + validityHours * 60 * 60 * 1000);
 
     await db.collection("members").updateOne(
         { _id: new ObjectId(memberId) },
-        { $set: { inviteCode } }
+        {
+            $set: {
+                inviteCode,
+                inviteCodeIssuedAt: now.toISOString(),
+                inviteCodeExpiresAt: expires.toISOString()
+            }
+        }
     );
 
     return inviteCode;
@@ -199,7 +236,7 @@ export async function setMemberGroup(memberId: string, groupId: string) {
         { _id: new ObjectId(memberId) },
         {
             $set: {
-                group: groupId,
+                groups: [groupId],
                 updatedAt: new Date().toISOString()
             }
         }
@@ -216,7 +253,7 @@ export async function removeMemberGroup(memberId: string) {
         { _id: new ObjectId(memberId) },
         {
             $set: {
-                group: "",
+                groups: [],
                 updatedAt: new Date().toISOString()
             }
         }
@@ -230,7 +267,7 @@ export async function removeMemberGroup(memberId: string) {
  */
 export async function getMembersByGroup(groupId: string) {
     return await db.collection("members")
-        .find({ group: groupId })
+        .find({ groups: groupId })
         .toArray();
 }
 
@@ -240,10 +277,12 @@ export async function getMembersByGroup(groupId: string) {
  */
 export async function unlinkGroupFromAllMembers(groupId: string) {
     await db.collection("members").updateMany(
-        { group: groupId },
+        { groups: groupId },
         {
+            $pull: {
+                groups: groupId
+            },
             $set: {
-                group: "",
                 updatedAt: new Date().toISOString()
             }
         }

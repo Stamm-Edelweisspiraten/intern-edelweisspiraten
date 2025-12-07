@@ -2,6 +2,7 @@
     export let data;
 
     let selectedGroup: string | null = null;
+    $: selectedGroupName = data.groups.find((g) => String(g.pk) === selectedGroup)?.name ?? "";
     let search = "";
 
     $: filteredPermissions = data.allPermissions.filter(p =>
@@ -27,6 +28,7 @@
     {#if selectedGroup}
         <form method="post" action="?/save" class="space-y-6">
             <input type="hidden" name="groupPk" value={selectedGroup} />
+            <input type="hidden" name="groupName" value={selectedGroupName} />
 
             <!-- Suche -->
             <input

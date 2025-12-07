@@ -1,6 +1,9 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { getMember } from "$lib/server/memberService";
-import { fail, redirect } from "@sveltejs/kit";
+import { fail, redirect, error } from "@sveltejs/kit";
+import { createSignedSession } from "$lib/server/session";
+
+const JOIN_COOKIE_AGE = 60 * 30; // 30 Minuten
 
 export const load: PageServerLoad = async ({ params }) => {
     const id = params.id;
@@ -19,18 +22,19 @@ export const load: PageServerLoad = async ({ params }) => {
         address: member.address,
         stand: member.stand,
         status: member.status,
-        group: member.group,
+        groups: member.groups ?? [],
         entryDate: member.entryDate,
         emails: member.emails ?? [],
         numbers: member.numbers ?? [],
-        inviteCode: member.inviteCode ?? null
+        inviteCode: member.inviteCode ?? null,
+        inviteCodeExpiresAt: member.inviteCodeExpiresAt ?? null
     };
 
     return { member: normalized };
 };
 
 export const actions: Actions = {
-    default: async ({ request, params, cookies  }) => {
+    default: async ({ request, params, cookies }) => {
         const form = await request.formData();
         const code = form.get("code")?.toString() ?? "";
         const memberId = params.id;
@@ -40,14 +44,25 @@ export const actions: Actions = {
             return fail(404, { error: "Mitglied nicht gefunden" });
         }
 
-        if (member.inviteCode !== code) {
+        if (!member.inviteCode || member.inviteCode !== code) {
             return fail(400, { error: "Ungültiger Einladungscode" });
         }
 
-        cookies.set(`join_verified_${memberId}`, "yes", {
+        if (member.inviteCodeExpiresAt && new Date(member.inviteCodeExpiresAt).getTime() < Date.now()) {
+            return fail(400, { error: "Einladungscode ist abgelaufen" });
+        }
+
+        const signed = createSignedSession(
+            { memberId, type: "invite" },
+            JOIN_COOKIE_AGE
+        );
+
+        cookies.set(`join_verified_${memberId}`, signed, {
             path: "/",
-            httpOnly: false,
-            maxAge: 60 * 30 // 30 Minuten gültig
+            httpOnly: true,
+            secure: true,
+            sameSite: "lax",
+            maxAge: JOIN_COOKIE_AGE
         });
 
         throw redirect(303, `/join/${memberId}/register`);

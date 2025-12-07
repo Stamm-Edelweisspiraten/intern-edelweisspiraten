@@ -1,15 +1,23 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { createMember } from "$lib/server/memberService";
 import { getAllGroups } from "$lib/server/groupService";
-import { redirect, fail } from "@sveltejs/kit";
+import { redirect, fail, error } from "@sveltejs/kit";
+import { requirePermission } from "$lib/server/permissionGuard";
+import { hasPermission } from "$lib/server/permissionService";
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+    requirePermission(event, "members.create");
+
     const groups = await getAllGroups();
     return { groups };
 };
 
 export const actions: Actions = {
     createMember: async ({ request, locals }) => {
+        if (!hasPermission(locals.permissions ?? [], "members.create")) {
+            throw error(403, "Keine Berechtigung");
+        }
+
         const form = await request.formData();
 
         const firstname = form.get("firstname")?.toString() ?? "";

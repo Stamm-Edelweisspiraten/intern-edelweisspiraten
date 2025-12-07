@@ -8,6 +8,7 @@ export interface Group {
     type: "sippe" | "meute";
     meeting_time: string;   // z. B. "Monday 4:30 PM"
     description?: string;
+    replyTo?: string;
 }
 
 
@@ -20,6 +21,7 @@ export async function createGroup(data: Group) {
         type: data.type,
         meeting_time: data.meeting_time,
         description: data.description || "",
+        replyTo: data.replyTo || "",
         createdAt: new Date(),
         updatedAt: new Date()
     });
@@ -38,7 +40,8 @@ export async function updateGroup(id: string, data: {
     meeting_time: string;
     name: string;
     description: string;
-    type: string
+    type: string;
+    replyTo?: string;
 }) {
     const mongoId = new ObjectId(id);
 
@@ -84,7 +87,8 @@ export async function getGroup(id: string) {
         name: g.name,
         type: g.type,
         meeting_time: g.meeting_time,
-        description: g.description
+        description: g.description,
+        replyTo: g.replyTo ?? ""
     };
 }
 
@@ -104,6 +108,7 @@ export async function getAllGroups() {
         name: g.name,
         type: g.type,
         meeting_time: g.meeting_time,
-        description: g.description
+        description: g.description,
+        replyTo: g.replyTo ?? ""
     }));
 }

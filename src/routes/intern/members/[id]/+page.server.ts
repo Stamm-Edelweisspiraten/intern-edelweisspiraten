@@ -1,11 +1,16 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { getMember, updateMember, deleteMember } from "$lib/server/memberService";
-import { redirect, fail } from "@sveltejs/kit";
+import { redirect, fail, error } from "@sveltejs/kit";
 import { db } from "$lib/server/mongo";
 import { ObjectId } from "mongodb";
 import { getAllGroups } from "$lib/server/groupService";
+import { hasPermission } from "$lib/server/permissionService";
 
-export const load: PageServerLoad = async ({ params, url }) => {
+export const load: PageServerLoad = async ({ params, url, locals }) => {
+    if (!hasPermission(locals.permissions ?? [], "members.view")) {
+        throw error(403, "Keine Berechtigung");
+    }
+
     const id = params.id;
 
     const member = await getMember(id);
@@ -62,6 +67,10 @@ export const load: PageServerLoad = async ({ params, url }) => {
 export const actions: Actions = {
 
     update: async ({ request, locals }) => {
+        if (!hasPermission(locals.permissions ?? [], "members.edit")) {
+            throw error(403, "Keine Berechtigung");
+        }
+
         const form = await request.formData();
 
         const id = form.get("id")?.toString();
@@ -131,7 +140,11 @@ export const actions: Actions = {
     },
 
 
-    delete: async ({ request }) => {
+    delete: async ({ request, locals }) => {
+        if (!hasPermission(locals.permissions ?? [], "members.delete")) {
+            throw error(403, "Keine Berechtigung");
+        }
+
         const form = await request.formData();
         const id = form.get("id")?.toString();
 
@@ -143,7 +156,11 @@ export const actions: Actions = {
     },
 
 
-    "update-users": async ({ request }) => {
+    "update-users": async ({ request, locals }) => {
+        if (!hasPermission(locals.permissions ?? [], "members.edit")) {
+            throw error(403, "Keine Berechtigung");
+        }
+
         const form = await request.formData();
 
         const memberId = form.get("memberId");

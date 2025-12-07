@@ -2,13 +2,16 @@ import { getMember } from "$lib/server/memberService";
 import { assignMemberToUser, createUser } from "$lib/server/userService";
 import { fail, redirect } from "@sveltejs/kit";
 import { ObjectId } from "mongodb";
-import {db} from "$lib/server/mongo";
+import { db } from "$lib/server/mongo";
+import { verifySignedSession } from "$lib/server/session";
+
+const JOIN_COOKIE_AGE = 60 * 30; // 30 Minuten
 
 export const load = async ({ params, cookies }) => {
     const memberId = params.id;
 
-    // Einladungscode-Prüfung
-    if (!cookies.get(`join_verified_${memberId}`)) {
+    const inviteSession = verifySignedSession(cookies.get(`join_verified_${memberId}`) ?? undefined);
+    if (!inviteSession || inviteSession.type !== "invite" || inviteSession.memberId !== memberId) {
         throw redirect(303, `/join/${memberId}`);
     }
 
@@ -28,8 +31,8 @@ export const actions = {
     default: async ({ request, params, cookies }) => {
         const memberId = params.id;
 
-        // Schutz
-        if (!cookies.get(`join_verified_${memberId}`)) {
+        const inviteSession = verifySignedSession(cookies.get(`join_verified_${memberId}`) ?? undefined);
+        if (!inviteSession || inviteSession.type !== "invite" || inviteSession.memberId !== memberId) {
             throw redirect(303, `/join/${memberId}`);
         }
 
@@ -53,7 +56,7 @@ export const actions = {
 
 
         // -------------------------------------------------------
-        // 1) USER ANLEGEN → MONGO + AUTHENTIK + EMAIL
+        // 1) USER ANLEGEN -> MONGO + AUTHENTIK (ohne Passwort-Mail)
         // -------------------------------------------------------
         const created = await createUser({
             name,
@@ -66,7 +69,7 @@ export const actions = {
         const mongoUserId = created.mongoId.toString();
 
         // -------------------------------------------------------
-        // 2) USER ↔ MEMBER VERKNÜPFEN
+        // 2) USER -> MEMBER VERKNAePFEN
         // -------------------------------------------------------
         await assignMemberToUser(mongoUserId, memberId);
 
@@ -76,8 +79,11 @@ export const actions = {
             { $addToSet: { userIds: mongoUserId } }
         );
 
+        // Cookie invalidieren
+        cookies.delete(`join_verified_${memberId}`, { path: "/" });
+
         // -------------------------------------------------------
-        // 3) Erfolgreich → Weiterleitung
+        // 3) Erfolgreich -> Weiterleitung
         // -------------------------------------------------------
         throw redirect(303, `/join/${memberId}/success`);
     }

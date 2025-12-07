@@ -2,12 +2,14 @@
     export let data;
 
     let search = "";
+    const groupMap = new Map(
+        data.groups?.map((g) => [g.id, g.name]) ?? []
+    );
 
     // Live-Filterfunktion
     $: filteredMembers = data.members.filter((member) => {
         const q = search.toLowerCase();
 
-        // Hilfsfunktion für Arrays wie emails, numbers
         const includesInArray = (arr: any[], field: string) =>
             arr?.some((item) => item[field]?.toLowerCase().includes(q));
 
@@ -15,10 +17,12 @@
             member.firstname.toLowerCase().includes(q) ||
             member.lastname.toLowerCase().includes(q) ||
             member.id.toLowerCase().includes(q) ||
-            (member.group ?? "").toLowerCase().includes(q) ||
             (member.status ?? "").toLowerCase().includes(q) ||
             includesInArray(member.emails, "email") ||
-            includesInArray(member.numbers, "number")
+            includesInArray(member.numbers, "number") ||
+            (member.groups ?? []).some((gid: string) =>
+                (groupMap.get(gid) ?? gid).toLowerCase().includes(q)
+            )
         );
     });
 </script>
@@ -55,7 +59,7 @@
             <thead class="bg-gray-100 border-b border-gray-300">
             <tr>
                 <th class="px-6 py-4 text-sm font-semibold text-gray-700">Name</th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700">Gruppe</th>
+                <th class="px-6 py-4 text-sm font-semibold text-gray-700">Gruppen</th>
                 <th class="px-6 py-4 text-sm font-semibold text-gray-700">Status</th>
                 <th class="px-6 py-4 text-sm font-semibold text-gray-700">E-Mails</th>
                 <th class="px-6 py-4 text-sm font-semibold text-gray-700">Telefon</th>
@@ -73,9 +77,13 @@
                         {m.firstname} {m.lastname}
                     </td>
 
-                    <!-- Gruppe -->
+                    <!-- Interne Gruppen -->
                     <td class="px-6 py-4 text-gray-700">
-                        {m.group ?? "—"}
+                        {#if m.groups?.length > 0}
+                            {m.groups.map((gid: string) => groupMap.get(gid) ?? gid).join(", ")}
+                        {:else}
+                            –
+                        {/if}
                     </td>
 
                     <!-- Status -->
@@ -83,9 +91,9 @@
                             <span class="px-2 py-1 rounded text-sm
                                 {m.status === 'aktiv' ? 'bg-green-100 text-green-700' : ''}
                                 {m.status === 'passiv' ? 'bg-yellow-100 text-yellow-700' : ''}
-                                {m.status === 'gekündigt' ? 'bg-red-100 text-red-700' : ''}
-                            ">
-                                {m.status ?? "—"}
+                                {m.status === 'gekündigt' ? 'bg-red-100 text-red-700' : ''}"
+                            >
+                                {m.status ?? "–"}
                             </span>
                     </td>
 
@@ -94,7 +102,7 @@
                         {#if m.emails?.length > 0}
                             {m.emails.map(e => e.email).join(", ")}
                         {:else}
-                            —
+                            –
                         {/if}
                     </td>
 
@@ -103,22 +111,20 @@
                         {#if m.numbers?.length > 0}
                             {m.numbers.map(n => n.number).join(", ")}
                         {:else}
-                            —
+                            –
                         {/if}
                     </td>
 
                     <!-- Aktionen -->
                     <td class="px-6 py-4 text-right whitespace-nowrap flex justify-end gap-2">
 
-                        <!-- Ansehen -->
                         <a
                                 href={`/intern/members/${m.id}`}
                                 class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition text-gray-700 shadow-sm"
                         >
-                            👁️
+                            🔍
                         </a>
 
-                        <!-- Bearbeiten -->
                         <a
                                 href={`/intern/members/${m.id}?scope=edit`}
                                 class="px-3 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 transition text-blue-700 shadow-sm"
@@ -126,7 +132,6 @@
                             ✏️
                         </a>
 
-                        <!-- Löschen -->
                         <form method="post" action="?/delete" class="inline">
                             <input type="hidden" name="id" value={m.id} />
 
@@ -139,12 +144,11 @@
                             </button>
                         </form>
 
-                        <!-- Beitritts PDF -->
                         <a
                                 href={`/intern/members/${m.id}/invite.pdf`}
-                                class="px-3 py-2 rounded-lg bg-red-400 hover:bg-red-500 transition text-red-700 shadow-sm"
+                                class="px-3 py-2 rounded-lg bg-red-400 hover:bg-red-500 transition text-white shadow-sm"
                         >
-                            📄
+                            ⬇️ PDF
                         </a>
 
 
@@ -155,7 +159,7 @@
 
             {#if filteredMembers.length === 0}
                 <tr>
-                    <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                    <td colspan="7" class="px-6 py-8 text-center text-gray-500">
                         Keine Mitglieder gefunden.
                     </td>
                 </tr>

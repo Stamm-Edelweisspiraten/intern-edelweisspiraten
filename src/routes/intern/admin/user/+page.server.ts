@@ -1,9 +1,14 @@
 import type { Actions } from "./$types";
 import { getAllUsers, deleteUser } from "$lib/server/userService";
 import { getAllMembers } from "$lib/server/memberService";
-import { redirect, fail } from "@sveltejs/kit";
+import { redirect, error } from "@sveltejs/kit";
+import { hasPermission } from "$lib/server/permissionService";
 
-export async function load() {
+export async function load({ locals }) {
+    if (!hasPermission(locals.permissions ?? [], "user.view")) {
+        throw error(403, "Keine Berechtigung");
+    }
+
     const users = await getAllUsers();
     const members = await getAllMembers();
 
@@ -25,7 +30,11 @@ export async function load() {
 }
 
 export const actions: Actions = {
-    delete: async ({ request }) => {
+    delete: async ({ request, locals }) => {
+        if (!hasPermission(locals.permissions ?? [], "user.delete")) {
+            throw error(403, "Keine Berechtigung");
+        }
+
         const form = await request.formData();
         const id = form.get("id");
 

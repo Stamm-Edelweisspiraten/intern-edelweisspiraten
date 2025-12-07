@@ -1,8 +1,13 @@
 import { error } from "@sveltejs/kit";
 import { getMember } from "$lib/server/memberService";
 import { createInvitePdf } from "$lib/server/pdf/invitePdf";
+import { hasPermission } from "$lib/server/permissionService";
 
-export async function GET({ params }) {
+export async function GET({ params, locals }) {
+    if (!hasPermission(locals.permissions ?? [], "members.view")) {
+        throw error(403, "Keine Berechtigung");
+    }
+
     const memberId = params.id;
 
     const member = await getMember(memberId);
