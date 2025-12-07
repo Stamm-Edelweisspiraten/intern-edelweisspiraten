@@ -193,15 +193,31 @@
                         required
                 />
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Reply-To</label>
-                <input
-                        class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                        bind:value={replyTo}
-                        placeholder="Antwort-Adresse"
-                        type="email"
-                        required
-                />
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Reply-To auswählen</label>
+                    <select
+                            class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            bind:value={replyTo}
+                    >
+                        {#each data.replyToOptions as opt}
+                            <option value={opt.email}>{opt.label} ({opt.email})</option>
+                        {/each}
+                        {#if !data.replyToOptions?.length}
+                            <option value={replyTo}>Keine Auswahl verfügbar</option>
+                        {/if}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Reply-To</label>
+                    <input
+                            class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            bind:value={replyTo}
+                            placeholder="Antwort-Adresse"
+                            type="email"
+                            required
+                    />
+                </div>
             </div>
             <div class="space-y-2">
                 <label class="block text-sm font-medium text-gray-700">Nachricht</label>

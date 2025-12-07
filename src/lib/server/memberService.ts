@@ -272,6 +272,16 @@ export async function getMembersByGroup(groupId: string) {
 }
 
 /**
+ * Holt Member anhand der ersten passenden E-Mail
+ */
+export async function getMemberByEmail(email: string) {
+    if (!email) return null;
+    return await db.collection("members").findOne({
+        "emails.email": email
+    });
+}
+
+/**
  * Holt Mitglieder per ID-Liste
  */
 export async function getMembersByIds(ids: string[]) {

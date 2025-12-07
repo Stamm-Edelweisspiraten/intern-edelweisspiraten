@@ -1,8 +1,9 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { error, fail } from "@sveltejs/kit";
 import { getGroup } from "$lib/server/groupService";
-import { getMembersByGroup, getMembersByIds } from "$lib/server/memberService";
+import { getMemberByEmail, getMembersByGroup, getMembersByIds } from "$lib/server/memberService";
 import { hasPermission } from "$lib/server/permissionService";
+import { getPositionsByMemberIds } from "$lib/server/positionService";
 
 export const load: PageServerLoad = async ({ url, locals }) => {
     const perms = locals.permissions ?? [];
@@ -37,10 +38,32 @@ export const load: PageServerLoad = async ({ url, locals }) => {
         throw error(400, "Keine Gruppe oder Mitglieder ausgewählt");
     }
 
+    const userEmail = locals.user?.userinfo?.email ?? "";
+    const replyToOptions: { label: string; email: string }[] = [];
+
+    if (userEmail) {
+        replyToOptions.push({ label: "Eigene E-Mail", email: userEmail });
+    }
+
+    const member = userEmail ? await getMemberByEmail(userEmail) : null;
+    if (member?._id) {
+        const memberIdStr = member._id.toString();
+        const positions = await getPositionsByMemberIds([memberIdStr]);
+        positions.forEach((p) => {
+            if (p.email) {
+                replyToOptions.push({
+                    label: p.name,
+                    email: p.email
+                });
+            }
+        });
+    }
+
     return {
         group,
         mode,
-        replyToDefault: locals.user?.userinfo?.email ?? group?.replyTo ?? "",
+        replyToDefault: replyToOptions[0]?.email ?? group?.replyTo ?? userEmail ?? "",
+        replyToOptions,
         members: members.map((m: any) => ({
             id: m._id.toString(),
             firstname: m.firstname,
