@@ -11,12 +11,20 @@
                 {data.group.description || "Keine Beschreibung"} · Treffen: {data.group.meeting_time || "k.A."}
             </p>
         </div>
-        <a
-                href={`/intern/email?group=${data.group.id}`}
-                class="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm"
-        >
-            E-Mail an Mitglieder
-        </a>
+        <div class="flex flex-col sm:flex-row gap-3">
+            <a
+                    href={`/intern/groups/${data.group.id}/members.pdf`}
+                    class="inline-flex items-center justify-center px-4 py-2 bg-emerald-600 text-white hover:text-white rounded-lg hover:bg-emerald-700 transition shadow-sm"
+            >
+                PDF Export
+            </a>
+            <a
+                    href={`/intern/email?group=${data.group.id}`}
+                    class="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm"
+            >
+                E-Mail an Mitglieder
+            </a>
+        </div>
     </div>
 
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
