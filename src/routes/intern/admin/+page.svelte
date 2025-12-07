@@ -24,6 +24,12 @@
             perm: "groups.view"
         },
         {
+            name: "Ämter",
+            href: "/intern/admin/position",
+            desc: "Ämter anlegen, zuordnen und löschen.",
+            perm: "admin.view"
+        },
+        {
             name: "Einstellungen",
             href: "/intern/admin/settings",
             desc: "Stammesdaten und Systemoptionen konfigurieren.",
