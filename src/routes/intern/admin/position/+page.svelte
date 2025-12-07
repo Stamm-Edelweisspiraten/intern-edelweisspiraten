@@ -8,6 +8,8 @@
     let email = "";
     let description = "";
     let memberIds: string[] = [];
+    let type: "amt" | "gruppenleiter" = "amt";
+    let groupId = "";
     let errorMsg = "";
     let successMsg = "";
     let submitting = false;
@@ -26,6 +28,8 @@
             form.set("name", name);
             form.set("email", email);
             form.set("description", description);
+            form.set("type", type);
+            form.set("groupId", groupId);
             memberIds.forEach((id) => form.append("memberIds", id));
 
             const res = await fetch("?/create", { method: "POST", body: form });
@@ -39,7 +43,9 @@
                 email,
                 description,
                 memberIds: [...memberIds],
-                members: appendMembers(memberIds)
+                members: appendMembers(memberIds),
+                type,
+                groupId
             };
             positions = [...positions, newPos];
             successMsg = "Amt angelegt.";
@@ -47,6 +53,8 @@
             email = "";
             description = "";
             memberIds = [];
+            groupId = "";
+            type = "amt";
         } catch (err: any) {
             errorMsg = err.message ?? "Unbekannter Fehler";
         } finally {
@@ -58,6 +66,8 @@
         event.preventDefault();
         const form = new FormData(event.currentTarget as HTMLFormElement);
         const ids = form.getAll("memberIds").map((v) => v.toString());
+        const type = form.get("type")?.toString() as "amt" | "gruppenleiter";
+        const groupId = form.get("groupId")?.toString() ?? "";
         try {
             const res = await fetch("?/update", { method: "POST", body: form });
             const json = await res.json();
@@ -73,7 +83,9 @@
                         email: form.get("email")?.toString() ?? "",
                         description: form.get("description")?.toString() ?? "",
                         memberIds: ids,
-                        members: appendMembers(ids)
+                        members: appendMembers(ids),
+                        type,
+                        groupId
                     }
                     : p
             );
@@ -128,6 +140,33 @@
                             placeholder="amt@example.de"
                     />
                 </div>
+                <div class="flex items-center gap-3">
+                    <label class="text-sm font-medium text-gray-700">Typ</label>
+                    <div class="flex items-center gap-3 text-sm">
+                        <label class="flex items-center gap-1">
+                            <input type="radio" name="type" value="amt" bind:group={type} checked={type === "amt"} />
+                            Amt
+                        </label>
+                        <label class="flex items-center gap-1">
+                            <input type="radio" name="type" value="gruppenleiter" bind:group={type} checked={type === "gruppenleiter"} />
+                            Gruppenleiter
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Gruppe (nur Gruppenleiter)</label>
+                    <select
+                            class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            bind:value={groupId}
+                            name="groupId"
+                            disabled={type !== "gruppenleiter"}
+                    >
+                        <option value="">Keine Gruppe</option>
+                        {#each data.groups as g}
+                            <option value={g.id}>{g.name}</option>
+                        {/each}
+                    </select>
+                </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Mitglieder (optional)</label>
                     <select
@@ -180,6 +219,9 @@
                                 {#if p.email}
                                     <span class="text-sm text-gray-500">{p.email}</span>
                                 {/if}
+                            </div>
+                            <div class="text-xs uppercase tracking-wide text-gray-500 mt-1">
+                                Typ: {p.type === "gruppenleiter" ? "Gruppenleiter" : "Amt"} {#if p.groupId && p.type === "gruppenleiter"} · Gruppe: {data.groups.find((g: any) => g.id === p.groupId)?.name || p.groupId}{/if}
                             </div>
                             {#if p.description}
                                 <div class="text-sm text-gray-700">{p.description}</div>
@@ -239,6 +281,29 @@
                                             name="description"
                                             value={p.description}
                                     />
+                                </div>
+                                <div class="md:col-span-2 flex items-center gap-4">
+                                    <div class="flex items-center gap-2">
+                                        <input type="radio" name="type" value="amt" checked={p.type !== "gruppenleiter"} />
+                                        <span class="text-sm">Amt</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="radio" name="type" value="gruppenleiter" checked={p.type === "gruppenleiter"} />
+                                        <span class="text-sm">Gruppenleiter</span>
+                                    </div>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Gruppe (nur Gruppenleiter)</label>
+                                    <select
+                                            name="groupId"
+                                            class="w-full px-4 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                            disabled={p.type !== "gruppenleiter"}
+                                        >
+                                        <option value="">Keine Gruppe</option>
+                                        {#each data.groups as g}
+                                            <option value={g.id} selected={p.groupId === g.id}>{g.name}</option>
+                                        {/each}
+                                    </select>
                                 </div>
                                 <div class="md:col-span-2">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Mitglieder</label>

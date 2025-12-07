@@ -3,15 +3,17 @@ import { error, fail } from "@sveltejs/kit";
 import { hasPermission } from "$lib/server/permissionService";
 import { createPosition, deletePosition, getAllPositions, updatePosition } from "$lib/server/positionService";
 import { getAllMembers } from "$lib/server/memberService";
+import { getAllGroups } from "$lib/server/groupService";
 
 export const load: PageServerLoad = async ({ locals }) => {
     if (!hasPermission(locals.permissions ?? [], "admin.view")) {
         throw error(403, "Keine Berechtigung");
     }
 
-    const [positions, members] = await Promise.all([
+    const [positions, members, groups] = await Promise.all([
         getAllPositions(),
-        getAllMembers()
+        getAllMembers(),
+        getAllGroups()
     ]);
 
     const memberMap = new Map(
@@ -36,7 +38,7 @@ export const load: PageServerLoad = async ({ locals }) => {
         email: (m.emails ?? [])[0]?.email ?? ""
     }));
 
-    return { positions: enriched, members: memberOptions };
+    return { positions: enriched, members: memberOptions, groups };
 };
 
 export const actions: Actions = {
@@ -50,16 +52,23 @@ export const actions: Actions = {
         const email = form.get("email")?.toString().trim() ?? "";
         const description = form.get("description")?.toString().trim() ?? "";
         const memberIds = form.getAll("memberIds").map((v) => v.toString()).filter(Boolean);
+        const type = (form.get("type")?.toString() ?? "amt") as "amt" | "gruppenleiter";
+        const groupId = form.get("groupId")?.toString().trim() ?? "";
 
         if (!name) {
             return fail(400, { error: "Name ist erforderlich." });
+        }
+        if (type === "gruppenleiter" && !groupId) {
+            return fail(400, { error: "Gruppe ist für Gruppenleiter erforderlich." });
         }
 
         await createPosition({
             name,
             email,
             description,
-            memberIds
+            memberIds,
+            type,
+            groupId
         });
 
         return { success: true };
@@ -75,15 +84,20 @@ export const actions: Actions = {
         const email = form.get("email")?.toString().trim() ?? "";
         const description = form.get("description")?.toString().trim() ?? "";
         const memberIds = form.getAll("memberIds").map((v) => v.toString()).filter(Boolean);
+        const type = (form.get("type")?.toString() ?? "amt") as "amt" | "gruppenleiter";
+        const groupId = form.get("groupId")?.toString().trim() ?? "";
 
         if (!id) return fail(400, { error: "ID fehlt." });
         if (!name) return fail(400, { error: "Name ist erforderlich." });
+        if (type === "gruppenleiter" && !groupId) return fail(400, { error: "Gruppe ist erforderlich." });
 
         await updatePosition(id, {
             name,
             email,
             description,
-            memberIds
+            memberIds,
+            type,
+            groupId
         });
 
         return { success: true };

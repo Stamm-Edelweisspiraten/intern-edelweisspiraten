@@ -7,6 +7,8 @@ export interface Position {
     email?: string;
     description?: string;
     memberIds?: string[];
+    type: "amt" | "gruppenleiter";
+    groupId?: string;
 }
 
 export async function createPosition(data: Position) {
@@ -15,6 +17,8 @@ export async function createPosition(data: Position) {
         email: data.email ?? "",
         description: data.description ?? "",
         memberIds: data.memberIds ?? [],
+        type: data.type,
+        groupId: data.groupId ?? "",
         createdAt: new Date(),
         updatedAt: new Date()
     });
@@ -56,6 +60,8 @@ export async function getAllPositions() {
         name: p.name,
         email: p.email ?? "",
         description: p.description ?? "",
+        type: p.type ?? "amt",
+        groupId: p.groupId ?? "",
         memberIds: Array.isArray(p.memberIds)
             ? p.memberIds.map((id: any) => id.toString())
             : p.memberId
