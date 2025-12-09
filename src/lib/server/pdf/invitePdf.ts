@@ -74,7 +74,7 @@ export async function createInvitePdf(member: Member) {
     doc.font("Helvetica").fontSize(12);
 
     const textBlock = `
-Liebe/r ${baseName},
+Liebe/r ${displayName},
 
 Sie wurden eingeladen, sich auf der internen Mitgliederplattform des Stammes Edelweißpiraten zu registrieren.
 
