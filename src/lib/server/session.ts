@@ -1,15 +1,18 @@
 import crypto from "node:crypto";
 import { env } from "$env/dynamic/private";
 
-const SESSION_SECRET = env.SESSION_SECRET;
-if (!SESSION_SECRET) {
-    throw new Error("SESSION_SECRET is not configured");
-}
-
 const encoder = new TextEncoder();
 
+function getSessionSecret() {
+    const secret = env.SESSION_SECRET;
+    if (!secret) {
+        throw new Error("SESSION_SECRET is not configured");
+    }
+    return secret;
+}
+
 function sign(data: string) {
-    return crypto.createHmac("sha256", SESSION_SECRET).update(data).digest("base64url");
+    return crypto.createHmac("sha256", getSessionSecret()).update(data).digest("base64url");
 }
 
 function encodePayload(payload: Record<string, any>) {
