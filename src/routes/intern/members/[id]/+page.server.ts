@@ -24,6 +24,7 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
         id,
         firstname: member.firstname,
         lastname: member.lastname,
+        fahrtenname: member.fahrtenname ?? "",
         birthday: member.birthday,
         address: member.address,
         stand: member.stand,
@@ -91,6 +92,7 @@ export const actions: Actions = {
 
         const firstname = form.get("firstname")?.toString() ?? "";
         const lastname = form.get("lastname")?.toString() ?? "";
+        const fahrtenname = form.get("fahrtenname")?.toString() ?? "";
         const birthday = form.get("birthday")?.toString() ?? "";
         const address_street = form.get("address_street")?.toString() ?? "";
         const address_city = form.get("address_city")?.toString() ?? "";
@@ -141,6 +143,7 @@ export const actions: Actions = {
         const updatedMember = {
             firstname,
             lastname,
+            ...(fahrtenname ? { fahrtenname } : { fahrtenname: "" }),
             birthday,
             address: {
                 street: address_street,

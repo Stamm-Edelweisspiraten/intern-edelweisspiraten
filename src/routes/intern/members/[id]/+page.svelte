@@ -6,6 +6,7 @@
 
     let firstname = data.member.firstname;
     let lastname = data.member.lastname;
+    let fahrtenname = data.member.fahrtenname;
     let birthday = data.member.birthday;
 
     let address_street = data.member.address.street;
@@ -107,6 +108,11 @@
                 <label>Nachname</label>
                 <input type="text" name="lastname" bind:value={lastname} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
             </div>
+        </div>
+
+        <div>
+            <label>Fahrtenname (optional)</label>
+            <input type="text" name="fahrtenname" bind:value={fahrtenname} disabled={disabled} placeholder="Spitzname fuer Fahrten" class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

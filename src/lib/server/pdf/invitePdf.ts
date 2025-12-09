@@ -16,6 +16,7 @@ export async function createInvitePdf(member: Member) {
     );
 
     const joinUrl = `https://intern.edelweisspiraten-bremen.de/join/${member._id}`;
+    const displayName = `${member.firstname} ${member.lastname}${member.fahrtenname ? ` (${member.fahrtenname})` : ""}`;
 
     const qrPng = await QRCode.toBuffer(joinUrl, {
         margin: 1,
@@ -46,7 +47,7 @@ export async function createInvitePdf(member: Member) {
 
     doc
         .fontSize(12)
-        .text(`${member.firstname} ${member.lastname}`, 60, receiverY)
+        .text(displayName, 60, receiverY)
         .text(member.address.street ?? "", 60, receiverY + 15)
         .text(`${member.address.zip ?? ""} ${member.address.city}`, 60, receiverY + 30);
 
@@ -72,7 +73,7 @@ export async function createInvitePdf(member: Member) {
     doc.font("Helvetica").fontSize(12);
 
     const textBlock = `
-Liebe/r ${member.firstname} ${member.lastname},
+Liebe/r ${displayName},
 
 Sie wurden eingeladen, sich auf der internen Mitgliederplattform des Stammes Edelweißpiraten zu registrieren.
 
@@ -134,7 +135,7 @@ Scannen Sie den QR-Code oben rechts oder geben Sie den folgenden Einladungscode 
     doc
         .fontSize(12)
         .text(`Mitglieds-ID:  ${member._id}`, 60, y)
-        .text(`Name:         ${member.firstname} ${member.lastname}`, 60, y + 15)
+        .text(`Name:         ${displayName}`, 60, y + 15)
         .text(`Adresse:      ${member.address.street}, ${member.address.zip ?? ""} ${member.address.city}`, 60, y + 30)
 
     // ===============================
