@@ -11,7 +11,8 @@ export async function createGroupMembersPdf({ group, members }: Options) {
     const doc = new PDFDocument({
         size: "A4",
         layout: "landscape",
-        margin: 40
+        margin: 40,
+        bufferPages: true
     });
 
     const chunks: Buffer[] = [];
