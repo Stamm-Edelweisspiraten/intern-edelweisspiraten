@@ -1,27 +1,19 @@
-# Multi-stage build for SvelteKit (adapter-auto -> Node)
-
-# --- Build Stage ---
 FROM node:20 AS builder
 WORKDIR /app
 
 COPY package*.json ./
-COPY .npmrc ./
-RUN npm ci
+RUN npm install
 
 COPY . .
-RUN npm run prepare && npm run build
+RUN npm run build
 
-# --- Run Stage ---
-FROM node:20 AS runner
+FROM node:20
 WORKDIR /app
-ENV NODE_ENV=production
 
-COPY .npmrc ./
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
-# Copy SvelteKit output (adapter-auto -> node)
-COPY --from=builder /app/.svelte-kit ./ ./.svelte-kit
+COPY --from=builder /app/build ./build
 
 EXPOSE 3000
-CMD ["node", ".svelte-kit/output/server/index.js"]
+CMD ["node", "build"]
