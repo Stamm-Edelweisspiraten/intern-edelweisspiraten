@@ -221,17 +221,15 @@
                         <summary class="px-3 py-2 cursor-pointer select-none">Gruppe wählen ({filterGroups.size || "alle"})</summary>
                         <div class="max-h-40 overflow-auto space-y-1 px-3 py-2">
                             {#each data.groups as g}
-                                <label class="flex items-center gap-2 text-sm text-gray-700">
-                                    <input type="checkbox"
-                                           checked={filterGroups.has(g.id)}
-                                           on:change={(e) => {
-                                               const next = new Set(filterGroups);
-                                               (e.target as HTMLInputElement).checked ? next.add(g.id) : next.delete(g.id);
-                                               filterGroups = next;
-                                           }}
-                                    />
-                                    <span>{g.name} ({g.type})</span>
-                                </label>
+                                <button type="button"
+                                        class="w-full text-left text-sm px-2 py-1 rounded hover:bg-blue-50"
+                                        on:click={() => {
+                                            const next = new Set(filterGroups);
+                                            next.has(g.id) ? next.delete(g.id) : next.add(g.id);
+                                            filterGroups = next;
+                                        }}>
+                                    {g.name} ({g.type}) {filterGroups.has(g.id) ? "✓" : ""}
+                                </button>
                             {/each}
                         </div>
                     </details>
@@ -243,17 +241,15 @@
                         <summary class="px-3 py-2 cursor-pointer select-none">Stand wählen ({filterStands.size || "alle"})</summary>
                         <div class="max-h-40 overflow-auto space-y-1 px-3 py-2">
                             {#each ["Wildling-Wölfling","Wölfling","Jungpfadfinder","Knappe","Wildling-Pfadinder","Pfadfinder","Späher","Kreuzpfadfinder"] as st}
-                                <label class="flex items-center gap-2 text-sm text-gray-700">
-                                    <input type="checkbox"
-                                           checked={filterStands.has(st)}
-                                           on:change={(e) => {
-                                               const next = new Set(filterStands);
-                                               (e.target as HTMLInputElement).checked ? next.add(st) : next.delete(st);
-                                               filterStands = next;
-                                           }}
-                                    />
-                                    <span>{st}</span>
-                                </label>
+                                <button type="button"
+                                        class="w-full text-left text-sm px-2 py-1 rounded hover:bg-blue-50"
+                                        on:click={() => {
+                                            const next = new Set(filterStands);
+                                            next.has(st) ? next.delete(st) : next.add(st);
+                                            filterStands = next;
+                                        }}>
+                                    {st} {filterStands.has(st) ? "✓" : ""}
+                                </button>
                             {/each}
                         </div>
                     </details>
@@ -265,17 +261,15 @@
                         <summary class="px-3 py-2 cursor-pointer select-none">Status wählen ({filterStatuses.size || "alle"})</summary>
                         <div class="max-h-40 overflow-auto space-y-1 px-3 py-2">
                             {#each ["aktiv","passiv","gekündigt"] as st}
-                                <label class="flex items-center gap-2 text-sm text-gray-700">
-                                    <input type="checkbox"
-                                           checked={filterStatuses.has(st)}
-                                           on:change={(e) => {
-                                               const next = new Set(filterStatuses);
-                                               (e.target as HTMLInputElement).checked ? next.add(st) : next.delete(st);
-                                               filterStatuses = next;
-                                           }}
-                                    />
-                                    <span>{st}</span>
-                                </label>
+                                <button type="button"
+                                        class="w-full text-left text-sm px-2 py-1 rounded hover:bg-blue-50"
+                                        on:click={() => {
+                                            const next = new Set(filterStatuses);
+                                            next.has(st) ? next.delete(st) : next.add(st);
+                                            filterStatuses = next;
+                                        }}>
+                                    {st} {filterStatuses.has(st) ? "✓" : ""}
+                                </button>
                             {/each}
                         </div>
                     </details>
