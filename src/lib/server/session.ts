@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
-import { SESSION_SECRET } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 
+const SESSION_SECRET = env.SESSION_SECRET;
 if (!SESSION_SECRET) {
     throw new Error("SESSION_SECRET is not configured");
 }
