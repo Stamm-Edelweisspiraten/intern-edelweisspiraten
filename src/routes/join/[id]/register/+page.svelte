@@ -15,7 +15,7 @@
     </h1>
 
     <p class="text-gray-600 mb-4 text-center">
-        Für Mitglied: <strong>{data.member.firstname} {data.member.lastname}</strong>
+        Für Mitglied: <strong>{data.member.id}</strong>
     </p>
 
     <!-- ACCOUNT TABS -->
