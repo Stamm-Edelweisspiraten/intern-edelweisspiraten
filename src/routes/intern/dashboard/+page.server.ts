@@ -5,7 +5,8 @@ import { getAllMembers } from "$lib/server/memberService";
 interface UpcomingBirthday {
     id: string;
     name: string;
-    date: string;
+    dateISO: string;
+    dateLabel: string;
     age: number;
     inDays: number;
 }
@@ -18,7 +19,7 @@ export const load: PageServerLoad = async (event) => {
     const members = await getAllMembers();
 
     const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startOfToday = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
 
     const upcoming: UpcomingBirthday[] = members
         .map((m) => {
@@ -26,21 +27,23 @@ export const load: PageServerLoad = async (event) => {
             const birthDate = new Date(m.birthday);
             if (isNaN(birthDate.getTime())) return null;
 
-            const thisYear = startOfToday.getFullYear();
-            const next = new Date(birthDate);
-            next.setFullYear(thisYear);
-            if (next < startOfToday) {
-                next.setFullYear(thisYear + 1);
+            const thisYear = startOfToday.getUTCFullYear();
+            const next = new Date(Date.UTC(thisYear, birthDate.getUTCMonth(), birthDate.getUTCDate()));
+            if (next.getTime() < startOfToday.getTime()) {
+                next.setUTCFullYear(thisYear + 1);
             }
 
             const diffMs = next.getTime() - startOfToday.getTime();
             const inDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-            const age = next.getFullYear() - birthDate.getFullYear();
+            const age = next.getUTCFullYear() - birthDate.getUTCFullYear();
+
+            const formatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 
             return {
                 id: m._id?.toString?.() ?? "",
                 name: `${m.firstname} ${m.lastname}`,
-                date: next.toISOString(),
+                dateISO: next.toISOString(),
+                dateLabel: formatter.format(next),
                 age,
                 inDays
             } satisfies UpcomingBirthday;

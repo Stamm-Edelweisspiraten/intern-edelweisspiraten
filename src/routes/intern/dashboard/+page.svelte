@@ -22,7 +22,7 @@
                     <div class="border border-gray-200 rounded-xl p-4 bg-gray-50">
                         <div class="flex justify-between items-center mb-2">
                             <div class="text-sm text-gray-500">in {b.inDays} Tag{b.inDays === 1 ? "" : "en"}</div>
-                            <div class="text-sm font-semibold text-gray-700">{new Date(b.date).toLocaleDateString()}</div>
+                            <div class="text-sm font-semibold text-gray-700">{b.dateLabel}</div>
                         </div>
                         <div class="text-lg font-semibold text-gray-900">{b.name}</div>
                         <div class="text-sm text-gray-600">wird {b.age}</div>
