@@ -3,6 +3,10 @@
     export let form;
 
     let accountType: "child" | "parent" = "child";
+    let password = "";
+    let password2 = "";
+
+    $: passwordMismatch = password && password2 && password !== password2;
 </script>
 
 <div class="max-w-md mx-auto mt-20 p-8 bg-white rounded-xl shadow border">
@@ -60,6 +64,7 @@
                     required
                     minlength="6"
                     class="w-full px-4 py-3 border rounded-lg bg-gray-50"
+                    bind:value={password}
             />
         </div>
 
@@ -72,14 +77,19 @@
                     required
                     minlength="6"
                     class="w-full px-4 py-3 border rounded-lg bg-gray-50"
+                    bind:value={password2}
             />
+            {#if passwordMismatch}
+                <p class="text-red-600 text-sm mt-1">Passwörter stimmen nicht überein.</p>
+            {/if}
         </div>
 
         {#if form?.error}
             <p class="text-red-600 text-center">{form.error}</p>
         {/if}
 
-        <button class="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700">
+        <button class="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60"
+                disabled={passwordMismatch}>
             Konto erstellen
         </button>
     </form>

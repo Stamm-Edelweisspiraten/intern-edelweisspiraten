@@ -82,14 +82,19 @@ export const actions = {
         // -------------------------------------------------------
         await assignMemberToUser(mongoUserId, memberId);
 
-        // Member.userIds ergänzen
         await db.collection("members").updateOne(
             { _id: new ObjectId(memberId) },
             { $addToSet: { userIds: mongoUserId } }
         );
 
-        // Cookie invalidieren
-        cookies.delete(`join_verified_${memberId}`, { path: "/" });
+        // Flag für Erfolg (Success-Seite)
+        cookies.set("join_created_user", "1", {
+            path: "/",
+            httpOnly: true,
+            sameSite: "lax",
+            secure: true,
+            maxAge: JOIN_COOKIE_AGE
+        });
 
         // -------------------------------------------------------
         // 3) Erfolgreich -> Weiterleitung
