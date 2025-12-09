@@ -13,7 +13,12 @@ export interface StoredFileMeta {
     memberId: string;
 }
 
-const bucket = new GridFSBucket(db, { bucketName: "member_uploads" });
+function getBucket() {
+    if (!db) {
+        throw new Error("MONGODB_URI ist nicht konfiguriert");
+    }
+    return new GridFSBucket(db, { bucketName: "member_uploads" });
+}
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_TYPES = ["application/pdf", "image/png", "image/jpeg"];
@@ -38,7 +43,7 @@ export async function saveMemberFile(
     const contentType = ALLOWED_TYPES.includes(file.type) ? file.type : "application/octet-stream";
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    const uploadStream = bucket.openUploadStream(file.name || `${kind}-${Date.now()}.bin`, {
+    const uploadStream = getBucket().openUploadStream(file.name || `${kind}-${Date.now()}.bin`, {
         contentType,
         metadata: {
             memberId,
@@ -55,7 +60,7 @@ export async function saveMemberFile(
     // Vorherige Datei entfernen, falls vorhanden
     if (previousId) {
         try {
-            await bucket.delete(new ObjectId(previousId));
+            await getBucket().delete(new ObjectId(previousId));
         } catch (err) {
             console.warn("Konnte alte Datei nicht löschen", previousId, err);
         }
@@ -73,18 +78,18 @@ export async function saveMemberFile(
 }
 
 export async function getMemberFile(id: string) {
-    const files = await bucket.find({ _id: new ObjectId(id) }).toArray();
+    const files = await getBucket().find({ _id: new ObjectId(id) }).toArray();
     const file = files[0];
     if (!file) return null;
 
-    const stream = bucket.openDownloadStream(new ObjectId(id));
+    const stream = getBucket().openDownloadStream(new ObjectId(id));
     return { file, stream };
 }
 
 export async function deleteMemberFile(id?: string) {
     if (!id) return;
     try {
-        await bucket.delete(new ObjectId(id));
+        await getBucket().delete(new ObjectId(id));
     } catch (err) {
         console.warn("Konnte Datei nicht löschen", id, err);
     }
