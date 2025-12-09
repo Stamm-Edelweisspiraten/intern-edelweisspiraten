@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     export let data;
 
     let search = "";
@@ -11,6 +11,9 @@
     let filterStatuses: Set<string> = new Set();
     let filterMinAge: number | null = null;
     let filterMaxAge: number | null = null;
+    let groupMenuOpen = false;
+    let standMenuOpen = false;
+    let statusMenuOpen = false;
 
     function toggleRow(id: string) {
         const next = new Set(selected);
@@ -34,19 +37,16 @@
         return age;
     }
 
-    const matchesFilters = (member: any) => {
-        if (filterGroups.size > 0 && !(member.groups ?? []).some((g: string) => filterGroups.has(g))) return false;
-        if (filterStands.size > 0 && (member.stand ? !filterStands.has(member.stand) : true)) return false;
-        if (filterStatuses.size > 0 && !filterStatuses.has(member.status)) return false;
+    const baseMembers = [...data.members].sort((a, b) => a.lastname.localeCompare(b.lastname));
 
-        const age = getAge(member.birthday);
-        if (filterMinAge !== null && (age === null || age < filterMinAge)) return false;
-        if (filterMaxAge !== null && (age === null || age > filterMaxAge)) return false;
+    $: filteredMembers = baseMembers.filter((member) => {
+        // ensure reactivity on filter changes
+        filterGroups;
+        filterStands;
+        filterStatuses;
+        filterMinAge;
+        filterMaxAge;
 
-        return true;
-    };
-
-    $: filteredMembers = data.members.filter((member) => {
         const q = search.toLowerCase();
         const matchesSearch = (
             member.firstname.toLowerCase().includes(q) ||
@@ -59,7 +59,18 @@
                 (groupMap.get(gid) ?? gid).toLowerCase().includes(q)
             )
         );
-        return matchesSearch && matchesFilters(member);
+
+        if (!matchesSearch) return false;
+
+        if (filterGroups.size > 0 && !(member.groups ?? []).some((g: string) => filterGroups.has(g))) return false;
+        if (filterStands.size > 0 && (member.stand ? !filterStands.has(member.stand) : true)) return false;
+        if (filterStatuses.size > 0 && !filterStatuses.has(member.status)) return false;
+
+        const age = getAge(member.birthday);
+        if (filterMinAge !== null && (age === null || age < filterMinAge)) return false;
+        if (filterMaxAge !== null && (age === null || age > filterMaxAge)) return false;
+
+        return true;
     });
 
     $: activeFilters = (() => {
@@ -149,65 +160,29 @@
                 class="px-4 py-3 border rounded-lg bg-white shadow-sm hover:bg-gray-50 text-gray-700"
                 on:click={() => filterOpen = !filterOpen}
         >
-            Filter {filterOpen ? "schließen" : "öffnen"}
+            Filter {filterOpen ? "schliessen" : "oeffnen"}
         </button>
     </div>
 
-    {#if filterGroups.size || filterStands.size || filterStatuses.size || filterMinAge !== null || filterMaxAge !== null}
+    {#if activeFilters.length}
         <div class="mb-4 flex flex-wrap gap-2">
-            {#each Array.from(filterGroups) as gid}
+            {#each activeFilters as filter}
                 <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
-                    Gruppe: {groupMap.get(gid) ?? gid}
-                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => {
-                        const next = new Set(filterGroups);
-                        next.delete(gid);
-                        filterGroups = next;
-                    }}>×</button>
+                    {filter.label}
+                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={filter.onRemove} aria-label="Filter entfernen">×</button>
                 </span>
             {/each}
-            {#each Array.from(filterStands) as st}
-                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
-                    Stand: {st}
-                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => {
-                        const next = new Set(filterStands);
-                        next.delete(st);
-                        filterStands = next;
-                    }}>×</button>
-                </span>
-            {/each}
-            {#each Array.from(filterStatuses) as st}
-                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
-                    Status: {st}
-                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => {
-                        const next = new Set(filterStatuses);
-                        next.delete(st);
-                        filterStatuses = next;
-                    }}>×</button>
-                </span>
-            {/each}
-            {#if filterMinAge !== null}
-                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
-                    Alter ab {filterMinAge}
-                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => filterMinAge = null}>×</button>
-                </span>
-            {/if}
-            {#if filterMaxAge !== null}
-                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
-                    Alter bis {filterMaxAge}
-                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => filterMaxAge = null}>×</button>
-                </span>
-            {/if}
             <button
                     type="button"
                     class="text-sm text-gray-600 underline"
                     on:click={() => {
-                        filterGroup = null;
-                        filterStand = null;
-                        filterStatus = null;
+                        filterGroups = new Set();
+                        filterStands = new Set();
+                        filterStatuses = new Set();
                         filterMinAge = null;
                         filterMaxAge = null;
                     }}>
-                Alle Filter löschen
+                Alle Filter loeschen
             </button>
         </div>
     {/if}
@@ -217,62 +192,89 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div class="relative">
                     <label class="text-sm text-gray-600">Gruppe</label>
-                    <details class="border rounded-lg bg-gray-50">
-                        <summary class="px-3 py-2 cursor-pointer select-none">Gruppe wählen ({filterGroups.size || "alle"})</summary>
-                        <div class="max-h-40 overflow-auto space-y-1 px-3 py-2">
+                    <button type="button"
+                            class="w-full border rounded-lg px-3 py-2 bg-gray-50 text-left"
+                            on:click={() => {
+                                groupMenuOpen = !groupMenuOpen;
+                                standMenuOpen = false;
+                                statusMenuOpen = false;
+                            }}>
+                        Gruppe waehlen ({filterGroups.size || "alle"})
+                    </button>
+                    {#if groupMenuOpen}
+                        <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
                             {#each data.groups as g}
                                 <button type="button"
-                                        class="w-full text-left text-sm px-2 py-1 rounded hover:bg-blue-50"
+                                        class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
                                         on:click={() => {
                                             const next = new Set(filterGroups);
                                             next.has(g.id) ? next.delete(g.id) : next.add(g.id);
                                             filterGroups = next;
                                         }}>
-                                    {g.name} ({g.type}) {filterGroups.has(g.id) ? "✓" : ""}
+                                    <span>{g.name} ({g.type})</span>
+                                    {#if filterGroups.has(g.id)}<span aria-hidden="true">&#10003;</span>{/if}
                                 </button>
                             {/each}
                         </div>
-                    </details>
+                    {/if}
                 </div>
 
                 <div class="relative">
                     <label class="text-sm text-gray-600">Stand</label>
-                    <details class="border rounded-lg bg-gray-50">
-                        <summary class="px-3 py-2 cursor-pointer select-none">Stand wählen ({filterStands.size || "alle"})</summary>
-                        <div class="max-h-40 overflow-auto space-y-1 px-3 py-2">
-                            {#each ["Wildling-Wölfling","Wölfling","Jungpfadfinder","Knappe","Wildling-Pfadinder","Pfadfinder","Späher","Kreuzpfadfinder"] as st}
+                    <button type="button"
+                            class="w-full border rounded-lg px-3 py-2 bg-gray-50 text-left"
+                            on:click={() => {
+                                standMenuOpen = !standMenuOpen;
+                                groupMenuOpen = false;
+                                statusMenuOpen = false;
+                            }}>
+                        Stand waehlen ({filterStands.size || "alle"})
+                    </button>
+                    {#if standMenuOpen}
+                        <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
+                            {#each ["Wildling-Woelfling","Woelfling","Jungpfadfinder","Knappe","Wildling-Pfadfinder","Pfadfinder","Spaeher","Kreuzpfadfinder"] as st}
                                 <button type="button"
-                                        class="w-full text-left text-sm px-2 py-1 rounded hover:bg-blue-50"
+                                        class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
                                         on:click={() => {
                                             const next = new Set(filterStands);
                                             next.has(st) ? next.delete(st) : next.add(st);
                                             filterStands = next;
                                         }}>
-                                    {st} {filterStands.has(st) ? "✓" : ""}
+                                    <span>{st}</span>
+                                    {#if filterStands.has(st)}<span aria-hidden="true">&#10003;</span>{/if}
                                 </button>
                             {/each}
                         </div>
-                    </details>
+                    {/if}
                 </div>
 
                 <div class="relative">
                     <label class="text-sm text-gray-600">Status</label>
-                    <details class="border rounded-lg bg-gray-50">
-                        <summary class="px-3 py-2 cursor-pointer select-none">Status wählen ({filterStatuses.size || "alle"})</summary>
-                        <div class="max-h-40 overflow-auto space-y-1 px-3 py-2">
-                            {#each ["aktiv","passiv","gekündigt"] as st}
+                    <button type="button"
+                            class="w-full border rounded-lg px-3 py-2 bg-gray-50 text-left"
+                            on:click={() => {
+                                statusMenuOpen = !statusMenuOpen;
+                                groupMenuOpen = false;
+                                standMenuOpen = false;
+                            }}>
+                        Status waehlen ({filterStatuses.size || "alle"})
+                    </button>
+                    {#if statusMenuOpen}
+                        <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
+                            {#each ["aktiv","passiv","gekuendigt"] as st}
                                 <button type="button"
-                                        class="w-full text-left text-sm px-2 py-1 rounded hover:bg-blue-50"
+                                        class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
                                         on:click={() => {
                                             const next = new Set(filterStatuses);
                                             next.has(st) ? next.delete(st) : next.add(st);
                                             filterStatuses = next;
                                         }}>
-                                    {st} {filterStatuses.has(st) ? "✓" : ""}
+                                    <span>{st}</span>
+                                    {#if filterStatuses.has(st)}<span aria-hidden="true">&#10003;</span>{/if}
                                 </button>
                             {/each}
                         </div>
-                    </details>
+                    {/if}
                 </div>
 
                 <div>
@@ -302,7 +304,7 @@
                             filterMinAge = null;
                             filterMaxAge = null;
                         }}>
-                    Filter zurücksetzen
+                    Filter zuruecksetzen
                 </button>
             </div>
         </div>
@@ -314,7 +316,7 @@
             <tr>
                 <th class="px-4 py-4 text-sm font-semibold text-gray-700 w-12">
                     <input type="checkbox"
-                           aria-label="Alle auswählen"
+                           aria-label="Alle auswaehlen"
                            on:change={(e) => {
                                const checked = (e.target as HTMLInputElement).checked;
                                if (checked) {
@@ -343,7 +345,7 @@
                 >
                     <td class="px-4 py-4">
                         <input type="checkbox"
-                               aria-label="Mitglied auswählen"
+                               aria-label="Mitglied auswaehlen"
                                value={m.id}
                                checked={selected.has(m.id)}
                                on:click|stopPropagation
@@ -372,7 +374,7 @@
                         <span class="px-2 py-1 rounded text-sm
                                 {m.status === 'aktiv' ? 'bg-green-100 text-green-700' : ''}
                                 {m.status === 'passiv' ? 'bg-yellow-100 text-yellow-700' : ''}
-                                {m.status === 'gekündigt' ? 'bg-red-100 text-red-700' : ''}"
+                                {m.status === 'gekuendigt' ? 'bg-red-100 text-red-700' : ''}"
                         >
                             {m.status ?? "-"}
                         </span>
@@ -423,12 +425,12 @@
                             <button
                                     type="submit"
                                 class="px-3 py-2 rounded-lg bg-red-100 hover:bg-red-200 transition text-red-700 shadow-sm flex items-center gap-2"
-                                on:click={() => confirm("Willst du dieses Mitglied wirklich löschen?")}
+                                on:click={(event) => { if (!confirm("Willst du dieses Mitglied wirklich loeschen?")) event.preventDefault(); }}
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16" aria-hidden="true">
                                     <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47M8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5"/>
                                 </svg>
-                                <span class="sr-only">Löschen</span>
+                                <span class="sr-only">Loeschen</span>
                             </button>
                         </form>
 
@@ -476,7 +478,7 @@
                                     selected = newSet;
                                 }}
                         >
-                            {selected.has(m.id) ? "Ausgewählt" : "Wählen"}
+                            {selected.has(m.id) ? "Ausgewaehlt" : "Waehlen"}
                         </button>
                     </div>
                 </div>
