@@ -1,10 +1,12 @@
 import type { PageServerLoad } from "./$types";
 import { requirePermission } from "$lib/server/permissionGuard";
 import { getAllMembers } from "$lib/server/memberService";
+import { getAllGroups } from "$lib/server/groupService";
 
 interface UpcomingBirthday {
     id: string;
-    name: string;
+    firstname: string;
+    group: string;
     dateISO: string;
     dateLabel: string;
     age: number;
@@ -16,7 +18,8 @@ export const load: PageServerLoad = async (event) => {
 
     const userName = event.locals.user?.userinfo?.name ?? event.locals.user?.userinfo?.email ?? "Willkommen";
 
-    const members = await getAllMembers();
+    const [members, groups] = await Promise.all([getAllMembers(), getAllGroups()]);
+    const groupMap = new Map((groups ?? []).map((g: any) => [g.id, g]));
 
     const today = new Date();
     const startOfToday = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
@@ -39,9 +42,14 @@ export const load: PageServerLoad = async (event) => {
 
             const formatter = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
 
+            const firstGroupId = (m.groups ?? [])[0];
+            const group = groupMap.get(firstGroupId);
+            const groupLabel = group ? `${group.type ? `${group.type} ` : ""}${group.name}` : "-";
+
             return {
                 id: m._id?.toString?.() ?? "",
-                name: `${m.firstname} ${m.lastname}`,
+                firstname: m.firstname,
+                group: groupLabel,
                 dateISO: next.toISOString(),
                 dateLabel: formatter.format(next),
                 age,
@@ -50,7 +58,7 @@ export const load: PageServerLoad = async (event) => {
         })
         .filter(Boolean)
         .sort((a, b) => a!.inDays - b!.inDays)
-        .slice(0, 8) as UpcomingBirthday[];
+        .slice(0, 3) as UpcomingBirthday[];
 
     return {
         userName,
