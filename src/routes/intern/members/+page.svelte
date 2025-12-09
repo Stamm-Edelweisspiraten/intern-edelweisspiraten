@@ -64,6 +64,63 @@
         filterVersion;
         return matchesSearch && matchesFilters(member);
     });
+
+    $: activeFilters = (() => {
+        const items: { label: string; onRemove: () => void }[] = [];
+        for (const gid of filterGroups) {
+            const name = groupMap.get(gid) ?? gid;
+            items.push({
+                label: `Gruppe: ${name}`,
+                onRemove: () => {
+                    const next = new Set(filterGroups);
+                    next.delete(gid);
+                    filterGroups = next;
+                    filterVersion += 1;
+                }
+            });
+        }
+        for (const st of filterStands) {
+            items.push({
+                label: `Stand: ${st}`,
+                onRemove: () => {
+                    const next = new Set(filterStands);
+                    next.delete(st);
+                    filterStands = next;
+                    filterVersion += 1;
+                }
+            });
+        }
+        for (const st of filterStatus) {
+            items.push({
+                label: `Status: ${st}`,
+                onRemove: () => {
+                    const next = new Set(filterStatus);
+                    next.delete(st);
+                    filterStatus = next;
+                    filterVersion += 1;
+                }
+            });
+        }
+        if (filterMinAge !== null) {
+            items.push({
+                label: `Alter ab ${filterMinAge}`,
+                onRemove: () => {
+                    filterMinAge = null;
+                    filterVersion += 1;
+                }
+            });
+        }
+        if (filterMaxAge !== null) {
+            items.push({
+                label: `Alter bis ${filterMaxAge}`,
+                onRemove: () => {
+                    filterMaxAge = null;
+                    filterVersion += 1;
+                }
+            });
+        }
+        return items;
+    })();
 </script>
 
 <div class="max-w-6xl mx-auto mt-12">
@@ -104,6 +161,30 @@
             Filter {filterOpen ? "schließen" : "öffnen"}
         </button>
     </div>
+
+    {#if activeFilters.length > 0}
+        <div class="mb-4 flex flex-wrap gap-2">
+            {#each activeFilters as f}
+                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
+                    {f.label}
+                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={f.onRemove}>×</button>
+                </span>
+            {/each}
+            <button
+                    type="button"
+                    class="text-sm text-gray-600 underline"
+                    on:click={() => {
+                        filterGroups = new Set();
+                        filterStands = new Set();
+                        filterStatus = new Set();
+                        filterMinAge = null;
+                        filterMaxAge = null;
+                        filterVersion += 1;
+                    }}>
+                Alle Filter löschen
+            </button>
+        </div>
+    {/if}
 
     {#if filterOpen}
         <div class="mb-6 border border-gray-200 rounded-xl p-4 bg-white shadow-sm space-y-4">
