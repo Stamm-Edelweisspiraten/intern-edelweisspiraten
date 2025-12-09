@@ -1,4 +1,4 @@
-import { AUTHENTIK_URL, AUTHENTIK_TOKEN } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 import { getAllDefinedPermissions, getPermissionsForGroup, setPermissionsForGroup } from "$lib/server/permissionService";
 import { redirect, error } from "@sveltejs/kit";
 import { hasPermission } from "$lib/server/permissionService";
@@ -9,6 +9,9 @@ export async function load({ locals }) {
     }
 
     // Authentik Gruppen laden
+    const AUTHENTIK_URL = env.AUTHENTIK_URL;
+    const AUTHENTIK_TOKEN = env.AUTHENTIK_TOKEN;
+
     const groupsRes = await fetch(`${AUTHENTIK_URL}/api/v3/core/groups/`, {
         headers: {
             Authorization: `Bearer ${AUTHENTIK_TOKEN}`

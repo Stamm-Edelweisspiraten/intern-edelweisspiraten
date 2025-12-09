@@ -1,10 +1,4 @@
-import {
-    SMTP_HOST,
-    SMTP_PORT,
-    SMTP_USER,
-    SMTP_PASS,
-    SMTP_FROM
-} from "$env/static/private";
+import { env } from "$env/dynamic/private";
 
 export interface EmailOptions {
     to: string;
@@ -22,6 +16,12 @@ export interface EmailOptions {
 
 export async function sendEmail({ to, subject, html, text, replyTo, attachments, from }: EmailOptions) {
     const nodemailer: any = await import("nodemailer");
+
+    const SMTP_HOST = env.SMTP_HOST;
+    const SMTP_PORT = env.SMTP_PORT;
+    const SMTP_USER = env.SMTP_USER;
+    const SMTP_PASS = env.SMTP_PASS;
+    const SMTP_FROM = env.SMTP_FROM;
 
     // Transporter bauen
     const transporter = nodemailer.createTransport({

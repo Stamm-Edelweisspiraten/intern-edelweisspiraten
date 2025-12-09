@@ -1,12 +1,6 @@
 import { redirect, error } from "@sveltejs/kit";
 import { db } from "$lib/server/mongo";
-import {
-    AUTHENTIK_CLIENT_ID,
-    AUTHENTIK_REDIRECT,
-    AUTHENTIK_CLIENT_SECRET,
-    AUTHENTIK_JWKS_URL,
-    AUTHENTIK_ISSUER
-} from "$env/static/private";
+import { env as privateEnv } from "$env/dynamic/private";
 import { ObjectId } from "mongodb";
 import { env } from "$lib/env";
 import { createRemoteJWKSet, jwtVerify } from "jose";
@@ -30,6 +24,12 @@ export async function GET({ url, cookies, fetch }) {
     let discoveryConf: any = null;
 
     // JWKS-URL bestimmen: Vorrang AUTHENTIK_JWKS_URL, sonst Discovery -> jwks_uri, sonst Fallback
+    const AUTHENTIK_CLIENT_ID = privateEnv.AUTHENTIK_CLIENT_ID;
+    const AUTHENTIK_CLIENT_SECRET = privateEnv.AUTHENTIK_CLIENT_SECRET;
+    const AUTHENTIK_REDIRECT = privateEnv.AUTHENTIK_REDIRECT;
+    const AUTHENTIK_JWKS_URL = privateEnv.AUTHENTIK_JWKS_URL;
+    const AUTHENTIK_ISSUER = privateEnv.AUTHENTIK_ISSUER;
+
     let jwksUri = AUTHENTIK_JWKS_URL;
     if (!jwksUri) {
         try {

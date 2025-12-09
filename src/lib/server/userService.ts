@@ -1,5 +1,5 @@
 import { db } from "$lib/server/mongo";
-import { AUTHENTIK_TOKEN, AUTHENTIK_URL } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 import { ObjectId } from "mongodb";
 import * as crypto from "node:crypto";
 
@@ -16,10 +16,10 @@ function generatePassword(length = 16) {
 //  Helper: Authentik PATCH
 // -----------------------------------------------------
 async function patchAuthentikUser(pk: number, data: Record<string, any>) {
-    const res = await fetch(`${AUTHENTIK_URL}/api/v3/core/users/${pk}/`, {
+    const res = await fetch(`${env.AUTHENTIK_URL}/api/v3/core/users/${pk}/`, {
         method: "PATCH",
         headers: {
-            "Authorization": `Bearer ${AUTHENTIK_TOKEN}`,
+            "Authorization": `Bearer ${env.AUTHENTIK_TOKEN}`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify(data)
@@ -47,10 +47,10 @@ export async function setAuthentikUserGroups(pk: number, groups: string[]) {
 async function createAuthentikUser({ username, email, name }: {
     username: string, email: string, name: string
 }) {
-    const res = await fetch(`${AUTHENTIK_URL}/api/v3/core/users/`, {
+    const res = await fetch(`${env.AUTHENTIK_URL}/api/v3/core/users/`, {
         method: "POST",
         headers: {
-            "Authorization": `Bearer ${AUTHENTIK_TOKEN}`,
+            "Authorization": `Bearer ${env.AUTHENTIK_TOKEN}`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -115,10 +115,10 @@ export async function createUser({
     // ----------------------------------------------------
     const finalPassword = providedPassword || generatePassword();
 
-    const pwRes = await fetch(`${AUTHENTIK_URL}/api/v3/core/users/${akUser.pk}/set_password/`, {
+    const pwRes = await fetch(`${env.AUTHENTIK_URL}/api/v3/core/users/${akUser.pk}/set_password/`, {
         method: "POST",
         headers: {
-            "Authorization": `Bearer ${AUTHENTIK_TOKEN}`,
+            "Authorization": `Bearer ${env.AUTHENTIK_TOKEN}`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -218,10 +218,10 @@ export async function deleteUser(id: string) {
     // 1) Authentik -> User löschen
     // -------------------------------------------
     if (user.authentikId) {
-        const res = await fetch(`${AUTHENTIK_URL}/api/v3/core/users/${user.authentikId}/`, {
+        const res = await fetch(`${env.AUTHENTIK_URL}/api/v3/core/users/${user.authentikId}/`, {
             method: "DELETE",
             headers: {
-                "Authorization": `Bearer ${AUTHENTIK_TOKEN}`
+                "Authorization": `Bearer ${env.AUTHENTIK_TOKEN}`
             }
         });
 

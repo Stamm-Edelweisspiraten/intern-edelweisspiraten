@@ -1,5 +1,5 @@
 import type { Actions, PageServerLoad } from "./$types";
-import { AUTHENTIK_TOKEN, AUTHENTIK_URL } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 import { createUser } from "$lib/server/userService";
 import { redirect, error } from "@sveltejs/kit";
 import { hasPermission } from "$lib/server/permissionService";
@@ -10,6 +10,9 @@ export const load: PageServerLoad = async ({ locals }) => {
     }
 
     // Authentik Gruppen laden
+    const AUTHENTIK_URL = env.AUTHENTIK_URL;
+    const AUTHENTIK_TOKEN = env.AUTHENTIK_TOKEN;
+
     const res = await fetch(`${AUTHENTIK_URL}/api/v3/core/groups/?page_size=1000`, {
         headers: {
             "Authorization": `Bearer ${AUTHENTIK_TOKEN}`
