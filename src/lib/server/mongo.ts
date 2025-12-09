@@ -1,11 +1,12 @@
 import { MongoClient } from "mongodb";
-import { MONGODB_URI } from "$env/static/private";
+import { env } from "$env/dynamic/private";
 
-if (!MONGODB_URI) {
-    throw new Error("❌ MONGODB_URI fehlt in .env");
+const uri = env.MONGODB_URI;
+if (!uri) {
+    throw new Error("MONGODB_URI fehlt in .env");
 }
 
-const client = new MongoClient(MONGODB_URI);
+const client = new MongoClient(uri);
 
 let clientPromise: Promise<MongoClient>;
 
