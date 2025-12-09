@@ -20,7 +20,8 @@ COPY .npmrc ./
 COPY package*.json ./
 RUN npm ci --omit=dev
 
-COPY --from=builder /app/build ./build
+# Copy SvelteKit output (adapter-auto -> node)
+COPY --from=builder /app/.svelte-kit ./ ./.svelte-kit
 
 EXPOSE 3000
-CMD ["node", "build"]
+CMD ["node", ".svelte-kit/output/server/index.js"]
