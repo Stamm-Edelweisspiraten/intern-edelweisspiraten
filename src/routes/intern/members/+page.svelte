@@ -6,12 +6,11 @@
     const groupMap = new Map(data.groups?.map((g) => [g.id, g.name]) ?? []);
 
     let filterOpen = false;
-    let filterGroups: Set<string> = new Set();
-    let filterStands: Set<string> = new Set();
-    let filterStatus: Set<string> = new Set();
+    let filterGroup: string | null = null;
+    let filterStand: string | null = null;
+    let filterStatus: string | null = null;
     let filterMinAge: number | null = null;
     let filterMaxAge: number | null = null;
-    let filterVersion = 0; // bump on apply to trigger reactivity
 
     function toggleRow(id: string) {
         const next = new Set(selected);
@@ -36,9 +35,9 @@
     }
 
     const matchesFilters = (member: any) => {
-        if (filterGroups.size > 0 && !(member.groups ?? []).some((g: string) => filterGroups.has(g))) return false;
-        if (filterStands.size > 0 && (member.stand ? !filterStands.has(member.stand) : true)) return false;
-        if (filterStatus.size > 0 && !filterStatus.has(member.status)) return false;
+        if (filterGroup && !(member.groups ?? []).includes(filterGroup)) return false;
+        if (filterStand && member.stand !== filterStand) return false;
+        if (filterStatus && member.status !== filterStatus) return false;
 
         const age = getAge(member.birthday);
         if (filterMinAge !== null && (age === null || age < filterMinAge)) return false;
@@ -60,8 +59,6 @@
                 (groupMap.get(gid) ?? gid).toLowerCase().includes(q)
             )
         );
-        // depend on filterVersion to re-run when Apply pressed
-        filterVersion;
         return matchesSearch && matchesFilters(member);
     });
 
@@ -162,24 +159,47 @@
         </button>
     </div>
 
-    {#if activeFilters.length > 0}
+    {#if filterGroup || filterStand || filterStatus || filterMinAge !== null || filterMaxAge !== null}
         <div class="mb-4 flex flex-wrap gap-2">
-            {#each activeFilters as f}
+            {#if filterGroup}
                 <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
-                    {f.label}
-                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={f.onRemove}>×</button>
+                    Gruppe: {groupMap.get(filterGroup) ?? filterGroup}
+                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => filterGroup = null}>×</button>
                 </span>
-            {/each}
+            {/if}
+            {#if filterStand}
+                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
+                    Stand: {filterStand}
+                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => filterStand = null}>×</button>
+                </span>
+            {/if}
+            {#if filterStatus}
+                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
+                    Status: {filterStatus}
+                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => filterStatus = null}>×</button>
+                </span>
+            {/if}
+            {#if filterMinAge !== null}
+                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
+                    Alter ab {filterMinAge}
+                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => filterMinAge = null}>×</button>
+                </span>
+            {/if}
+            {#if filterMaxAge !== null}
+                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
+                    Alter bis {filterMaxAge}
+                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={() => filterMaxAge = null}>×</button>
+                </span>
+            {/if}
             <button
                     type="button"
                     class="text-sm text-gray-600 underline"
                     on:click={() => {
-                        filterGroups = new Set();
-                        filterStands = new Set();
-                        filterStatus = new Set();
+                        filterGroup = null;
+                        filterStand = null;
+                        filterStatus = null;
                         filterMinAge = null;
                         filterMaxAge = null;
-                        filterVersion += 1;
                     }}>
                 Alle Filter löschen
             </button>
@@ -191,65 +211,35 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div class="relative">
                     <label class="text-sm text-gray-600">Gruppe</label>
-                    <details class="border rounded-lg bg-gray-50">
-                        <summary class="px-3 py-2 cursor-pointer select-none">Gruppe wählen ({filterGroups.size || "alle"})</summary>
-                        <div class="max-h-40 overflow-auto space-y-1 px-3 py-2">
-                            {#each data.groups as g}
-                                <label class="flex items-center gap-2 text-sm text-gray-700">
-                                    <input type="checkbox"
-                                           checked={filterGroups.has(g.id)}
-                                           on:change={(e) => {
-                                               const next = new Set(filterGroups);
-                                               (e.target as HTMLInputElement).checked ? next.add(g.id) : next.delete(g.id);
-                                               filterGroups = next;
-                                           }}
-                                    />
-                                    <span>{g.name} ({g.type})</span>
-                                </label>
-                            {/each}
-                        </div>
-                    </details>
+                    <select class="w-full border rounded-lg px-3 py-2 bg-gray-50"
+                            bind:value={filterGroup}>
+                        <option value={null}>Alle</option>
+                        {#each data.groups as g}
+                            <option value={g.id}>{g.name} ({g.type})</option>
+                        {/each}
+                    </select>
                 </div>
 
                 <div class="relative">
                     <label class="text-sm text-gray-600">Stand</label>
-                    <details class="border rounded-lg bg-gray-50">
-                        <summary class="px-3 py-2 cursor-pointer select-none">Stand wählen ({filterStands.size || "alle"})</summary>
-                        <div class="max-h-40 overflow-auto space-y-1 px-3 py-2">
-                            {#each ["Wildling-Wölfling","Wölfling","Jungpfadfinder","Knappe","Wildling-Pfadinder","Pfadfinder","Späher","Kreuzpfadfinder"] as st}
-                                <label class="flex items-center gap-2 text-sm text-gray-700">
-                                    <input type="checkbox"
-                                           checked={filterStands.has(st)}
-                                           on:change={(e) => {
-                                               const next = new Set(filterStands);
-                                               (e.target as HTMLInputElement).checked ? next.add(st) : next.delete(st);
-                                               filterStands = next;
-                                           }}
-                                    />
-                                    <span>{st}</span>
-                                </label>
-                            {/each}
-                        </div>
-                    </details>
+                    <select class="w-full border rounded-lg px-3 py-2 bg-gray-50"
+                            bind:value={filterStand}>
+                        <option value={null}>Alle</option>
+                        {#each ["Wildling-Wölfling","Wölfling","Jungpfadfinder","Knappe","Wildling-Pfadinder","Pfadfinder","Späher","Kreuzpfadfinder"] as st}
+                            <option value={st}>{st}</option>
+                        {/each}
+                    </select>
                 </div>
 
                 <div>
                     <label class="text-sm text-gray-600">Status</label>
-                    <div class="flex flex-wrap gap-2 mt-1">
-                        {#each ["aktiv", "passiv", "gekündigt"] as st}
-                            <label class="flex items-center gap-1 text-sm text-gray-700 border rounded px-2 py-1 bg-gray-50">
-                                <input type="checkbox"
-                                       checked={filterStatus.has(st)}
-                                       on:change={(e) => {
-                                           const next = new Set(filterStatus);
-                                           (e.target as HTMLInputElement).checked ? next.add(st) : next.delete(st);
-                                           filterStatus = next;
-                                       }}
-                                />
-                                {st}
-                            </label>
-                        {/each}
-                    </div>
+                    <select class="w-full border rounded-lg px-3 py-2 bg-gray-50"
+                            bind:value={filterStatus}>
+                        <option value={null}>Alle</option>
+                        <option value="aktiv">aktiv</option>
+                        <option value="passiv">passiv</option>
+                        <option value="gekündigt">gekündigt</option>
+                    </select>
                 </div>
 
                 <div>
@@ -271,22 +261,13 @@
 
             <div class="flex gap-3">
                 <button type="button"
-                        class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg"
-                        on:click={() => {
-                            filterVersion += 1;
-                            filterOpen = false;
-                        }}>
-                    Anwenden
-                </button>
-                <button type="button"
                         class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg"
                         on:click={() => {
-                            filterGroups = new Set();
-                            filterStands = new Set();
-                            filterStatus = new Set();
+                            filterGroup = null;
+                            filterStand = null;
+                            filterStatus = null;
                             filterMinAge = null;
                             filterMaxAge = null;
-                            filterVersion += 1;
                         }}>
                     Filter zurücksetzen
                 </button>
