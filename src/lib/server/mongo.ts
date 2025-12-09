@@ -20,7 +20,7 @@ if (uri) {
     }
 
     mongoClient = await clientPromise;
-    db = mongoClient.db("intern-test");
+    db = mongoClient.db(env.MONGODB_DB || "intern-test");
 } else {
     console.warn("MONGODB_URI ist nicht gesetzt. Datenbankzugriff wird fehlschlagen.");
     db = new Proxy(
