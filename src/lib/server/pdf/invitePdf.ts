@@ -16,6 +16,7 @@ export async function createInvitePdf(member: Member) {
     );
 
     const joinUrl = `https://intern.edelweisspiraten-bremen.de/join/${member._id}`;
+    const baseName = `${member.firstname} ${member.lastname}`;
     const displayName = `${member.firstname} ${member.lastname}${member.fahrtenname ? ` (${member.fahrtenname})` : ""}`;
 
     const qrPng = await QRCode.toBuffer(joinUrl, {
@@ -47,7 +48,7 @@ export async function createInvitePdf(member: Member) {
 
     doc
         .fontSize(12)
-        .text(displayName, 60, receiverY)
+        .text(baseName, 60, receiverY)
         .text(member.address.street ?? "", 60, receiverY + 15)
         .text(`${member.address.zip ?? ""} ${member.address.city}`, 60, receiverY + 30);
 
@@ -73,7 +74,7 @@ export async function createInvitePdf(member: Member) {
     doc.font("Helvetica").fontSize(12);
 
     const textBlock = `
-Liebe/r ${displayName},
+Liebe/r ${baseName},
 
 Sie wurden eingeladen, sich auf der internen Mitgliederplattform des Stammes Edelweißpiraten zu registrieren.
 
