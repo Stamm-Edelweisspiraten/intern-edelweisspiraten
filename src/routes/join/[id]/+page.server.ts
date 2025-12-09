@@ -26,8 +26,7 @@ export const load: PageServerLoad = async ({ params }) => {
         entryDate: member.entryDate,
         emails: member.emails ?? [],
         numbers: member.numbers ?? [],
-        inviteCode: member.inviteCode ?? null,
-        inviteCodeExpiresAt: member.inviteCodeExpiresAt ?? null
+        inviteCode: member.inviteCode ?? null
     };
 
     return { member: normalized };
@@ -46,10 +45,6 @@ export const actions: Actions = {
 
         if (!member.inviteCode || member.inviteCode !== code) {
             return fail(400, { error: "Ungültiger Einladungscode" });
-        }
-
-        if (member.inviteCodeExpiresAt && new Date(member.inviteCodeExpiresAt).getTime() < Date.now()) {
-            return fail(400, { error: "Einladungscode ist abgelaufen" });
         }
 
         const signed = createSignedSession(

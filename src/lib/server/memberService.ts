@@ -212,14 +212,14 @@ export async function addUserToMember(memberId: string, userId: string) {
 //  INVITE CODE
 // -----------------------------------------------------
 export async function generateInviteCode(): Promise<string> {
-    const chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    const chars = "0123456789";
     let code = "";
 
     // Kollisionen vermeiden
     // eslint-disable-next-line no-constant-condition
     while (true) {
         code = "";
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 6; i++) {
             code += chars[Math.floor(Math.random() * chars.length)];
         }
 
@@ -230,18 +230,16 @@ export async function generateInviteCode(): Promise<string> {
     return code;
 }
 
-export async function assignInviteCode(memberId: string, validityHours = 72) {
+export async function assignInviteCode(memberId: string) {
     const inviteCode = await generateInviteCode();
-    const now = new Date();
-    const expires = new Date(now.getTime() + validityHours * 60 * 60 * 1000);
 
     await db.collection("members").updateOne(
         { _id: new ObjectId(memberId) },
         {
             $set: {
                 inviteCode,
-                inviteCodeIssuedAt: now.toISOString(),
-                inviteCodeExpiresAt: expires.toISOString()
+                inviteCodeIssuedAt: new Date().toISOString(),
+                inviteCodeExpiresAt: null
             }
         }
     );
