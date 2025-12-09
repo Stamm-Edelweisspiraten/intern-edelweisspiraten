@@ -41,10 +41,15 @@ export const actions = {
         const name = form.get("name")?.toString();
         const email = form.get("email")?.toString();
         const password = form.get("password")?.toString();
+        const password2 = form.get("password2")?.toString();
         const type = form.get("accountType")?.toString() || "parent"; // fallback
 
-        if (!name || !email || !password || !type) {
+        if (!name || !email || !password || !password2 || !type) {
             return fail(400, { error: "Bitte alle Felder ausfüllen." });
+        }
+
+        if (password !== password2) {
+            return fail(400, { error: "Passwörter stimmen nicht überein." });
         }
 
         const GROUP_MAP = {
@@ -54,22 +59,26 @@ export const actions = {
 
         const groups = GROUP_MAP[type] ?? GROUP_MAP.parent;
 
-
         // -------------------------------------------------------
         // 1) USER ANLEGEN -> MONGO + AUTHENTIK (ohne Passwort-Mail)
         // -------------------------------------------------------
-        const created = await createUser({
-            name,
-            email,
-            type,
-            groups,
-            password
-        });
+        let created;
+        try {
+            created = await createUser({
+                name,
+                email,
+                type,
+                groups,
+                password
+            });
+        } catch (err: any) {
+            return fail(500, { error: err?.message ?? "Konto konnte nicht erstellt werden." });
+        }
 
         const mongoUserId = created.mongoId.toString();
 
         // -------------------------------------------------------
-        // 2) USER -> MEMBER VERKNAePFEN
+        // 2) USER -> MEMBER VERKNÜPFEN
         // -------------------------------------------------------
         await assignMemberToUser(mongoUserId, memberId);
 
