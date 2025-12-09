@@ -64,37 +64,27 @@
 
     $: activeFilters = (() => {
         const items: { label: string; onRemove: () => void }[] = [];
-        for (const gid of filterGroups) {
-            const name = groupMap.get(gid) ?? gid;
+        if (filterGroup) {
             items.push({
-                label: `Gruppe: ${name}`,
+                label: `Gruppe: ${groupMap.get(filterGroup) ?? filterGroup}`,
                 onRemove: () => {
-                    const next = new Set(filterGroups);
-                    next.delete(gid);
-                    filterGroups = next;
-                    filterVersion += 1;
+                    filterGroup = null;
                 }
             });
         }
-        for (const st of filterStands) {
+        if (filterStand) {
             items.push({
-                label: `Stand: ${st}`,
+                label: `Stand: ${filterStand}`,
                 onRemove: () => {
-                    const next = new Set(filterStands);
-                    next.delete(st);
-                    filterStands = next;
-                    filterVersion += 1;
+                    filterStand = null;
                 }
             });
         }
-        for (const st of filterStatus) {
+        if (filterStatus) {
             items.push({
-                label: `Status: ${st}`,
+                label: `Status: ${filterStatus}`,
                 onRemove: () => {
-                    const next = new Set(filterStatus);
-                    next.delete(st);
-                    filterStatus = next;
-                    filterVersion += 1;
+                    filterStatus = null;
                 }
             });
         }
@@ -103,7 +93,6 @@
                 label: `Alter ab ${filterMinAge}`,
                 onRemove: () => {
                     filterMinAge = null;
-                    filterVersion += 1;
                 }
             });
         }
@@ -112,7 +101,6 @@
                 label: `Alter bis ${filterMaxAge}`,
                 onRemove: () => {
                     filterMaxAge = null;
-                    filterVersion += 1;
                 }
             });
         }
