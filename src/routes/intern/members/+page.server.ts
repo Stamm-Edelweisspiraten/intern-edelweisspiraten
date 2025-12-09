@@ -11,15 +11,17 @@ export const load: PageServerLoad = async (event) => {
     const members = await getAllMembers();
     const groups = await getAllGroups();
 
-    const normalized = members.map((m: any) => ({
-        id: m._id.toString(),
-        firstname: m.firstname,
-        lastname: m.lastname,
-        groups: m.groups ?? [],
-        status: m.status,
-        emails: m.emails,
-        numbers: m.numbers
-    }));
+    const normalized = members
+        .map((m: any) => ({
+            id: m._id.toString(),
+            firstname: m.firstname,
+            lastname: m.lastname,
+            groups: m.groups ?? [],
+            status: m.status,
+            emails: m.emails,
+            numbers: m.numbers
+        }))
+        .sort((a, b) => (a.lastname || "").localeCompare(b.lastname || "", "de"));
 
     return { members: normalized, groups };
 };
