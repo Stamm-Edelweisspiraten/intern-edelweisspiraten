@@ -129,6 +129,7 @@ export const actions: Actions = {
 
         const { sendEmail } = await import("$lib/server/emailService");
         const reply = replyToForm || group?.replyTo || locals.user?.userinfo?.email || "";
+        const fromAddress = reply || undefined;
 
         // Attachments aufbereiten
         const attachments: { filename?: string; content: Buffer; contentType?: string }[] = [];
@@ -147,6 +148,7 @@ export const actions: Actions = {
         for (const to of emails) {
             await sendEmail({
                 to,
+                from: fromAddress,
                 subject,
                 text: bodyText || bodyHtml,
                 html: bodyHtml,

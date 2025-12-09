@@ -11,6 +11,7 @@ export interface EmailOptions {
     subject: string;
     html?: string;
     text?: string;
+    from?: string;
     replyTo?: string;
     attachments?: {
         filename?: string;
@@ -19,7 +20,7 @@ export interface EmailOptions {
     }[];
 }
 
-export async function sendEmail({ to, subject, html, text, replyTo, attachments }: EmailOptions) {
+export async function sendEmail({ to, subject, html, text, replyTo, attachments, from }: EmailOptions) {
     const nodemailer: any = await import("nodemailer");
 
     // Transporter bauen
@@ -35,7 +36,7 @@ export async function sendEmail({ to, subject, html, text, replyTo, attachments 
 
     // E-Mail senden
     return transporter.sendMail({
-        from: SMTP_FROM,
+        from: from || SMTP_FROM,
         to,
         subject,
         html,

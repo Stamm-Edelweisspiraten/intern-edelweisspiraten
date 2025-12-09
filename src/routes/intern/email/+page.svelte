@@ -193,31 +193,21 @@
                         required
                 />
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Reply-To auswählen</label>
-                    <select
-                            class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                            bind:value={replyTo}
-                    >
-                        {#each data.replyToOptions as opt}
-                            <option value={opt.email}>{opt.label} ({opt.email})</option>
-                        {/each}
-                        {#if !data.replyToOptions?.length}
-                            <option value={replyTo}>Keine Auswahl verfügbar</option>
-                        {/if}
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Reply-To</label>
-                    <input
-                            class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                            bind:value={replyTo}
-                            placeholder="Antwort-Adresse"
-                            type="email"
-                            required
-                    />
-                </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Absender / Reply-To</label>
+                <select
+                        class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        bind:value={replyTo}
+                        required
+                >
+                    {#each data.replyToOptions as opt}
+                        <option value={opt.email}>{opt.label} ({opt.email})</option>
+                    {/each}
+                    {#if !data.replyToOptions?.length}
+                        <option value={replyTo}>Keine Auswahl verfügbar</option>
+                    {/if}
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Die Mail wird mit dieser Adresse als Absender/Reply-To verschickt.</p>
             </div>
             <div class="space-y-2">
                 <label class="block text-sm font-medium text-gray-700">Nachricht</label>
