@@ -5,6 +5,8 @@
     export let data;
 
     let loading = false;
+    let successMsg = "";
+    let errorMsg = "";
 
     // --------------------------------------------
     // Emails
@@ -35,13 +37,49 @@
         selectedGroups = selectedGroups.filter((_, i) => i !== idx);
     }
 
-    const onSubmit: SubmitFunction = () => loading = true;
+    const resetFormState = () => {
+        emails = [{ label: "", email: "" }];
+        numbers = [{ label: "", number: "" }];
+        selectedGroups = [];
+    };
+
+    const onSubmit: SubmitFunction = ({ update }) => {
+        loading = true;
+        successMsg = "";
+        errorMsg = "";
+        return async ({ result, form }) => {
+            if (result.type === "success") {
+                successMsg = result.data?.memberName
+                    ? `Das Mitglied ${result.data.memberName} wurde erfolgreich erstellt!`
+                    : "Das Mitglied wurde erfolgreich erstellt!";
+                form?.reset();
+                resetFormState();
+            } else if (result.type === "failure") {
+                errorMsg = result.data?.error ?? "Speichern fehlgeschlagen.";
+            } else if (result.type === "error") {
+                errorMsg = result.error?.message ?? "Speichern fehlgeschlagen.";
+            }
+            loading = false;
+            await update();
+        };
+    };
 </script>
 
 
 <div class="max-w-4xl mx-auto mt-12 p-10 bg-white rounded-2xl shadow-xl border border-gray-200">
 
     <h1 class="text-4xl font-bold mb-8 text-gray-900">Neues Mitglied anlegen</h1>
+
+    {#if successMsg}
+        <div class="mb-4 px-4 py-3 rounded-lg bg-green-100 text-green-800 border border-green-200">
+            {successMsg}
+        </div>
+    {/if}
+    {#if errorMsg}
+        <div class="mb-4 px-4 py-3 rounded-lg bg-red-100 text-red-800 border border-red-200">
+            {errorMsg}
+        </div>
+    {/if}
 
     <form method="post" enctype="multipart/form-data" use:enhance={onSubmit} class="space-y-8">
 
