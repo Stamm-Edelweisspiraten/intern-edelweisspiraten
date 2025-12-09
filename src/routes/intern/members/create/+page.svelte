@@ -19,15 +19,20 @@
     function addNumber() { numbers = [...numbers, { label: "", number: "" }]; }
 
     // --------------------------------------------
-    // Gruppen Dropdown / Auswahl
+    // Gruppen als wiederholbare Selects
     // --------------------------------------------
     let selectedGroups: string[] = [];
-    let showGroupDropdown = false;
-
-    function toggleGroup(id: string) {
-        selectedGroups = selectedGroups.includes(id)
-            ? selectedGroups.filter(x => x !== id)
-            : [...selectedGroups, id];
+    function addGroup() {
+        const first = data.groups?.[0]?.id ?? "";
+        selectedGroups = [...selectedGroups, first];
+    }
+    function updateGroup(idx: number, value: string) {
+        const copy = [...selectedGroups];
+        copy[idx] = value;
+        selectedGroups = copy;
+    }
+    function removeGroup(idx: number) {
+        selectedGroups = selectedGroups.filter((_, i) => i !== idx);
     }
 
     const onSubmit: SubmitFunction = () => loading = true;
@@ -38,7 +43,7 @@
 
     <h1 class="text-4xl font-bold mb-8 text-gray-900">Neues Mitglied anlegen</h1>
 
-    <form method="post" use:enhance={onSubmit} class="space-y-8">
+    <form method="post" enctype="multipart/form-data" use:enhance={onSubmit} class="space-y-8">
 
         <input type="hidden" name="groups" value={JSON.stringify(selectedGroups)} />
 
@@ -116,34 +121,64 @@
             </select>
         </div>
 
-        <!-- Gruppen Auswahl -->
-        <div class="relative">
+        <!-- Gruppen Auswahl (mehrere Selects) -->
+        <div class="space-y-3">
             <label class="block text-sm font-medium text-gray-700 mb-1">Gruppen</label>
-
-            <button type="button"
-                    on:click={() => showGroupDropdown = !showGroupDropdown}
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 text-left">
-                {#if selectedGroups.length === 0}
-                    Keine Gruppen ausgewählt
-                {:else}
-                    {selectedGroups.length} Gruppe(n) ausgewählt
-                {/if}
-            </button>
-
-            {#if showGroupDropdown}
-                <div class="absolute w-full mt-1 bg-white border rounded-lg shadow-lg max-h-64 overflow-auto z-40 p-3">
-
-                    {#each data.groups as g}
-                        <label class="flex items-center gap-2 py-1 cursor-pointer">
-                            <input type="checkbox"
-                                   checked={selectedGroups.includes(g.id)}
-                                   on:change={() => toggleGroup(g.id)} />
-                            <span>{g.name} ({g.type})</span>
-                        </label>
-                    {/each}
-
-                </div>
+            {#if selectedGroups.length === 0}
+                <p class="text-sm text-gray-500">Keine Gruppe ausgewählt.</p>
             {/if}
+            {#each selectedGroups as gid, i}
+                <div class="flex gap-3 items-center">
+                    <select
+                            class="flex-1 px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500"
+                            bind:value={selectedGroups[i]}
+                            on:change={(e) => updateGroup(i, (e.target as HTMLSelectElement).value)}
+                    >
+                        {#each data.groups as g}
+                            <option value={g.id}>{g.name} ({g.type})</option>
+                        {/each}
+                    </select>
+                    <button type="button"
+                            class="px-4 py-3 bg-red-100 text-red-700 rounded-lg h-full"
+                            on:click={() => removeGroup(i)}>
+                        Entfernen
+                    </button>
+                </div>
+            {/each}
+            <button type="button" on:click={addGroup}
+                    class="px-4 py-3 bg-blue-100 text-blue-700 rounded-lg">
+                + Gruppe hinzufügen
+            </button>
+        </div>
+
+        <!-- Medien-Einverständnis -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <label class="flex items-center gap-2">
+                <input type="checkbox" name="consent_social" />
+                <span>Social Media erlaubt</span>
+            </label>
+            <label class="flex items-center gap-2">
+                <input type="checkbox" name="consent_website" />
+                <span>Stammeswebsite erlaubt</span>
+            </label>
+            <label class="flex items-center gap-2">
+                <input type="checkbox" name="consent_print" />
+                <span>Print erlaubt</span>
+            </label>
+        </div>
+
+        <!-- Uploads -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Datenschutzerklärung / Einwilligung (PDF/JPG/PNG, max. 10 MB)</label>
+                <input type="file" name="consent_file" accept=".pdf,image/png,image/jpeg"
+                       class="w-full border rounded-lg px-3 py-2" />
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Stammesanmeldung (PDF/JPG/PNG, max. 10 MB)</label>
+                <input type="file" name="application_file" accept=".pdf,image/png,image/jpeg"
+                       class="w-full border rounded-lg px-3 py-2" />
+            </div>
         </div>
 
         <!-- Emails -->

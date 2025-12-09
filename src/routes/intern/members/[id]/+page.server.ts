@@ -5,6 +5,7 @@ import { db } from "$lib/server/mongo";
 import { ObjectId } from "mongodb";
 import { getAllGroups } from "$lib/server/groupService";
 import { hasPermission } from "$lib/server/permissionService";
+import { saveMemberFile, deleteMemberFile } from "$lib/server/fileStore";
 
 export const load: PageServerLoad = async ({ params, url, locals }) => {
     if (!hasPermission(locals.permissions ?? [], "members.view")) {
@@ -31,7 +32,14 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
         entryDate: member.entryDate,
         emails: member.emails ?? [],
         numbers: member.numbers ?? [],
-        userIds: member.userIds
+        userIds: member.userIds,
+        mediaConsent: {
+            socialMedia: member.mediaConsent?.socialMedia ?? false,
+            website: member.mediaConsent?.website ?? false,
+            print: member.mediaConsent?.print ?? false
+        },
+        consentFile: member.consentFile ?? null,
+        applicationFile: member.applicationFile ?? null
     };
 
     const relatedUsers = await db.collection("users")
@@ -76,6 +84,11 @@ export const actions: Actions = {
         const id = form.get("id")?.toString();
         if (!id) return fail(400, { error: "ID fehlt" });
 
+        const existing = await getMember(id);
+        if (!existing) {
+            return fail(404, { error: "Mitglied nicht gefunden" });
+        }
+
         const firstname = form.get("firstname")?.toString() ?? "";
         const lastname = form.get("lastname")?.toString() ?? "";
         const birthday = form.get("birthday")?.toString() ?? "";
@@ -89,6 +102,15 @@ export const actions: Actions = {
 
         // --- Gruppen-Array ---
         const groups = JSON.parse(<string>form.get("groups") ?? "[]");
+
+        const consentSocial = form.get("consent_social") === "on";
+        const consentWebsite = form.get("consent_website") === "on";
+        const consentPrint = form.get("consent_print") === "on";
+
+        const consentFile = form.get("consent_file");
+        const applicationFile = form.get("application_file");
+        const removeConsent = form.get("remove_consent") === "true";
+        const removeApplication = form.get("remove_application") === "true";
 
         if (!firstname || !lastname || !birthday) {
             return fail(400, { error: "Bitte Pflichtfelder ausfüllen." });
@@ -131,8 +153,37 @@ export const actions: Actions = {
             entryDate,
             emails,
             numbers,
+            mediaConsent: {
+                socialMedia: consentSocial,
+                website: consentWebsite,
+                print: consentPrint
+            },
             updatedBy: locals.user?.userinfo?.email ?? "system"
         };
+
+        try {
+            const consentMeta = await saveMemberFile(consentFile, id, "consent", existing.consentFile?.id);
+            if (consentMeta) {
+                (updatedMember as any).consentFile = consentMeta;
+            }
+
+            const applicationMeta = await saveMemberFile(applicationFile, id, "application", existing.applicationFile?.id);
+            if (applicationMeta) {
+                (updatedMember as any).applicationFile = applicationMeta;
+            }
+
+            if (removeConsent && existing.consentFile?.id) {
+                await deleteMemberFile(existing.consentFile.id);
+                (updatedMember as any).consentFile = null;
+            }
+
+            if (removeApplication && existing.applicationFile?.id) {
+                await deleteMemberFile(existing.applicationFile.id);
+                (updatedMember as any).applicationFile = null;
+            }
+        } catch (err: any) {
+            return fail(400, { error: err?.message ?? "Datei-Upload fehlgeschlagen." });
+        }
 
         await updateMember(id, updatedMember, locals.user?.userinfo?.email ?? "system");
 

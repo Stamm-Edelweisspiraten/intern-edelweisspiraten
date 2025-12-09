@@ -39,6 +39,25 @@ export interface Member {
     inviteCode?: string;
     inviteCodeExpiresAt?: string;
     inviteCodeIssuedAt?: string;
+    mediaConsent?: {
+        socialMedia?: boolean;
+        website?: boolean;
+        print?: boolean;
+    };
+    consentFile?: {
+        id: string;
+        filename: string;
+        contentType: string;
+        size: number;
+        uploadedAt: string;
+    };
+    applicationFile?: {
+        id: string;
+        filename: string;
+        contentType: string;
+        size: number;
+        uploadedAt: string;
+    };
 }
 
 
@@ -57,7 +76,14 @@ export async function createMember(member: {
     stand: string;
     users: any[];
     lastname: string;
-    status: string
+    status: string;
+    mediaConsent?: {
+        socialMedia?: boolean;
+        website?: boolean;
+        print?: boolean;
+    };
+    consentFile?: Member["consentFile"];
+    applicationFile?: Member["applicationFile"];
 }) {
 
     const payload = {

@@ -1,9 +1,10 @@
 import type { Actions, PageServerLoad } from "./$types";
-import { createMember } from "$lib/server/memberService";
+import { createMember, updateMember } from "$lib/server/memberService";
 import { getAllGroups } from "$lib/server/groupService";
 import { redirect, fail, error } from "@sveltejs/kit";
 import { requirePermission } from "$lib/server/permissionGuard";
 import { hasPermission } from "$lib/server/permissionService";
+import { saveMemberFile } from "$lib/server/fileStore";
 
 export const load: PageServerLoad = async (event) => {
     requirePermission(event, "members.create");
@@ -34,6 +35,13 @@ export const actions: Actions = {
         const entryDate = form.get("joined")?.toString() ?? "";
 
         const groups = JSON.parse(<string>form.get("groups") ?? "[]");
+
+        const consentSocial = form.get("consent_social") === "on";
+        const consentWebsite = form.get("consent_website") === "on";
+        const consentPrint = form.get("consent_print") === "on";
+
+        const consentFile = form.get("consent_file");
+        const applicationFile = form.get("application_file");
 
         const emails: { label: string; email: string }[] = [];
         for (const [key, value] of form.entries()) {
@@ -75,10 +83,35 @@ export const actions: Actions = {
             groups,
             users: [],
             entryDate,
-            updatedBy: locals.user?.userinfo?.email ?? "system"
+            updatedBy: locals.user?.userinfo?.email ?? "system",
+            mediaConsent: {
+                socialMedia: consentSocial,
+                website: consentWebsite,
+                print: consentPrint
+            }
         };
 
-        await createMember(memberData);
+        const created = await createMember(memberData);
+
+        // Dateien speichern (optional)
+        let fileUpdates: Record<string, any> = {};
+
+        try {
+            const consentMeta = await saveMemberFile(consentFile, created._id.toString(), "consent");
+            if (consentMeta) {
+                fileUpdates.consentFile = consentMeta;
+            }
+            const applicationMeta = await saveMemberFile(applicationFile, created._id.toString(), "application");
+            if (applicationMeta) {
+                fileUpdates.applicationFile = applicationMeta;
+            }
+        } catch (err: any) {
+            return fail(400, { error: err?.message ?? "Datei-Upload fehlgeschlagen." });
+        }
+
+        if (Object.keys(fileUpdates).length > 0) {
+            await updateMember(created._id.toString(), fileUpdates, locals.user?.userinfo?.email ?? "system");
+        }
 
         throw redirect(303, "/intern/members");
     }
