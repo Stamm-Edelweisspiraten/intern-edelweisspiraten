@@ -134,11 +134,11 @@
             <select name="stand"
                     class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500">
 
-                <option>Wildling-Wölfling</option>
+                <option>Neuling-Wölfling</option>
                 <option>Wölfling</option>
                 <option>Jungpfadfinder</option>
                 <option>Knappe</option>
-                <option>Wildling-Pfadinder</option>
+                <option>Neuling-Pfadinder</option>
                 <option>Pfadfinder</option>
                 <option>Späher</option>
                 <option>Kreuzpfadfinder</option>
