@@ -113,6 +113,10 @@ export const actions: Actions = {
             await updateMember(created._id.toString(), fileUpdates, locals.user?.userinfo?.email ?? "system");
         }
 
-        throw redirect(303, "/intern/members");
+        return {
+            success: true,
+            memberName: `${firstname} ${lastname}`,
+            memberId: created._id?.toString?.() ?? null
+        };
     }
 };
