@@ -4,14 +4,12 @@
 FROM node:20 AS builder
 WORKDIR /app
 
-ENV NODE_ENV=production
-
 COPY package*.json ./
 COPY .npmrc ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN npm run prepare && npm run build
 
 # --- Run Stage ---
 FROM node:20 AS runner
