@@ -36,7 +36,7 @@
                             </div>
                             <div class="text-lg font-semibold text-gray-900">{b.firstname ?? "-"}</div>
                             <div class="text-sm text-gray-600">{b.group ?? "-"}</div>
-                            <div class="text-sm text-gray-500">wird {b.age}</div>
+                            <div class="text-sm text-gray-500">wird {b.age} Jahre alt.</div>
                         </div>
                     {/each}
                 </div>

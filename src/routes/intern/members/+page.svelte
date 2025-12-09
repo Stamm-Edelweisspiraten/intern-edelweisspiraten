@@ -5,6 +5,13 @@
     let selected = new Set<string>();
     const groupMap = new Map(data.groups?.map((g) => [g.id, g.name]) ?? []);
 
+    let filterOpen = false;
+    let filterGroup: string | null = null;
+    let filterStand: string | null = null;
+    let filterStatus: Set<string> = new Set();
+    let filterMinAge: number | null = null;
+    let filterMaxAge: number | null = null;
+
     function toggleRow(id: string) {
         const next = new Set(selected);
         if (next.has(id)) next.delete(id); else next.add(id);
@@ -14,9 +21,34 @@
     const includesInArray = (arr: any[], field: string, q: string) =>
         arr?.some((item) => item[field]?.toLowerCase().includes(q));
 
+    function getAge(birthday?: string) {
+        if (!birthday) return null;
+        const birthDate = new Date(birthday);
+        if (isNaN(birthDate.getTime())) return null;
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    }
+
+    const matchesFilters = (member: any) => {
+        if (filterGroup && !(member.groups ?? []).includes(filterGroup)) return false;
+        if (filterStand && member.stand !== filterStand) return false;
+        if (filterStatus.size > 0 && !filterStatus.has(member.status)) return false;
+
+        const age = getAge(member.birthday);
+        if (filterMinAge !== null && (age === null || age < filterMinAge)) return false;
+        if (filterMaxAge !== null && (age === null || age > filterMaxAge)) return false;
+
+        return true;
+    };
+
     $: filteredMembers = data.members.filter((member) => {
         const q = search.toLowerCase();
-        return (
+        const matchesSearch = (
             member.firstname.toLowerCase().includes(q) ||
             member.lastname.toLowerCase().includes(q) ||
             member.id.toLowerCase().includes(q) ||
@@ -27,6 +59,7 @@
                 (groupMap.get(gid) ?? gid).toLowerCase().includes(q)
             )
         );
+        return matchesSearch && matchesFilters(member);
     });
 </script>
 
@@ -52,15 +85,109 @@
         </div>
     </div>
 
-    <div class="mb-6">
+    <div class="mb-6 flex flex-col md:flex-row md:items-center gap-3">
         <input
                 type="text"
                 placeholder="Suche nach Name, Gruppe, Status, E-Mail, Telefon..."
                 bind:value={search}
-                class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
+                class="flex-1 px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
                focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-700"
         />
+        <button
+                type="button"
+                class="px-4 py-3 border rounded-lg bg-white shadow-sm hover:bg-gray-50 text-gray-700"
+                on:click={() => filterOpen = !filterOpen}
+        >
+            Filter {filterOpen ? "schließen" : "öffnen"}
+        </button>
     </div>
+
+    {#if filterOpen}
+        <div class="mb-6 border border-gray-200 rounded-xl p-4 bg-white shadow-sm space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                    <label class="text-sm text-gray-600">Gruppe</label>
+                    <select class="w-full border rounded-lg px-3 py-2 bg-gray-50"
+                            bind:value={filterGroup}>
+                        <option value={null}>Alle</option>
+                        {#each data.groups as g}
+                            <option value={g.id}>{g.name} ({g.type})</option>
+                        {/each}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-sm text-gray-600">Stand</label>
+                    <select class="w-full border rounded-lg px-3 py-2 bg-gray-50"
+                            bind:value={filterStand}>
+                        <option value={null}>Alle</option>
+                        <option>Wildling-Wölfling</option>
+                        <option>Wölfling</option>
+                        <option>Jungpfadfinder</option>
+                        <option>Knappe</option>
+                        <option>Wildling-Pfadinder</option>
+                        <option>Pfadfinder</option>
+                        <option>Späher</option>
+                        <option>Kreuzpfadfinder</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-sm text-gray-600">Status</label>
+                    <div class="flex flex-wrap gap-2 mt-1">
+                        {#each ["aktiv", "passiv", "gekündigt"] as st}
+                            <label class="flex items-center gap-1 text-sm text-gray-700 border rounded px-2 py-1 bg-gray-50">
+                                <input type="checkbox"
+                                       checked={filterStatus.has(st)}
+                                       on:change={(e) => {
+                                           const next = new Set(filterStatus);
+                                           (e.target as HTMLInputElement).checked ? next.add(st) : next.delete(st);
+                                           filterStatus = next;
+                                       }}
+                                />
+                                {st}
+                            </label>
+                        {/each}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-sm text-gray-600">Alter (min/max)</label>
+                    <div class="flex gap-2">
+                        <input type="number" min="0" placeholder="min"
+                               class="w-full border rounded-lg px-3 py-2 bg-gray-50"
+                               bind:value={filterMinAge}
+                               on:input={(e) => filterMinAge = (e.target as HTMLInputElement).value ? Number((e.target as HTMLInputElement).value) : null}
+                        />
+                        <input type="number" min="0" placeholder="max"
+                               class="w-full border rounded-lg px-3 py-2 bg-gray-50"
+                               bind:value={filterMaxAge}
+                               on:input={(e) => filterMaxAge = (e.target as HTMLInputElement).value ? Number((e.target as HTMLInputElement).value) : null}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button type="button"
+                        class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg"
+                        on:click={() => filterOpen = false}>
+                    Anwenden
+                </button>
+                <button type="button"
+                        class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg"
+                        on:click={() => {
+                            filterGroup = null;
+                            filterStand = null;
+                            filterStatus = new Set();
+                            filterMinAge = null;
+                            filterMaxAge = null;
+                        }}>
+                    Filter zurücksetzen
+                </button>
+            </div>
+        </div>
+    {/if}
 
     <div class="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden hidden md:block">
         <table class="w-full text-left">
