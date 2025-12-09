@@ -12,9 +12,9 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div class="lg:col-span-2">
-            <div class="bg-white border border-gray-200 rounded-2xl shadow p-6">
-                <h2 class="text-2xl font-semibold text-gray-900 mb-2">Übersicht</h2>
-                <p class="text-gray-600 text-sm">Füge hier weitere Widgets hinzu.</p>
+            <div class="bg-gray-100 border border-gray-200 rounded-2xl p-6 text-gray-500">
+                <h2 class="text-2xl font-semibold text-gray-700 mb-2">Coming Soon</h2>
+                <p class="text-sm">Weitere Widgets und Kennzahlen folgen.</p>
             </div>
         </div>
 

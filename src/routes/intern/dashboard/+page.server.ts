@@ -44,7 +44,11 @@ export const load: PageServerLoad = async (event) => {
 
             const firstGroupId = (m.groups ?? [])[0];
             const group = groupMap.get(firstGroupId);
-            const groupLabel = group ? `${group.type ? `${group.type} ` : ""}${group.name}` : "-";
+            let groupLabel = "-";
+            if (group) {
+                const type = group.type ? `${group.type.charAt(0).toUpperCase()}${group.type.slice(1)}` : "";
+                groupLabel = `${type ? `${type} ` : ""}${group.name}`;
+            }
 
             return {
                 id: m._id?.toString?.() ?? "",
