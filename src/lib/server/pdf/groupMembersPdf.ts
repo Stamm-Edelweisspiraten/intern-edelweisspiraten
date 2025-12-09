@@ -74,7 +74,7 @@ export async function createGroupMembersPdf({ group, members }: Options) {
             : "-";
         const phones = Array.isArray(m.numbers) && m.numbers.length > 0
             ? m.numbers
-                .map((n: any) => `${fullname}: ${n.number}${n.label ? ` (${n.label})` : ""}`)
+                .map((n: any) => `${n.label}: ${n.number}${n.label ? `` : ""}`)
                 .join("\n")
             : "-";
 
