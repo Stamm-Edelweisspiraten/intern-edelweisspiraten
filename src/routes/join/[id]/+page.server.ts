@@ -18,6 +18,7 @@ export const load: PageServerLoad = async ({ params }) => {
         id,
         firstname: member.firstname,
         lastname: member.lastname,
+        fahrtenname: member.fahrtenname ?? "",
         birthday: member.birthday,
         address: member.address,
         stand: member.stand,

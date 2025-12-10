@@ -11,7 +11,8 @@ export async function createGroupMembersPdf({ group, members }: Options) {
     const doc = new PDFDocument({
         size: "A4",
         layout: "landscape",
-        margin: 40
+        margin: 40,
+        bufferPages: true
     });
 
     const chunks: Buffer[] = [];
@@ -66,6 +67,7 @@ export async function createGroupMembersPdf({ group, members }: Options) {
 
     members.forEach((m) => {
         const fullname = `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt";
+        const displayName = m.fahrtenname ? `${fullname} (${m.fahrtenname})` : fullname;
         const addr = m.address
             ? `${m.address.street ?? ""}, ${m.address.zip ?? ""} ${m.address.city ?? ""}`.trim()
             : "-";
@@ -74,7 +76,7 @@ export async function createGroupMembersPdf({ group, members }: Options) {
             : "-";
         const phones = Array.isArray(m.numbers) && m.numbers.length > 0
             ? m.numbers
-                .map((n: any) => `${fullname}: ${n.number}${n.label ? ` (${n.label})` : ""}`)
+                .map((n: any) => `${n.label}: ${n.number}${n.label ? `` : ""}`)
                 .join("\n")
             : "-";
 
@@ -84,7 +86,7 @@ export async function createGroupMembersPdf({ group, members }: Options) {
             doc.rect(startX + colWidths.slice(0, idx).reduce((a, b) => a + b, 0), y, colWidths[idx], rowHeight).stroke("#e5e7eb");
         });
 
-        doc.text(fullname, startX + 6, y + 8, { width: colWidths[0] - 12 });
+        doc.text(displayName, startX + 6, y + 8, { width: colWidths[0] - 12 });
         doc.text(addr, startX + colWidths[0] + 6, y + 8, { width: colWidths[1] - 12 });
         doc.text(emails, startX + colWidths[0] + colWidths[1] + 6, y + 8, { width: colWidths[2] - 12 });
         doc.text(phones, startX + colWidths[0] + colWidths[1] + colWidths[2] + 6, y + 8, { width: colWidths[3] - 12 });

@@ -23,6 +23,7 @@ export const actions: Actions = {
 
         const firstname = form.get("firstname")?.toString() ?? "";
         const lastname = form.get("lastname")?.toString() ?? "";
+        const fahrtenname = form.get("fahrtenname")?.toString() ?? "";
         const birthday = form.get("birthday")?.toString() ?? "";
 
         const address_street = form.get("address_street")?.toString() ?? "";
@@ -70,6 +71,7 @@ export const actions: Actions = {
         const memberData = {
             firstname,
             lastname,
+            ...(fahrtenname ? { fahrtenname } : {}),
             birthday,
             address: {
                 street: address_street,

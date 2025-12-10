@@ -25,6 +25,7 @@ export interface Member {
     _id?: ObjectId;
     firstname: string;
     lastname: string;
+    fahrtenname?: string;
     birthday: string;
     address: MemberAddress;
     stand: string;
@@ -69,6 +70,7 @@ export async function createMember(member: {
     emails: { label: string; email: string }[];
     firstname: string;
     address: { zip: string; city: string; street: string };
+    fahrtenname?: string;
     updatedBy: string;
     entryDate: string;
     numbers: { label: string; number: string }[];
@@ -182,6 +184,7 @@ export async function searchMembers(query: string) {
             $or: [
                 { firstname: { $regex: q, $options: "i" } },
                 { lastname: { $regex: q, $options: "i" } },
+                { fahrtenname: { $regex: q, $options: "i" } },
                 { groups: { $regex: q, $options: "i" } },
                 { status: { $regex: q, $options: "i" } },
                 { stand: { $regex: q, $options: "i" } },

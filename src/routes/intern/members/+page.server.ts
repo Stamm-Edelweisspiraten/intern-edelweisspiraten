@@ -16,6 +16,7 @@ export const load: PageServerLoad = async (event) => {
             id: m._id.toString(),
             firstname: m.firstname,
             lastname: m.lastname,
+            fahrtenname: m.fahrtenname ?? "",
             birthday: m.birthday,
             stand: m.stand,
             groups: m.groups ?? [],

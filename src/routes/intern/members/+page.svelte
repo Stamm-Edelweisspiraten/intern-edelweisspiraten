@@ -51,6 +51,7 @@
         const matchesSearch = (
             member.firstname.toLowerCase().includes(q) ||
             member.lastname.toLowerCase().includes(q) ||
+            (member.fahrtenname ?? "").toLowerCase().includes(q) ||
             member.id.toLowerCase().includes(q) ||
             (member.status ?? "").toLowerCase().includes(q) ||
             includesInArray(member.emails, "email", q) ||
@@ -359,7 +360,7 @@
                     </td>
 
                     <td class="px-6 py-4 font-medium text-gray-900">
-                        {m.firstname} {m.lastname}
+                        {m.firstname} {m.lastname}{m.fahrtenname ? ` (${m.fahrtenname})` : ""}
                     </td>
 
                     <td class="px-6 py-4 text-gray-700">
@@ -466,7 +467,7 @@
             <div class="card p-4 border border-gray-200 rounded-xl">
                 <div class="flex justify-between items-center">
                     <div>
-                        <div class="font-semibold text-lg text-gray-900">{m.firstname} {m.lastname}</div>
+                        <div class="font-semibold text-lg text-gray-900">{m.firstname} {m.lastname}{m.fahrtenname ? ` (${m.fahrtenname})` : ""}</div>
                         <div class="text-sm text-gray-500">{m.status ?? "-"}</div>
                     </div>
                     <div class="flex items-center gap-2">
