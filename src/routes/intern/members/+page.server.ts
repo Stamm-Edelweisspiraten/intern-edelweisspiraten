@@ -40,7 +40,8 @@ export const actions: Actions = {
 
         if (!id) return fail(400, { error: "Missing ID" });
 
-        await deleteMember(id);
+        const actor = locals.user?.userinfo?.name ?? locals.user?.userinfo?.email ?? "system";
+        await deleteMember(id, actor);
 
         throw redirect(303, "/intern/members");
     }

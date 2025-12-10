@@ -76,6 +76,8 @@ export const actions: Actions = {
             return fail(400, { error: "Bitte Pflichtfelder ausfüllen." });
         }
 
+        const updatedBy = locals.user?.userinfo?.name ?? locals.user?.userinfo?.email ?? "system";
+
         const memberData = {
             firstname,
             lastname,
@@ -93,7 +95,7 @@ export const actions: Actions = {
             groups,
             users: [],
             entryDate,
-            updatedBy: locals.user?.userinfo?.email ?? "system",
+            updatedBy,
             isSecondMember,
             contributionDues,
             mediaConsent: {
@@ -122,7 +124,7 @@ export const actions: Actions = {
         }
 
         if (Object.keys(fileUpdates).length > 0) {
-            await updateMember(created._id.toString(), fileUpdates, locals.user?.userinfo?.email ?? "system");
+            await updateMember(created._id.toString(), fileUpdates, updatedBy);
         }
 
         return {

@@ -103,12 +103,30 @@
         if (disabled) return;
         memberUserIds = memberUserIds.filter((id) => id !== uid);
     }
+
+    const formatDate = (iso: string) => new Date(iso).toLocaleString("de-DE");
+    const lastChanged = data.member.updatedAt ? formatDate(data.member.updatedAt) : null;
 </script>
 
 <div class="max-w-3xl mx-auto mt-12 p-8 bg-white rounded-2xl shadow-xl border">
-    <h1 class="text-4xl font-bold mb-8 text-gray-900">
-        {mode === "view" ? "Mitglied ansehen" : "Mitglied bearbeiten"}
-    </h1>
+    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
+        <div>
+            <h1 class="text-4xl font-bold text-gray-900">
+                {mode === "view" ? "Mitglied ansehen" : "Mitglied bearbeiten"}
+            </h1>
+            {#if lastChanged}
+                <p class="text-sm text-gray-600 mt-2">
+                    Zuletzt geändert {lastChanged}{data.member.updatedBy ? ` von ${data.member.updatedBy}` : ""}
+                </p>
+            {/if}
+        </div>
+        <a
+            href={`/intern/members/${data.member.id}/log`}
+            class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+            Änderungslog
+        </a>
+    </div>
 
     <form method="post" enctype={mode === "edit" ? "multipart/form-data" : undefined} action={mode === "edit" ? "?/update" : undefined} class="space-y-7">
         <input type="hidden" name="id" value={data.member.id} />

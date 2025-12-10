@@ -68,6 +68,50 @@ export interface Member {
     };
 }
 
+export interface MemberLogEntry {
+    memberId: string;
+    action: "create" | "update" | "delete";
+    changes?: { field: string; before: any; after: any }[];
+    createdAt: string;
+    user: string;
+}
+
+function collectChanges(before: any, after: Record<string, any>): { field: string; before: any; after: any }[] {
+    const changes: { field: string; before: any; after: any }[] = [];
+    for (const key of Object.keys(after)) {
+        const oldVal = before?.[key];
+        const newVal = after[key];
+        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+            changes.push({ field: key, before: oldVal, after: newVal });
+        }
+    }
+    return changes;
+}
+
+async function addMemberLog(entry: Omit<MemberLogEntry, "createdAt">) {
+    const payload: MemberLogEntry = {
+        ...entry,
+        createdAt: new Date().toISOString()
+    };
+    await db.collection("memberLogs").insertOne(payload);
+}
+
+export async function getMemberLogs(memberId: string) {
+    const logs = await db.collection("memberLogs")
+        .find({ memberId })
+        .sort({ createdAt: -1 })
+        .limit(100)
+        .toArray();
+
+    return logs.map((l: any) => ({
+        memberId: l.memberId,
+        action: l.action,
+        changes: l.changes ?? [],
+        createdAt: l.createdAt,
+        user: l.user ?? "unbekannt"
+    }));
+}
+
 
 // -----------------------------------------------------
 //  CREATE MEMBER
@@ -108,6 +152,13 @@ export async function createMember(member: {
 
     // Invite Code erzeugen
     await assignInviteCode(memberId);
+
+    await addMemberLog({
+        memberId,
+        action: "create",
+        changes: [],
+        user: payload.updatedBy ?? "system"
+    });
 
     return { ...payload, _id: res.insertedId };
 }
@@ -155,16 +206,28 @@ export async function updateMember(id: string, data: Partial<Member>, updatedBy:
 
     const mongoId = new ObjectId(id);
 
+    const existing = await db.collection("members").findOne({ _id: mongoId });
+    if (!existing) return false;
+
     const payload = {
         ...data,
         updatedBy,
         updatedAt: new Date().toISOString()
     };
 
+    const changes = collectChanges(existing, payload);
+
     await db.collection("members").updateOne(
         { _id: mongoId },
         { $set: payload }
     );
+
+    await addMemberLog({
+        memberId: id,
+        action: "update",
+        changes,
+        user: updatedBy
+    });
 
     return true;
 }
@@ -173,8 +236,15 @@ export async function updateMember(id: string, data: Partial<Member>, updatedBy:
 // -----------------------------------------------------
 //  DELETE MEMBER
 // -----------------------------------------------------
-export async function deleteMember(id: string) {
-    return await db.collection("members").deleteOne({ _id: new ObjectId(id) });
+export async function deleteMember(id: string, deletedBy?: string) {
+    const res = await db.collection("members").deleteOne({ _id: new ObjectId(id) });
+    await addMemberLog({
+        memberId: id,
+        action: "delete",
+        changes: [],
+        user: deletedBy ?? "system"
+    });
+    return res;
 }
 
 

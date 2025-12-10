@@ -47,7 +47,9 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
             print: member.mediaConsent?.print ?? false
         },
         consentFile: member.consentFile ?? null,
-        applicationFile: member.applicationFile ?? null
+        applicationFile: member.applicationFile ?? null,
+        updatedAt: member.updatedAt ?? null,
+        updatedBy: member.updatedBy ?? null
     };
 
     const relatedUsers = await db.collection("users")
@@ -155,6 +157,8 @@ export const actions: Actions = {
             }
         }
 
+        const updatedBy = locals.user?.userinfo?.name ?? locals.user?.userinfo?.email ?? "system";
+
         const updatedMember = {
             firstname,
             lastname,
@@ -178,7 +182,7 @@ export const actions: Actions = {
                 website: consentWebsite,
                 print: consentPrint
             },
-            updatedBy: locals.user?.userinfo?.email ?? "system"
+            updatedBy
         };
 
         try {
@@ -205,7 +209,7 @@ export const actions: Actions = {
             return fail(400, { error: err?.message ?? "Datei-Upload fehlgeschlagen." });
         }
 
-        await updateMember(id, updatedMember, locals.user?.userinfo?.email ?? "system");
+        await updateMember(id, updatedMember, updatedBy);
 
         throw redirect(303, `/intern/members/${id}`);
     },
@@ -221,7 +225,8 @@ export const actions: Actions = {
 
         if (!id) return fail(400, { error: "ID fehlt" });
 
-        await deleteMember(id);
+        const actor = locals.user?.userinfo?.name ?? locals.user?.userinfo?.email ?? "system";
+        await deleteMember(id, actor);
 
         throw redirect(303, "/intern/members");
     },
