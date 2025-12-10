@@ -115,7 +115,7 @@
 
         <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Fahrtenname (optional)</label>
-            <input name="fahrtenname" placeholder="Spitzname fuer Fahrten"
+            <input name="fahrtenname"
                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
         </div>
 

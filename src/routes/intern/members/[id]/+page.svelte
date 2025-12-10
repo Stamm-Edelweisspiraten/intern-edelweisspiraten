@@ -128,7 +128,7 @@
 
         <div>
             <label>Fahrtenname (optional)</label>
-            <input type="text" name="fahrtenname" bind:value={fahrtenname} disabled={disabled} placeholder="Spitzname fuer Fahrten" class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
+            <input type="text" name="fahrtenname" bind:value={fahrtenname} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
