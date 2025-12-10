@@ -1,4 +1,4 @@
-export function welcomeTemplate(name: string) {
+export function welcomeTemplate(name: string, username?: string, email?: string) {
     return `
 <!DOCTYPE html>
 <html lang="de" style="margin:0;padding:0;">
@@ -40,6 +40,8 @@ export function welcomeTemplate(name: string) {
                         <td style="font-size:16px;line-height:1.6;color:#4b5563;padding-bottom:24px;text-align:center;">
                             Dein Benutzerkonto wurde erfolgreich erstellt.<br />
                             Bitte setze jetzt dein eigenes Passwort.
+                            ${username ? `<br /><strong>Anmeldename:</strong> ${username}` : ""}
+                            ${email ? `<br /><strong>E-Mail:</strong> ${email}` : ""}
                         </td>
                     </tr>
 

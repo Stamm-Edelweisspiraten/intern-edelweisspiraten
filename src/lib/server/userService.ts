@@ -1,4 +1,4 @@
-import { db } from "$lib/server/mongo";
+﻿import { db } from "$lib/server/mongo";
 import { env } from "$env/dynamic/private";
 import { ObjectId } from "mongodb";
 import * as crypto from "node:crypto";
@@ -35,7 +35,7 @@ async function patchAuthentikUser(pk: number, data: Record<string, any>) {
 }
 
 // -----------------------------------------------------
-//  Helper: Gruppen vollständig setzen
+//    Helper: Gruppen vollständig setzen
 // -----------------------------------------------------
 export async function setAuthentikUserGroups(pk: number, groups: string[]) {
     return await patchAuthentikUser(pk, { groups });
@@ -67,6 +67,26 @@ async function createAuthentikUser({ username, email, name }: {
     }
 
     return await res.json();
+}
+
+function normalizePart(part: string) {
+    return part
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+}
+
+function buildUsernameFromName(fullName: string, email: string) {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length === 0) {
+        return email;
+    }
+    const first = normalizePart(parts[0]);
+    const last = normalizePart(parts.length > 1 ? parts[parts.length - 1] : parts[0]);
+
+    const base = [first || null, last || null].filter(Boolean).join(".");
+    return base || email;
 }
 
 // -----------------------------------------------------
@@ -104,8 +124,10 @@ export async function createUser({
     // ----------------------------------------------------
     // 2) AUTHENTIK USER OHNE PASSWORT ERZEUGEN
     // ----------------------------------------------------
+    const username = buildUsernameFromName(name, email);
+
     const akUser = await createAuthentikUser({
-        username: email,
+        username,
         email,
         name
     });
@@ -155,23 +177,29 @@ export async function createUser({
             html: `
                 <p>Hallo ${name},</p>
                 <p>dein Benutzerkonto wurde erfolgreich erstellt.</p>
+                <p>Anmeldename: <strong>${username}</strong><br/>E-Mail: <strong>${email}</strong></p>
                 <p>Bitte setze dein Passwort auf der Login-Seite über "Passwort vergessen" selbst oder nutze das von dir gesetzte Passwort.</p>
                 <p>Viele Grüße<br>Edelweisspiraten Bremen</p>
             `,
-            text: `Hallo ${name}, dein Konto wurde erstellt. Bitte setze dein Passwort über "Passwort vergessen" oder nutze das von dir vergebene Passwort.`
+            text: `Hallo ${name}, dein Konto wurde erstellt.
+Anmeldename: ${username}
+E-Mail: ${email}
+Bitte setze dein Passwort über "Passwort vergessen" oder nutze das von dir vergebene Passwort.`
         });
 
     } else {
         await sendEmail({
             to: email,
             subject: "Dein Benutzerkonto wurde erstellt",
-            html: welcomeTemplate(name),
-            text: `Hallo ${name}, dein Benutzerkonto wurde erstellt. Bitte setze dein eigenes Passwort über die Login-Seite (Passwort vergessen).`
+            html: welcomeTemplate(name, username, email),
+            text: `Hallo ${name}, dein Benutzerkonto wurde erstellt.
+Anmeldename: ${username}
+E-Mail: ${email}
+Bitte setze dein eigenes Passwort über die Login-Seite (Passwort vergessen).`
         });
     }
-
-    // ----------------------------------------------------
-    // 7) Rückgabe
+// ----------------------------------------------------
+    // 7) RÃ¼ckgabe
     // ----------------------------------------------------
     return {
         mongoId: mongoRes.insertedId,
@@ -215,7 +243,7 @@ export async function deleteUser(id: string) {
     if (!user) return;
 
     // -------------------------------------------
-    // 1) Authentik -> User löschen
+    // 1) Authentik -> User lÃ¶schen
     // -------------------------------------------
     if (user.authentikId) {
         const res = await fetch(`${env.AUTHENTIK_URL}/api/v3/core/users/${user.authentikId}/`, {
@@ -231,7 +259,7 @@ export async function deleteUser(id: string) {
     }
 
     // -------------------------------------------
-    // 2) Member <-> User Verknüpfungen lösen
+    // 2) Member <-> User VerknÃ¼pfungen lÃ¶sen
     // -------------------------------------------
     await db.collection("members").updateMany(
         { users: id },
@@ -244,7 +272,7 @@ export async function deleteUser(id: string) {
     );
 
     // -------------------------------------------
-    // 3) MongoDB -> User löschen
+    // 3) MongoDB -> User lÃ¶schen
     // -------------------------------------------
     return await db.collection("users").deleteOne({ _id: mongoId });
 }
@@ -285,3 +313,9 @@ export async function removeMemberFromUser(userId: string, memberId: string) {
 
     return result.modifiedCount > 0;
 }
+
+
+
+
+
+
