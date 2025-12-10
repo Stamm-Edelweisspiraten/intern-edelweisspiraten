@@ -16,6 +16,22 @@
     let stand = data.member.stand;
     let status = data.member.status;
 
+    let isSecondMember = data.member.isSecondMember ?? false;
+    let contributionDues = {
+        stamm: data.member.contributionDues?.stamm ?? (isSecondMember ? true : false),
+        gau: data.member.contributionDues?.gau ?? false,
+        landesmark: data.member.contributionDues?.landesmark ?? false,
+        bund: data.member.contributionDues?.bund ?? false
+    };
+
+    $: if (!isSecondMember && (contributionDues.stamm || contributionDues.gau || contributionDues.landesmark || contributionDues.bund)) {
+        contributionDues = { stamm: false, gau: false, landesmark: false, bund: false };
+    }
+
+    $: if (isSecondMember && !contributionDues.stamm) {
+        contributionDues = { ...contributionDues, stamm: true };
+    }
+
     let consentSocial = data.member.mediaConsent?.socialMedia ?? false;
     let consentWebsite = data.member.mediaConsent?.website ?? false;
     let consentPrint = data.member.mediaConsent?.print ?? false;
@@ -206,6 +222,39 @@
                     <option>gekündigt</option>
                 </select>
             </div>
+        </div>
+
+        <div class="space-y-3">
+            <label class="flex items-center gap-2 text-gray-800">
+                <input type="checkbox" name="is_second_member" bind:checked={isSecondMember} disabled={disabled} class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                <span>Zweitmitglied</span>
+            </label>
+
+            {#if isSecondMember}
+                {#if mode === "edit"}
+                    <input type="hidden" name="dues_stamm" value="on" />
+                {/if}
+                <div class="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label class="flex items-center gap-2 text-gray-800">
+                            <input type="checkbox" checked disabled class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                            <span>Stamm (immer fällig)</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-gray-800">
+                            <input type="checkbox" name="dues_gau" bind:checked={contributionDues.gau} disabled={disabled} class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                            <span>Gau</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-gray-800">
+                            <input type="checkbox" name="dues_landesmark" bind:checked={contributionDues.landesmark} disabled={disabled} class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                            <span>Landesmark</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-gray-800">
+                            <input type="checkbox" name="dues_bund" bind:checked={contributionDues.bund} disabled={disabled} class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                            <span>Bund</span>
+                        </label>
+                    </div>
+                </div>
+            {/if}
         </div>
 
         <div class="space-y-3">

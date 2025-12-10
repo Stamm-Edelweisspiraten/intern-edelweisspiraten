@@ -35,6 +35,14 @@ export const actions: Actions = {
 
         const entryDate = form.get("joined")?.toString() ?? "";
 
+        const isSecondMember = form.get("is_second_member") === "on";
+        const contributionDues = {
+            stamm: isSecondMember ? true : false,
+            gau: isSecondMember && form.get("dues_gau") === "on",
+            landesmark: isSecondMember && form.get("dues_landesmark") === "on",
+            bund: isSecondMember && form.get("dues_bund") === "on"
+        };
+
         const groups = JSON.parse(<string>form.get("groups") ?? "[]");
 
         const consentSocial = form.get("consent_social") === "on";
@@ -86,6 +94,8 @@ export const actions: Actions = {
             users: [],
             entryDate,
             updatedBy: locals.user?.userinfo?.email ?? "system",
+            isSecondMember,
+            contributionDues,
             mediaConsent: {
                 socialMedia: consentSocial,
                 website: consentWebsite,

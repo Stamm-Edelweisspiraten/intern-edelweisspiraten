@@ -35,6 +35,13 @@ export interface Member {
     groups: string[];      // interne Gruppen-IDs
     users: string[];
     entryDate: string;
+    isSecondMember?: boolean;
+    contributionDues?: {
+        stamm: boolean;
+        gau: boolean;
+        landesmark: boolean;
+        bund: boolean;
+    };
     updatedAt: string;
     updatedBy: string;
     inviteCode?: string;
@@ -79,6 +86,8 @@ export async function createMember(member: {
     users: any[];
     lastname: string;
     status: string;
+    isSecondMember?: boolean;
+    contributionDues?: Member["contributionDues"];
     mediaConsent?: {
         socialMedia?: boolean;
         website?: boolean;

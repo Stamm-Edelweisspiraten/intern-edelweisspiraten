@@ -8,6 +8,17 @@
     let successMsg = "";
     let errorMsg = "";
 
+    let isSecondMember = false;
+    let contributionDues = { stamm: true, gau: false, landesmark: false, bund: false };
+
+    $: if (!isSecondMember && (contributionDues.stamm || contributionDues.gau || contributionDues.landesmark || contributionDues.bund)) {
+        contributionDues = { stamm: false, gau: false, landesmark: false, bund: false };
+    }
+
+    $: if (isSecondMember && !contributionDues.stamm) {
+        contributionDues = { ...contributionDues, stamm: true };
+    }
+
     // --------------------------------------------
     // Emails
     // --------------------------------------------
@@ -41,6 +52,8 @@
         emails = [{ label: "", email: "" }];
         numbers = [{ label: "", number: "" }];
         selectedGroups = [];
+        isSecondMember = false;
+        contributionDues = { stamm: true, gau: false, landesmark: false, bund: false };
     };
 
     const onSubmit: SubmitFunction = ({ update }) => {
@@ -163,6 +176,42 @@
                 <option>gekündigt</option>
 
             </select>
+        </div>
+
+        <!-- Zweitmitglied -->
+        <div class="space-y-3">
+            <label class="flex items-center gap-2 text-gray-800">
+                <input type="checkbox" name="is_second_member" bind:checked={isSecondMember}
+                       class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                <span>Zweitmitglied</span>
+            </label>
+
+            {#if isSecondMember}
+                <div class="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
+                    <input type="hidden" name="dues_stamm" value="on" />
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <label class="flex items-center gap-2 text-gray-800">
+                            <input type="checkbox" checked disabled class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                            <span>Stamm (immer fällig)</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-gray-800">
+                            <input type="checkbox" name="dues_gau" bind:checked={contributionDues.gau}
+                                   class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                            <span>Gau</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-gray-800">
+                            <input type="checkbox" name="dues_landesmark" bind:checked={contributionDues.landesmark}
+                                   class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                            <span>Landesmark</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-gray-800">
+                            <input type="checkbox" name="dues_bund" bind:checked={contributionDues.bund}
+                                   class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
+                            <span>Bund</span>
+                        </label>
+                    </div>
+                </div>
+            {/if}
         </div>
 
         <!-- Gruppen Auswahl (mehrere Selects) -->

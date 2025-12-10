@@ -33,6 +33,13 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
         entryDate: member.entryDate,
         emails: member.emails ?? [],
         numbers: member.numbers ?? [],
+        isSecondMember: member.isSecondMember ?? false,
+        contributionDues: {
+            stamm: member.contributionDues?.stamm ?? false,
+            gau: member.contributionDues?.gau ?? false,
+            landesmark: member.contributionDues?.landesmark ?? false,
+            bund: member.contributionDues?.bund ?? false
+        },
         userIds: member.userIds,
         mediaConsent: {
             socialMedia: member.mediaConsent?.socialMedia ?? false,
@@ -102,6 +109,14 @@ export const actions: Actions = {
 
         const entryDate = form.get("entryDate")?.toString() ?? "";
 
+        const isSecondMember = form.get("is_second_member") === "on";
+        const contributionDues = {
+            stamm: isSecondMember ? true : false,
+            gau: isSecondMember && form.get("dues_gau") === "on",
+            landesmark: isSecondMember && form.get("dues_landesmark") === "on",
+            bund: isSecondMember && form.get("dues_bund") === "on"
+        };
+
         // --- Gruppen-Array ---
         const groups = JSON.parse(<string>form.get("groups") ?? "[]");
 
@@ -156,6 +171,8 @@ export const actions: Actions = {
             entryDate,
             emails,
             numbers,
+            isSecondMember,
+            contributionDues,
             mediaConsent: {
                 socialMedia: consentSocial,
                 website: consentWebsite,
