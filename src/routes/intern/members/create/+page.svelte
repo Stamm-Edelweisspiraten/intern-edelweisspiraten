@@ -136,9 +136,9 @@
 
                 <option>Neuling-Wölfling</option>
                 <option>Wölfling</option>
+                <option>Neuling-Pfadinder</option>
                 <option>Jungpfadfinder</option>
                 <option>Knappe</option>
-                <option>Neuling-Pfadinder</option>
                 <option>Pfadfinder</option>
                 <option>Späher</option>
                 <option>Kreuzpfadfinder</option>
