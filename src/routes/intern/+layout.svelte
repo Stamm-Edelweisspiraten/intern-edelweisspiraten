@@ -8,6 +8,7 @@
         { name: "Dashboard", href: "/intern/dashboard" },
         { name: "Termine", href: "/intern/termine" },
         { name: "Downloads", href: "/intern/downloads" },
+        { name: "Kasse", href: "/intern/finance" },
         { name: "Profil", href: "/intern/profil" }
     ];
 
