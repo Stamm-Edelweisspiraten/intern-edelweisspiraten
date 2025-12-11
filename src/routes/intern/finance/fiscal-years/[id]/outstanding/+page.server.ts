@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ params }) => {
     const sumAll = fiscalYear.dues.stamm + fiscalYear.dues.gau + fiscalYear.dues.landesmark + fiscalYear.dues.bund;
 
     const paymentsByMember = (fiscalYear.transactions ?? [])
-        .filter((tx) => tx.kind === "dues" && tx.memberId)
+        .filter((tx) => tx.kind === "Jahresbeitrag" && tx.memberId)
         .reduce((acc: Record<string, number>, tx) => {
             const key = tx.memberId as string;
             acc[key] = (acc[key] ?? 0) + (Number(tx.amount) || 0);

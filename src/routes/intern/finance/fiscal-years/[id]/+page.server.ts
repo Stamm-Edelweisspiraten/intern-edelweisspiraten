@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { error, fail, redirect } from "@sveltejs/kit";
 import { addTransaction, getFiscalYear } from "$lib/server/financeService";
-import { getAllMembers } from "$lib/server/memberService";
+import { getAllMembers, getMember } from "$lib/server/memberService";
 
 export const load: PageServerLoad = async ({ params }) => {
     const fiscalYear = await getFiscalYear(params.id);
@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ params }) => {
     const sumAll = fiscalYear.dues.stamm + fiscalYear.dues.gau + fiscalYear.dues.landesmark + fiscalYear.dues.bund;
 
     const paymentsByMember = (fiscalYear.transactions ?? [])
-        .filter((tx) => tx.kind === "dues" && tx.memberId)
+        .filter((tx) => tx.kind === "Jahresbeitrag" && tx.memberId)
         .reduce((acc: Record<string, number>, tx) => {
             const key = tx.memberId as string;
             acc[key] = (acc[key] ?? 0) + (Number(tx.amount) || 0);
@@ -74,15 +74,25 @@ export const actions: Actions = {
         const date = form.get("date")?.toString() ?? "";
         const direction = form.get("direction")?.toString() === "out" ? "out" : "in";
         const kind = form.get("kind")?.toString() ?? "custom";
-        const member = form.get("member")?.toString() ?? "";
+        const memberInput = form.get("member")?.toString() ?? "";
+        const memberId = form.get("memberId")?.toString() ?? "";
         const note = form.get("note")?.toString() ?? "";
 
         if (!params.id) return fail(400, { error: "Missing fiscal year id" });
         if (Number.isNaN(amount) || amount <= 0) return fail(400, { error: "Invalid amount" });
         if (!date) return fail(400, { error: "Date is required" });
 
+        let memberName = memberInput || "Unbekannt";
+        if (memberId) {
+            const m = await getMember(memberId);
+            if (m) {
+                memberName = `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || memberName;
+            }
+        }
+
         const tx = await addTransaction(params.id, {
-            member: member || "Unbekannt",
+            memberId: memberId || undefined,
+            member: memberName,
             date,
             direction,
             kind,

@@ -28,6 +28,7 @@
     let txDirection: "in" | "out" = "in";
     let txKind = "custom";
     let txMember = "";
+    let txMemberId = "";
     let txNote = "";
 
     const sortedTransactions = [...(fiscalYear.transactions ?? [])].sort((a, b) => {
@@ -65,7 +66,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
             <p class="text-sm text-gray-500">Einnahmen</p>
             <p class="text-2xl font-semibold text-green-600">{euro(totals.in)}</p>
@@ -90,7 +91,7 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div class="lg:col-span-2 bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
+        <div class="lg:col-span-2 bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-4">
             <h2 class="text-xl font-semibold text-gray-900">Jahresbeitrag</h2>
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div class="p-4 bg-gray-50 rounded-xl border border-gray-100">
@@ -115,7 +116,7 @@
             </p>
         </div>
 
-        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
+        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-4">
             <h2 class="text-xl font-semibold text-gray-900">Aktionen</h2>
             <div class="space-y-3">
                 {#if actions.length === 0}
@@ -140,7 +141,7 @@
         </div>
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 sm:p-6 space-y-4">
         <h2 class="text-xl font-semibold text-gray-900">Bestellungen / Sonstige Posten</h2>
         {#if memberOrders.length}
             <ul class="divide-y divide-gray-200">
@@ -160,14 +161,14 @@
     </div>
 
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-        <div class="px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
+        <div class="px-4 sm:px-6 py-4 flex items-start sm:items-center justify-between gap-3 flex-wrap">
             <div class="flex items-center gap-2">
                 <h2 class="text-xl font-semibold text-gray-900">Transaktionen</h2>
                 <span class="text-sm text-gray-500">({filteredTransactions.length}/{fiscalYear.transactions.length})</span>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 w-full sm:w-auto">
                 <button
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg"
+                        class="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg"
                         on:click={() => {
                             showTxModal = true;
                             txAmount = 0;
@@ -176,6 +177,7 @@
                             txKind = "custom";
                             txMember = "";
                             txNote = "";
+                            txMemberId = "";
                         }}
                         type="button"
                 >
@@ -195,12 +197,12 @@
             <table class="w-full min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Datum</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Mitglied</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Typ</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Richtung</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Betrag</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Notiz</th>
+                    <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Richtung</th>
+                    <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Datum</th>
+                    <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Mitglied</th>
+                    <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Typ</th>
+                    <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Betrag</th>
+                    <th class="px-4 sm:px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Notiz</th>
                 </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
@@ -213,10 +215,7 @@
                 {:else}
                     {#each filteredTransactions as tx}
                         <tr class="hover:bg-gray-50 transition">
-                            <td class="px-6 py-4 text-sm text-gray-700">{tx.date}</td>
-                            <td class="px-6 py-4 text-sm text-gray-900 font-semibold">{tx.member}</td>
-                            <td class="px-6 py-4 text-sm text-gray-700 uppercase tracking-wide">{tx.kind}</td>
-                            <td class="px-6 py-4 text-sm text-gray-700">
+                            <td class="px-4 sm:px-6 py-4 text-sm text-gray-700">
                                 {#if tx.direction === "in"}
                                     <span class="inline-flex items-center gap-2 text-green-600 font-semibold">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-graph-up-arrow" viewBox="0 0 16 16">
@@ -233,8 +232,11 @@
                                     </span>
                                 {/if}
                             </td>
-                            <td class="px-6 py-4 text-sm text-gray-900 font-semibold">{euro(tx.amount)}</td>
-                            <td class="px-6 py-4 text-sm text-gray-600">{tx.note ?? "-"}</td>
+                            <td class="px-4 sm:px-6 py-4 text-sm text-gray-700">{tx.date}</td>
+                            <td class="px-4 sm:px-6 py-4 text-sm text-gray-900 font-semibold">{tx.member}</td>
+                            <td class="px-4 sm:px-6 py-4 text-sm text-gray-700 uppercase tracking-wide">{tx.kind}</td>
+                            <td class="px-4 sm:px-6 py-4 text-sm text-gray-900 font-semibold">{euro(tx.amount)}</td>
+                            <td class="px-4 sm:px-6 py-4 text-sm text-gray-600">{tx.note ?? "-"}</td>
                         </tr>
                     {/each}
                 {/if}
@@ -300,18 +302,27 @@
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Mitglied / Gegenpartei</label>
+                    <select
+                            name="memberId"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            bind:value={txMemberId}
+                            on:change={() => {
+                                const selected = memberSuggestions.find((m) => m.id === txMemberId);
+                                if (selected) txMember = selected.name;
+                            }}
+                    >
+                        <option value="">Kein Mitglied / frei eingeben</option>
+                        {#each memberSuggestions as m}
+                            <option value={m.id}>{m.name}</option>
+                        {/each}
+                    </select>
                     <input
                             name="member"
                             type="text"
-                            list="member-list"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Optional: Name/Gegenpartei"
                             bind:value={txMember}
                     />
-                    <datalist id="member-list">
-                        {#each memberSuggestions as m}
-                            <option value={m.name}>{m.name}</option>
-                        {/each}
-                    </datalist>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Notiz (optional)</label>
