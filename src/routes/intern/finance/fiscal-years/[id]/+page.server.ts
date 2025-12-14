@@ -10,59 +10,42 @@ export const load: PageServerLoad = async ({ params }) => {
     }
 
     const members = await getAllMembers();
-    const sumAll = fiscalYear.dues.stamm + fiscalYear.dues.gau + fiscalYear.dues.landesmark + fiscalYear.dues.bund;
 
-    const paymentsByMember = (fiscalYear.transactions ?? [])
-        .filter((tx) => tx.kind === "Jahresbeitrag" && tx.memberId && (tx.status ?? "paid") === "paid")
-        .reduce((acc: Record<string, number>, tx) => {
-            const key = tx.memberId as string;
-            acc[key] = (acc[key] ?? 0) + (Number(tx.amount) || 0);
-            return acc;
-        }, {});
+    const pendingInvoices = (fiscalYear.invoices ?? [])
+        .filter((inv) => (inv.status ?? "pending") === "pending")
+        .map((inv) => {
+            const paidSum = (fiscalYear.transactions ?? [])
+                .filter((tx) => tx.invoiceId === inv.id && (tx.status ?? "paid") === "paid")
+                .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
 
-    const outstandingItems = members.map((m: any) => {
-        const id = m._id?.toString?.() ?? m.id ?? "";
-        const isSecondMember = !!m.isSecondMember;
-        const flags = m.contributionDues ?? { stamm: true, gau: true, landesmark: true, bund: true };
+            return {
+                id: inv.id ?? "",
+                memberId: inv.memberId ?? "",
+                title: inv.member ?? "Unbekannt",
+                amount: Math.max((Number(inv.amount) || 0) - paidSum, 0),
+                payable: Number(inv.amount) || 0,
+                paid: paidSum,
+                type: inv.kind ?? "Sonstiges",
+                note: inv.note ?? "",
+                invoiceId: inv.id
+            };
+        })
+        .filter((item) => item.amount > 0);
 
-        const payableParts = {
-            stamm: flags.stamm ? fiscalYear.dues.stamm : 0,
-            gau: flags.gau ? fiscalYear.dues.gau : 0,
-            landesmark: flags.landesmark ? fiscalYear.dues.landesmark : 0,
-            bund: flags.bund ? fiscalYear.dues.bund : 0
-        };
-
-        const payable = isSecondMember
-            ? payableParts.stamm + payableParts.gau + payableParts.landesmark + payableParts.bund
-            : sumAll;
-
-        const paid = paymentsByMember[id] ?? 0;
-        const open = payable - paid;
-
-        return {
-            id,
-            title: `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt",
-            amount: open > 0 ? open : 0,
-            note: isSecondMember ? "Zweitmitglied" : undefined
-        };
-    }).filter((item) => item.amount > 0);
-
-    const outstandingTotal = outstandingItems.reduce((sum, item) => sum + item.amount, 0);
-
-    const memberSuggestions = members.map((m: any) => ({
-        id: m._id?.toString?.() ?? m.id ?? "",
-        name: `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt"
-    }));
+    const outstandingTotal = pendingInvoices.reduce((sum, item) => sum + item.amount, 0);
 
     return {
         fiscalYear,
         outstanding: {
             total: outstandingTotal,
-            items: outstandingItems
+            items: pendingInvoices
         },
         actions: [] as { title: string; note?: string }[],
         memberOrders: [] as { member: string; item: string; amount: number }[],
-        memberSuggestions
+        memberSuggestions: members.map((m: any) => ({
+            id: m._id?.toString?.() ?? m.id ?? "",
+            name: `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt"
+        }))
     };
 };
 

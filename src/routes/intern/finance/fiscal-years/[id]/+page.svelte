@@ -34,6 +34,7 @@
     let txMember = "";
     let txMemberId = "";
     let txNote = "";
+    let prevOverflow = "";
 
     const sortedTransactions = [...paidTransactions].sort((a, b) => {
         const ad = new Date(a.date ?? 0).getTime();
@@ -54,7 +55,7 @@
     });
 
     // Close custom dropdown when clicking outside
-    import { onMount } from "svelte";
+    import { onMount, onDestroy } from "svelte";
     onMount(() => {
         const handleClick = (event: MouseEvent) => {
             if (txDirectionOpen && dirDropdownRef && !dirDropdownRef.contains(event.target as Node)) {
@@ -64,45 +65,90 @@
         window.addEventListener("click", handleClick);
         return () => window.removeEventListener("click", handleClick);
     });
+
+    $: if (typeof document !== "undefined") {
+        if (showTxModal) {
+            prevOverflow = document.body.style.overflow;
+            document.body.style.overflow = "hidden";
+        } else {
+            document.body.style.overflow = prevOverflow;
+        }
+    }
+
+    onDestroy(() => {
+        if (typeof document !== "undefined") {
+            document.body.style.overflow = prevOverflow;
+        }
+    });
 </script>
 
 <div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-900">Geschaeftsjahr {fiscalYear.year}</h1>
-            <p class="text-gray-600 mt-1">Beitraege und Transaktionen fuer dieses Jahr.</p>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+        <div class="lg:col-span-2 p-6 bg-gradient-to-br from-sky-50 to-white border border-sky-100 rounded-2xl shadow-sm">
+            <div class="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                    <p class="text-sm font-semibold text-sky-700 uppercase tracking-wide">Geschaeftsjahr</p>
+                    <h1 class="text-3xl font-bold text-gray-900">Jahr {fiscalYear.year}</h1>
+                    <p class="text-sm text-gray-600 mt-1">Beitraege, Transaktionen und offene Posten im Blick.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <a
+                            href="/intern/finance"
+                            class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-800 hover:bg-gray-50 shadow-sm"
+                    >
+                        <span class="bi bi-arrow-left"></span>
+                        Zurueck
+                    </a>
+                    <button
+                            type="button"
+                            class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow"
+                            on:click={() => {
+                                showTxModal = true;
+                                txAmount = 0;
+                                txDate = new Date().toISOString().slice(0, 10);
+                                txDirection = "in";
+                                txKind = "Jahresbeitrag";
+                                txMember = "";
+                                txMemberId = "";
+                                txNote = "";
+                            }}
+                    >
+                        <span class="bi bi-plus-circle"></span>
+                        Transaktion
+                    </button>
+                </div>
+            </div>
+            <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
+                    <p class="text-sm text-gray-500 flex items-center gap-2"><span class="bi bi-graph-up text-green-600"></span> Einnahmen</p>
+                    <p class="text-2xl font-semibold text-green-600 mt-1">{euro(totals.in)}</p>
+                </div>
+                <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
+                    <p class="text-sm text-gray-500 flex items-center gap-2"><span class="bi bi-graph-down text-red-500"></span> Ausgaben</p>
+                    <p class="text-2xl font-semibold text-red-500 mt-1">{euro(totals.out)}</p>
+                </div>
+                <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
+                    <p class="text-sm text-gray-500 flex items-center gap-2"><span class="bi bi-balance-scale"></span> Saldo</p>
+                    <p class={`text-2xl font-semibold ${net >= 0 ? "text-green-600" : "text-red-500"} mt-1`}>{euro(net)}</p>
+                </div>
+            </div>
         </div>
-        <div class="flex items-center gap-3 flex-wrap">
-            <a
-                    href="/intern/finance/fiscal-years"
-                    class="text-sm font-semibold text-blue-600 hover:text-blue-700"
-            >
-                Zurueck zur Uebersicht
-            </a>
-        </div>
-    </div>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <p class="text-sm text-gray-500">Einnahmen</p>
-            <p class="text-2xl font-semibold text-green-600">{euro(totals.in)}</p>
-        </div>
-        <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <p class="text-sm text-gray-500">Ausgaben</p>
-            <p class="text-2xl font-semibold text-red-500">{euro(totals.out)}</p>
-        </div>
-        <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <p class="text-sm text-gray-500">Saldo</p>
-            <p class={`text-2xl font-semibold ${net >= 0 ? "text-green-600" : "text-red-500"}`}>{euro(net)}</p>
-        </div>
-        <a href={`/intern/finance/fiscal-years/${fiscalYear.id}/outstanding`} class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm hover:border-amber-200 hover:shadow cursor-pointer transition">
-            <p class="text-sm text-gray-500">Ausstehende Einnahmen</p>
-            <p class="text-2xl font-semibold text-amber-600">{euro(outstandingTotal)}</p>
-            {#if outstanding.items?.length}
-                <p class="text-xs text-gray-500 mt-1">{outstanding.items.length} offene Position{outstanding.items.length === 1 ? "" : "en"}</p>
-            {:else}
-                <p class="text-xs text-gray-500 mt-1">Keine offenen Posten.</p>
-            {/if}
+        <a href={`/intern/finance/fiscal-years/${fiscalYear.id}/outstanding`} class="p-6 bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-amber-200 hover:shadow cursor-pointer transition flex flex-col justify-between">
+            <div>
+                <p class="text-sm text-gray-500 flex items-center gap-2">
+                    <span class="bi bi-exclamation-diamond text-amber-600"></span>
+                    Ausstehende Einnahmen
+                </p>
+                <p class="text-3xl font-semibold text-amber-600 mt-2">{euro(outstandingTotal)}</p>
+                {#if outstanding.items?.length}
+                    <p class="text-xs text-gray-500 mt-1">{outstanding.items.length} offene Position{outstanding.items.length === 1 ? "" : "en"}</p>
+                {:else}
+                    <p class="text-xs text-gray-500 mt-1">Keine offenen Posten.</p>
+                {/if}
+            </div>
+            <p class="text-sm font-semibold text-blue-600 mt-4 inline-flex items-center gap-1">
+                Mehr erfahren <span class="bi bi-arrow-right"></span>
+            </p>
         </a>
     </div>
 
@@ -147,12 +193,18 @@
                         {/each}
                     </ul>
                 {/if}
-                <button class="w-full px-4 py-3 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-not-allowed">
-                    Export (soon)
-                </button>
-                <button class="w-full px-4 py-3 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-not-allowed">
-                    Archive (soon)
-                </button>
+                <div class="grid grid-cols-1 gap-2">
+                    <a href={`/intern/finance/fiscal-years/${fiscalYear.id}/outstanding`} class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl font-semibold hover:bg-blue-100 transition">
+                        <span class="bi bi-cash-stack"></span>
+                        Offene Einnahmen
+                    </a>
+                    <button class="w-full px-4 py-3 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-not-allowed">
+                        Export (soon)
+                    </button>
+                    <button class="w-full px-4 py-3 bg-gray-100 text-gray-800 rounded-xl font-semibold cursor-not-allowed">
+                        Archivieren (soon)
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -259,8 +311,8 @@
 </div>
 
 {#if showTxModal}
-    <div class="fixed inset-0 bg-white/20 backdrop-blur-sm flex items-center justify-center z-50 px-4">
-        <form method="post" action="?/addTransaction" class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-200">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+        <form method="post" action="?/addTransaction" class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 max-h-[90vh] overflow-hidden flex flex-col">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <div>
                     <p class="text-sm text-gray-500">Transaktion hinzufuegen</p>
@@ -268,7 +320,7 @@
                 </div>
                 <button type="button" class="text-gray-400 hover:text-gray-600" on:click={() => (showTxModal = false)}>X</button>
             </div>
-            <div class="px-6 py-5 space-y-4">
+            <div class="px-6 py-5 space-y-4 overflow-y-auto">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Betrag</label>
                     <input

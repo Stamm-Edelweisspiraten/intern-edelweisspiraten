@@ -1,5 +1,5 @@
 import type { Actions, PageServerLoad } from "./$types";
-import { error } from "@sveltejs/kit";
+import { error, redirect } from "@sveltejs/kit";
 import { addInvoice, addTransaction, calculateMemberDues, getFiscalYear, updateInvoice, updateTransaction } from "$lib/server/financeService";
 import { getAllMembers, getMember } from "$lib/server/memberService";
 import { fail } from "@sveltejs/kit";
@@ -61,12 +61,7 @@ export const load: PageServerLoad = async ({ params }) => {
         .filter((inv) => (inv.status ?? "pending") === "pending")
         .map((inv) => {
             const paidSum = (fiscalYear.transactions ?? [])
-                .filter(
-                    (tx) =>
-                        (tx.invoiceId === inv.id ||
-                            (!tx.invoiceId && tx.memberId && tx.memberId === inv.memberId && tx.kind === inv.kind)) &&
-                        (tx.status ?? "paid") === "paid"
-                )
+                .filter((tx) => tx.invoiceId === inv.id && (tx.status ?? "paid") === "paid")
                 .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
 
             return {
@@ -141,19 +136,7 @@ export const actions: Actions = {
             return fail(500, { error: "Konnte Rechnung nicht speichern." });
         }
 
-        return {
-            success: true,
-            pending: {
-                id: inv.id ?? "",
-                invoiceId: inv.id ?? "",
-                memberId,
-                title: memberName,
-                amount,
-                payable: amount,
-                type: kind,
-                note
-            }
-        };
+        throw redirect(303, `/intern/finance/fiscal-years/${fiscalYearId}/outstanding`);
     },
 
     pay: async ({ request, params }) => {
@@ -216,19 +199,6 @@ export const actions: Actions = {
             await updateInvoice(fiscalYearId, invoice.id!, { status: "paid" });
         }
 
-        const remaining = Math.max((Number(invoice.amount) || 0) - paidSum, 0);
-
-        return {
-            success: true,
-            payment: {
-                memberId: memberKey,
-                invoiceId: invoice.id ?? targetId,
-                transactionId: tx.id ?? targetId,
-                amount,
-                date,
-                note,
-                remaining
-            }
-        };
+        throw redirect(303, `/intern/finance/fiscal-years/${params.id}/outstanding`);
     }
 };

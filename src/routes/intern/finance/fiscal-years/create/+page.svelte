@@ -27,7 +27,7 @@
             <h1 class="text-3xl font-bold text-gray-900">Neues Geschaeftsjahr</h1>
             <p class="text-gray-600 mt-1">Lege Beitragshoehen fest.</p>
         </div>
-        <a href="/intern/finance/fiscal-years" class="text-blue-600 font-semibold hover:text-blue-700 text-sm">
+        <a href="/intern/finance" class="text-blue-600 font-semibold hover:text-blue-700 text-sm">
             Zurueck zur Uebersicht
         </a>
     </div>
@@ -83,7 +83,7 @@
             >
                 Speichern
             </button>
-            <a href="/intern/finance/fiscal-years" class="text-gray-600 hover:text-gray-800 text-sm font-semibold">
+            <a href="/intern/finance" class="text-gray-600 hover:text-gray-800 text-sm font-semibold">
                 Abbrechen
             </a>
         </div>

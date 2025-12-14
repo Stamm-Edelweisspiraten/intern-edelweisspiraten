@@ -36,6 +36,7 @@ export interface FiscalInvoice {
     date: string;         // issue date
     dueDate?: string;
     note?: string;
+    orderId?: string;     // optional: zugehoerige Bestellung (kaemmerer)
     status: InvoiceStatus;
 }
 
@@ -82,7 +83,8 @@ const ensureInvoiceIds = (invoices: FiscalInvoice[] = []): FiscalInvoice[] =>
     invoices.map((i) => ({
         ...i,
         id: i.id ?? new ObjectId().toString(),
-        status: i.status ?? "pending"
+        status: i.status ?? "pending",
+        orderId: i.orderId
     }));
 
 const mapDocToFiscalYear = (doc: any): FiscalYear => ({
@@ -343,11 +345,15 @@ export async function removeMemberTransactions(memberId: string) {
 // ---------------------------------------------
 // Invoices
 // ---------------------------------------------
-export async function addInvoice(fiscalYearId: string, invoice: Omit<FiscalInvoice, "id" | "status"> & { status?: InvoiceStatus }) {
+export async function addInvoice(
+    fiscalYearId: string,
+    invoice: Omit<FiscalInvoice, "id" | "status"> & { status?: InvoiceStatus }
+) {
     const payload: FiscalInvoice = {
         ...invoice,
         id: invoice.id ?? new ObjectId().toString(),
-        status: invoice.status ?? "pending"
+        status: invoice.status ?? "pending",
+        orderId: invoice.orderId
     };
 
     const res = await db.collection(COLLECTION).updateOne(
@@ -375,11 +381,24 @@ export async function updateInvoice(
     if (data.status !== undefined) setFields[prefix + "status"] = data.status;
     if (data.date !== undefined) setFields[prefix + "date"] = data.date;
     if (data.dueDate !== undefined) setFields[prefix + "dueDate"] = data.dueDate;
+    if (data.orderId !== undefined) setFields[prefix + "orderId"] = data.orderId;
 
     const res = await db.collection(COLLECTION).updateOne(
         { _id: new ObjectId(fiscalYearId), "invoices.id": invoiceId },
         { $set: setFields }
     );
+
+    if (res.matchedCount > 0 && data.status) {
+        // Sync kaemmerer order payment status, if module is available
+        try {
+            const mod = await import("$lib/server/kaemmererService");
+            if (typeof mod.syncOrderPaymentForInvoice === "function") {
+                await mod.syncOrderPaymentForInvoice(invoiceId);
+            }
+        } catch (err) {
+            console.error("Could not sync kaemmerer order payment", err);
+        }
+    }
 
     return res.matchedCount > 0;
 }

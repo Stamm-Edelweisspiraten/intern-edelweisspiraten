@@ -38,6 +38,17 @@ export const ALL_PERMISSIONS = [
     "admin.*",
 
     // -----------------------
+    // Kaemmerer
+    // -----------------------
+    "kaemmerer.access",
+    "kaemmerer.order.create",
+    "kaemmerer.order.view",
+    "kaemmerer.orders.view",
+    "kaemmerer.articles.manage",
+    "kaemmerer.storage.manage",
+    "kaemmerer.*",
+
+    // -----------------------
     // Test / Misc
     // -----------------------
     "*"

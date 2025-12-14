@@ -1,10 +1,9 @@
 import type { Actions, PageServerLoad } from "./$types";
-import { archiveFiscalYear, listFiscalYears } from "$lib/server/financeService";
+import { archiveFiscalYear } from "$lib/server/financeService";
 import { redirect } from "@sveltejs/kit";
 
 export const load: PageServerLoad = async () => {
-    const fiscalYears = await listFiscalYears();
-    return { fiscalYears };
+    throw redirect(308, "/intern/finance");
 };
 
 export const actions: Actions = {
@@ -17,6 +16,6 @@ export const actions: Actions = {
         }
 
         await archiveFiscalYear(id);
-        throw redirect(303, "/intern/finance/fiscal-years");
+        throw redirect(303, "/intern/finance");
     }
 };
