@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="97b33290-0b9f-4282-86ac-08fbb9fd1a15" name="Changes" comment="Update 02.12." />
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="+layout" />
+        <option value="+page.server" />
+        <option value="ep-groups" />
+        <option value="TypeScript File" />
+        <option value="+page" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;CrayonGamerHD-Philipp&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/Stamm-Edelweisspiraten/intern-edelweisspiraten.git&quot;,
+    &quot;accountId&quot;: &quot;e60d035b-a0b8-4126-93a3-406894f294b8&quot;
+  }
+}</component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
+  <component name="ProjectId" id="361aX43heed9yZriTUDD8jIaqxq" />
+  <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/Phili/OneDrive/01 - Pfadfinder/02 - Edelweißpiraten/03 - IT/01 - Website/intern-edelweisspiraten&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;C:\\Users\\Phili\\OneDrive\\01 - Pfadfinder\\02 - Edelweißpiraten\\03 - IT\\01 - Website\\intern-edelweisspiraten\\node_modules\\typescript\\lib&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  },
+  &quot;keyToStringList&quot;: {
+    &quot;DatabaseDriversLRU&quot;: [
+      &quot;mongo&quot;
+    ]
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\Phili\OneDrive\01 - Pfadfinder\02 - Edelweißpiraten\03 - IT\01 - Website\intern-edelweisspiraten\src\lib" />
+      <recent name="C:\Users\Phili\OneDrive\01 - Pfadfinder\02 - Edelweißpiraten\03 - IT\01 - Website\intern-edelweisspiraten\src\routes\intern\admin\user\[id]" />
+      <recent name="C:\Users\Phili\OneDrive\01 - Pfadfinder\02 - Edelweißpiraten\03 - IT\01 - Website\intern-edelweisspiraten\src\routes\intern\profil" />
+      <recent name="C:\Users\Phili\OneDrive\01 - Pfadfinder\02 - Edelweißpiraten\03 - IT\01 - Website\intern-edelweisspiraten\src" />
+    </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="console.js" type="DatabaseScript" editBeforeRun="true" temporary="true" nameIsGenerated="true">
+      <script-file value="$APPLICATION_CONFIG_DIR$/consoles/db/22d85f99-5b74-4914-badc-a19c0463b05a/console.js" />
+      <script-mode>FILE</script-mode>
+      <method v="2" />
+    </configuration>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="97b33290-0b9f-4282-86ac-08fbb9fd1a15" name="Changes" comment="" />
+      <created>1764176567957</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1764176567957</updated>
+      <workItem from="1764176569168" duration="8270000" />
+      <workItem from="1764231252515" duration="5050000" />
+    </task>
+    <task id="LOCAL-00001" summary="Init">
+      <option name="closed" value="true" />
+      <created>1764282234478</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1764282234478</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Fixed Remove Member from User">
+      <option name="closed" value="true" />
+      <created>1764282944950</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1764282944950</updated>
+    </task>
+    <task id="LOCAL-00003" summary="Added Join to Members">
+      <option name="closed" value="true" />
+      <created>1764335946448</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1764335946448</updated>
+    </task>
+    <task id="LOCAL-00004" summary="Update 01.12.">
+      <option name="closed" value="true" />
+      <created>1764589631095</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1764589631095</updated>
+    </task>
+    <task id="LOCAL-00005" summary="Update 02.12.">
+      <option name="closed" value="true" />
+      <created>1764687422121</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1764687422122</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="Init" />
+    <MESSAGE value="Fixed Remove Member from User" />
+    <MESSAGE value="Added multe member for Users" />
+    <MESSAGE value="Fixed multi user - member link" />
+    <MESSAGE value="Added Join to Members" />
+    <MESSAGE value="Update 01.12." />
+    <MESSAGE value="Update 02.12." />
+    <option name="LAST_COMMIT_MESSAGE" value="Update 02.12." />
+  </component>
+</project>
