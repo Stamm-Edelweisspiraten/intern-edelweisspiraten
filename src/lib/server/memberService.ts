@@ -1,5 +1,6 @@
 import { db } from "$lib/server/mongo";
 import { ObjectId } from "mongodb";
+import { removeMemberTransactions } from "$lib/server/financeService";
 
 // -----------------------------------------------------
 //  Types
@@ -244,6 +245,7 @@ export async function deleteMember(id: string, deletedBy?: string) {
         changes: [],
         user: deletedBy ?? "system"
     });
+    await removeMemberTransactions(id);
     return res;
 }
 

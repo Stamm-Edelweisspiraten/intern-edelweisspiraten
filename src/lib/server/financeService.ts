@@ -11,16 +11,32 @@ export interface Dues {
 }
 
 export type TransactionDirection = "in" | "out";
+export type TransactionStatus = "pending" | "paid";
+export type InvoiceStatus = "pending" | "paid" | "cancelled";
 
 export interface FiscalTransaction {
     id?: string;
     memberId?: string;
     member: string;
+    invoiceId?: string;
     date: string;                 // ISO string
     direction: TransactionDirection;
     kind: string;                 // e.g. dues, donation, equipment
     amount: Money;
     note?: string;
+    status?: TransactionStatus;   // e.g. paid, pending
+}
+
+export interface FiscalInvoice {
+    id?: string;
+    memberId?: string;
+    member: string;
+    kind: string;         // e.g. Jahresbeitrag, Pfadverlag, Lager/Aktion
+    amount: Money;
+    date: string;         // issue date
+    dueDate?: string;
+    note?: string;
+    status: InvoiceStatus;
 }
 
 export type FiscalYearStatus = "active" | "archived";
@@ -30,6 +46,7 @@ export interface FiscalYear {
     year: number;
     dues: Dues;
     transactions: FiscalTransaction[];
+    invoices?: FiscalInvoice[];
     status?: FiscalYearStatus;
     createdAt?: string;
     updatedAt?: string;
@@ -57,7 +74,15 @@ const normalizeDues = (dues: Partial<Dues> = {}): Dues => ({
 const ensureTransactionIds = (transactions: FiscalTransaction[] = []): FiscalTransaction[] =>
     transactions.map((t) => ({
         ...t,
-        id: t.id ?? new ObjectId().toString()
+        id: t.id ?? new ObjectId().toString(),
+        status: t.status ?? "paid"
+    }));
+
+const ensureInvoiceIds = (invoices: FiscalInvoice[] = []): FiscalInvoice[] =>
+    invoices.map((i) => ({
+        ...i,
+        id: i.id ?? new ObjectId().toString(),
+        status: i.status ?? "pending"
     }));
 
 const mapDocToFiscalYear = (doc: any): FiscalYear => ({
@@ -65,6 +90,7 @@ const mapDocToFiscalYear = (doc: any): FiscalYear => ({
     year: Number(doc.year),
     dues: normalizeDues(doc.dues),
     transactions: ensureTransactionIds(doc.transactions ?? []),
+    invoices: ensureInvoiceIds(doc.invoices ?? []),
     status: (doc.status as FiscalYearStatus) ?? "active",
     createdAt: doc.createdAt?.toISOString?.() ?? doc.createdAt,
     updatedAt: doc.updatedAt?.toISOString?.() ?? doc.updatedAt
@@ -134,6 +160,7 @@ export async function updateFiscalYear(
         year?: number;
         dues?: Partial<Dues>;
         transactions?: FiscalTransaction[];
+        invoices?: FiscalInvoice[];
         status?: FiscalYearStatus;
     }
 ): Promise<boolean> {
@@ -144,6 +171,7 @@ export async function updateFiscalYear(
     if (data.year !== undefined) update.year = data.year;
     if (data.dues) update.dues = normalizeDues(data.dues);
     if (data.transactions) update.transactions = ensureTransactionIds(data.transactions);
+    if (data.invoices) update.invoices = ensureInvoiceIds(data.invoices);
     if (data.status) update.status = data.status;
 
     const res = await db.collection(COLLECTION).updateOne(
@@ -159,7 +187,7 @@ export async function addTransaction(
     fiscalYearId: string,
     tx: FiscalTransaction
 ): Promise<FiscalTransaction | null> {
-    const withId = { ...tx, id: tx.id ?? new ObjectId().toString() };
+    const withId = { ...tx, id: tx.id ?? new ObjectId().toString(), status: tx.status ?? "pending" };
 
     const res = await db.collection(COLLECTION).updateOne(
         { _id: new ObjectId(fiscalYearId) },
@@ -195,6 +223,8 @@ export async function updateTransaction(
     if (data.kind !== undefined) setFields[prefix + "kind"] = data.kind;
     if (data.member !== undefined) setFields[prefix + "member"] = data.member;
     if (data.memberId !== undefined) setFields[prefix + "memberId"] = data.memberId;
+    if (data.status !== undefined) setFields[prefix + "status"] = data.status;
+    if (data.invoiceId !== undefined) setFields[prefix + "invoiceId"] = data.invoiceId;
 
     const res = await db.collection(COLLECTION).updateOne(
         { _id: new ObjectId(fiscalYearId), "transactions.id": transactionId },
@@ -209,5 +239,147 @@ export async function archiveFiscalYear(id: string): Promise<boolean> {
         { _id: new ObjectId(id) },
         { $set: { status: "archived", updatedAt: new Date() } }
     );
+    return res.matchedCount > 0;
+}
+
+// ---------------------------------------------
+// Helper: Beitrag pro Mitglied berechnen
+// ---------------------------------------------
+export function calculateMemberDues(dues: Dues, member: any) {
+    const sumAll = dues.stamm + dues.gau + dues.landesmark + dues.bund;
+    const isSecondMember = !!member?.isSecondMember;
+    const flags = member?.contributionDues ?? { stamm: true, gau: true, landesmark: true, bund: true };
+
+    const payableParts = {
+        stamm: flags.stamm ? dues.stamm : 0,
+        gau: flags.gau ? dues.gau : 0,
+        landesmark: flags.landesmark ? dues.landesmark : 0,
+        bund: flags.bund ? dues.bund : 0
+    };
+
+    const payable = isSecondMember
+        ? payableParts.stamm + payableParts.gau + payableParts.landesmark + payableParts.bund
+        : sumAll;
+
+    return { payable, payableParts };
+}
+
+// ---------------------------------------------
+// Helper: aktives Geschäftsjahr holen
+// ---------------------------------------------
+export async function getActiveFiscalYear(): Promise<FiscalYear | null> {
+    const doc = await db.collection(COLLECTION)
+        .find({ status: "active" })
+        .sort({ year: -1 })
+        .limit(1)
+        .next();
+
+    if (!doc) return null;
+    return mapDocToFiscalYear(doc);
+}
+
+// ---------------------------------------------
+// Yearly dues pro Mitglied erstellen/aktualisieren
+// ---------------------------------------------
+export async function upsertMemberDueForYear(
+    fiscalYearId: string,
+    member: any,
+    duesOverride?: Dues
+) {
+    const fiscalYear = await getFiscalYear(fiscalYearId);
+    if (!fiscalYear) return;
+
+    const dues = duesOverride ? normalizeDues(duesOverride) : fiscalYear.dues;
+    const memberId = member?._id?.toString?.() ?? member?.id ?? "";
+    if (!memberId) return;
+
+    const { payable } = calculateMemberDues(dues, member);
+    const memberName = `${member.firstname ?? ""} ${member.lastname ?? ""}`.trim() || "Unbekannt";
+
+    const paymentsTotal = (fiscalYear.transactions ?? [])
+        .filter((tx) => tx.kind === "Jahresbeitrag" && tx.memberId === memberId && tx.status !== "pending")
+        .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+    const status: TransactionStatus = paymentsTotal >= payable ? "paid" : "pending";
+
+    const existingDue = (fiscalYear.transactions ?? []).find(
+        (tx) => tx.kind === "Jahresbeitrag" && tx.memberId === memberId && tx.direction === "in"
+    );
+
+    if (existingDue) {
+        await updateTransaction(fiscalYearId, existingDue.id!, {
+            amount: payable,
+            status,
+            member: memberName,
+            memberId
+        });
+    } else {
+        await addTransaction(fiscalYearId, {
+            memberId,
+            member: memberName,
+            date: new Date().toISOString(),
+            direction: "in",
+            kind: "Jahresbeitrag",
+            amount: payable,
+            status,
+            note: "Automatisch erstellt"
+        });
+    }
+}
+
+export async function seedYearlyDuesForMembers(fiscalYearId: string, members: any[], dues: Dues) {
+    for (const member of members) {
+        await upsertMemberDueForYear(fiscalYearId, member, dues);
+    }
+}
+
+export async function removeMemberTransactions(memberId: string) {
+    await db.collection(COLLECTION).updateMany(
+        {},
+        { $pull: { transactions: { memberId } }, $set: { updatedAt: new Date() } }
+    );
+}
+
+// ---------------------------------------------
+// Invoices
+// ---------------------------------------------
+export async function addInvoice(fiscalYearId: string, invoice: Omit<FiscalInvoice, "id" | "status"> & { status?: InvoiceStatus }) {
+    const payload: FiscalInvoice = {
+        ...invoice,
+        id: invoice.id ?? new ObjectId().toString(),
+        status: invoice.status ?? "pending"
+    };
+
+    const res = await db.collection(COLLECTION).updateOne(
+        { _id: new ObjectId(fiscalYearId) },
+        { $push: { invoices: payload }, $set: { updatedAt: new Date() } }
+    );
+
+    if (res.matchedCount === 0) return null;
+    return payload;
+}
+
+export async function updateInvoice(
+    fiscalYearId: string,
+    invoiceId: string,
+    data: Partial<FiscalInvoice>
+) {
+    const prefix = "invoices.$.";
+    const setFields: Record<string, any> = { updatedAt: new Date() };
+
+    if (data.amount !== undefined) setFields[prefix + "amount"] = data.amount;
+    if (data.kind !== undefined) setFields[prefix + "kind"] = data.kind;
+    if (data.note !== undefined) setFields[prefix + "note"] = data.note;
+    if (data.member !== undefined) setFields[prefix + "member"] = data.member;
+    if (data.memberId !== undefined) setFields[prefix + "memberId"] = data.memberId;
+    if (data.status !== undefined) setFields[prefix + "status"] = data.status;
+    if (data.date !== undefined) setFields[prefix + "date"] = data.date;
+    if (data.dueDate !== undefined) setFields[prefix + "dueDate"] = data.dueDate;
+
+    const res = await db.collection(COLLECTION).updateOne(
+        { _id: new ObjectId(fiscalYearId), "invoices.id": invoiceId },
+        { $set: setFields }
+    );
+
     return res.matchedCount > 0;
 }

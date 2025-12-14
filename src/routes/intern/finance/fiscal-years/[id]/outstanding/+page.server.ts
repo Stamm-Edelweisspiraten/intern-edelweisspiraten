@@ -1,7 +1,8 @@
-import type { PageServerLoad } from "./$types";
+import type { Actions, PageServerLoad } from "./$types";
 import { error } from "@sveltejs/kit";
-import { getFiscalYear } from "$lib/server/financeService";
-import { getAllMembers } from "$lib/server/memberService";
+import { addInvoice, addTransaction, calculateMemberDues, getFiscalYear, updateInvoice, updateTransaction } from "$lib/server/financeService";
+import { getAllMembers, getMember } from "$lib/server/memberService";
+import { fail } from "@sveltejs/kit";
 
 export const load: PageServerLoad = async ({ params }) => {
     const fiscalYear = await getFiscalYear(params.id);
@@ -12,48 +13,222 @@ export const load: PageServerLoad = async ({ params }) => {
     const members = await getAllMembers();
     const sumAll = fiscalYear.dues.stamm + fiscalYear.dues.gau + fiscalYear.dues.landesmark + fiscalYear.dues.bund;
 
-    const paymentsByMember = (fiscalYear.transactions ?? [])
-        .filter((tx) => tx.kind === "Jahresbeitrag" && tx.memberId)
-        .reduce((acc: Record<string, number>, tx) => {
-            const key = tx.memberId as string;
-            acc[key] = (acc[key] ?? 0) + (Number(tx.amount) || 0);
+    let invoices = [...(fiscalYear.invoices ?? [])];
+
+    // Ensure there is a pending invoice per member for the yearly dues
+    for (const m of members) {
+        const memberId = m._id?.toString?.() ?? m.id ?? "";
+        if (!memberId) continue;
+
+        const existing = invoices.find((inv) => inv.memberId === memberId && inv.kind === "Jahresbeitrag");
+        if (!existing) {
+            const { payable } = calculateMemberDues(fiscalYear.dues, m);
+            const memberName = `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt";
+            const inv = await addInvoice(fiscalYear.id!, {
+                memberId,
+                member: memberName,
+                kind: "Jahresbeitrag",
+                amount: payable,
+                date: new Date().toISOString(),
+                note: m.isSecondMember ? "Zweitmitglied" : undefined,
+                status: "pending"
+            });
+            if (inv) {
+                invoices.push(inv);
+            }
+        }
+    }
+
+    const paymentsDetailed = (fiscalYear.transactions ?? [])
+        .filter((tx) => tx.status !== "pending")
+        .reduce((acc: any, tx: any) => {
+            const key = tx.invoiceId ?? tx.memberId ?? tx.id;
+            if (!key) return acc;
+            if (!acc[key]) {
+                acc[key] = { total: 0, entries: [] as any[] };
+            }
+            acc[key].entries.push({
+                id: tx.id,
+                amount: tx.amount,
+                date: tx.date,
+                note: tx.note ?? ""
+            });
+            acc[key].total += Number(tx.amount) || 0;
             return acc;
         }, {});
 
-    const outstandingItems = members.map((m: any) => {
-        const id = m._id?.toString?.() ?? m.id ?? "";
-        const isSecondMember = !!m.isSecondMember;
-        const flags = m.contributionDues ?? { stamm: true, gau: true, landesmark: true, bund: true };
+    const pendingInvoices = invoices
+        .filter((inv) => (inv.status ?? "pending") === "pending")
+        .map((inv) => {
+            const paidSum = (fiscalYear.transactions ?? [])
+                .filter(
+                    (tx) =>
+                        (tx.invoiceId === inv.id ||
+                            (!tx.invoiceId && tx.memberId && tx.memberId === inv.memberId && tx.kind === inv.kind)) &&
+                        (tx.status ?? "paid") === "paid"
+                )
+                .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
 
-        const payableParts = {
-            stamm: flags.stamm ? fiscalYear.dues.stamm : 0,
-            gau: flags.gau ? fiscalYear.dues.gau : 0,
-            landesmark: flags.landesmark ? fiscalYear.dues.landesmark : 0,
-            bund: flags.bund ? fiscalYear.dues.bund : 0
-        };
+            return {
+                id: inv.id ?? "",
+                memberId: inv.memberId ?? "",
+                title: inv.member ?? "Unbekannt",
+                amount: Math.max((Number(inv.amount) || 0) - paidSum, 0),
+                payable: Number(inv.amount) || 0,
+                paid: paidSum,
+                type: inv.kind ?? "Sonstiges",
+                note: inv.note ?? "",
+                invoiceId: inv.id
+            };
+        })
+        .filter((item) => item.amount > 0);
 
-        const payable = isSecondMember
-            ? payableParts.stamm + payableParts.gau + payableParts.landesmark + payableParts.bund
-            : sumAll;
-
-        const paid = paymentsByMember[id] ?? 0;
-        const open = payable - paid;
-
-        return {
-            id,
-            title: `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt",
-            amount: open > 0 ? open : 0,
-            note: isSecondMember ? "Zweitmitglied" : undefined
-        };
-    }).filter((item) => item.amount > 0);
-
-    const outstandingTotal = outstandingItems.reduce((sum, item) => sum + item.amount, 0);
+    const allOutstanding = [...pendingInvoices];
+    const outstandingTotal = allOutstanding.reduce((sum, item) => sum + item.amount, 0);
 
     return {
         fiscalYear,
         outstanding: {
             total: outstandingTotal,
-            items: outstandingItems
-        }
+            items: allOutstanding
+        },
+        payments: paymentsDetailed,
+        memberSuggestions: members.map((m: any) => ({
+            id: m._id?.toString?.() ?? m.id ?? "",
+            name: `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt"
+        }))
     };
+};
+
+export const actions: Actions = {
+    addPending: async ({ request, params }) => {
+        const form = await request.formData();
+        const fiscalYearId = params.id;
+        const memberId = form.get("memberId")?.toString() ?? "";
+        const memberNameInput = form.get("memberName")?.toString() ?? "";
+        const amount = Number(form.get("amount") ?? 0);
+        const date = form.get("date")?.toString() ?? "";
+        const kind = form.get("kind")?.toString() ?? "Jahresbeitrag";
+        const note = form.get("note")?.toString() ?? "";
+
+        if (!fiscalYearId || Number.isNaN(amount) || amount <= 0 || !date) {
+            return fail(400, { error: "Ungültige Angaben" });
+        }
+
+        const fiscalYear = await getFiscalYear(fiscalYearId);
+        if (!fiscalYear) {
+            return fail(404, { error: "Fiscal year not found" });
+        }
+
+        let memberName = memberNameInput || "Unbekannt";
+        if (memberId) {
+            const member = await getMember(memberId);
+            if (member) {
+                memberName = `${member.firstname ?? ""} ${member.lastname ?? ""}`.trim() || memberName;
+            }
+        }
+
+        const inv = await addInvoice(fiscalYearId, {
+            memberId: memberId || undefined,
+            member: memberName,
+            kind,
+            amount,
+            date,
+            note: note || undefined
+        });
+
+        if (!inv) {
+            return fail(500, { error: "Konnte Rechnung nicht speichern." });
+        }
+
+        return {
+            success: true,
+            pending: {
+                id: inv.id ?? "",
+                invoiceId: inv.id ?? "",
+                memberId,
+                title: memberName,
+                amount,
+                payable: amount,
+                type: kind,
+                note
+            }
+        };
+    },
+
+    pay: async ({ request, params }) => {
+        const form = await request.formData();
+        const fiscalYearId = form.get("fiscalYearId")?.toString() ?? "";
+        const itemId = form.get("itemId")?.toString() ?? "";
+        const memberId = form.get("memberId")?.toString() ?? "";
+        const memberNameInput = form.get("memberName")?.toString() ?? "";
+        const amount = Number(form.get("amount") ?? 0);
+        const date = form.get("date")?.toString() ?? "";
+        const note = form.get("note")?.toString() ?? "";
+        const transactionId = form.get("transactionId")?.toString() ?? "";
+
+        if (!fiscalYearId || !date || Number.isNaN(amount) || amount <= 0) {
+            return fail(400, { error: "Invalid payload" });
+        }
+
+        const fiscalYear = await getFiscalYear(params.id);
+        if (!fiscalYear || fiscalYear.id !== fiscalYearId) {
+            return fail(400, { error: "Fiscal year mismatch" });
+        }
+
+        let memberName = memberNameInput || "Unbekannt";
+        if (memberId) {
+            const member = await getMember(memberId);
+            if (!member) {
+                return fail(404, { error: "Member not found" });
+            }
+            memberName = `${member.firstname ?? ""} ${member.lastname ?? ""}`.trim() || memberName;
+        }
+
+        const memberKey = memberId || itemId || transactionId || memberName;
+
+        const targetId = transactionId || itemId;
+        const invoice = (fiscalYear.invoices ?? []).find((i) => i.id === targetId);
+        if (!invoice) {
+            return fail(404, { error: "Pending entry not found" });
+        }
+
+        const tx = await addTransaction(fiscalYearId, {
+            memberId: memberId || invoice.memberId || undefined,
+            member: memberName || invoice.member || memberId || itemId,
+            date,
+            direction: "in",
+            kind: invoice.kind ?? "Jahresbeitrag",
+            amount,
+            note: note || undefined,
+            status: "paid",
+            invoiceId: invoice.id
+        });
+
+        if (!tx) return fail(500, { error: "Could not save transaction" });
+
+        // check if invoice is now fully paid
+        const paidSum = (fiscalYear.transactions ?? [])
+            .filter((t) => t.invoiceId === invoice.id && (t.status ?? "paid") === "paid")
+            .reduce((sum, t) => sum + (Number(t.amount) || 0), 0) + amount;
+
+        if (paidSum >= (Number(invoice.amount) || 0)) {
+            await updateInvoice(fiscalYearId, invoice.id!, { status: "paid" });
+        }
+
+        const remaining = Math.max((Number(invoice.amount) || 0) - paidSum, 0);
+
+        return {
+            success: true,
+            payment: {
+                memberId: memberKey,
+                invoiceId: invoice.id ?? targetId,
+                transactionId: tx.id ?? targetId,
+                amount,
+                date,
+                note,
+                remaining
+            }
+        };
+    }
 };

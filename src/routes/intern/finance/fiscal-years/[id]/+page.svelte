@@ -9,7 +9,9 @@
 
     const euro = (value: number) => `${value.toFixed(2)} EUR`;
 
-    const totals = (fiscalYear.transactions ?? []).reduce(
+    const paidTransactions = (fiscalYear.transactions ?? []).filter((tx) => (tx.status ?? "paid") === "paid");
+
+    const totals = paidTransactions.reduce(
         (acc: { in: number; out: number }, tx) => {
             if (tx.direction === "in") acc.in += Number(tx.amount) || 0;
             if (tx.direction === "out") acc.out += Number(tx.amount) || 0;
@@ -26,12 +28,14 @@
     let txAmount = 0;
     let txDate = new Date().toISOString().slice(0, 10);
     let txDirection: "in" | "out" = "in";
+    let txDirectionOpen = false;
+    let dirDropdownRef: HTMLElement | null = null;
     let txKind = "custom";
     let txMember = "";
     let txMemberId = "";
     let txNote = "";
 
-    const sortedTransactions = [...(fiscalYear.transactions ?? [])].sort((a, b) => {
+    const sortedTransactions = [...paidTransactions].sort((a, b) => {
         const ad = new Date(a.date ?? 0).getTime();
         const bd = new Date(b.date ?? 0).getTime();
         return bd - ad;
@@ -47,6 +51,18 @@
             tx.date?.toLowerCase().includes(q) ||
             `${tx.amount}`.includes(q)
         );
+    });
+
+    // Close custom dropdown when clicking outside
+    import { onMount } from "svelte";
+    onMount(() => {
+        const handleClick = (event: MouseEvent) => {
+            if (txDirectionOpen && dirDropdownRef && !dirDropdownRef.contains(event.target as Node)) {
+                txDirectionOpen = false;
+            }
+        };
+        window.addEventListener("click", handleClick);
+        return () => window.removeEventListener("click", handleClick);
     });
 </script>
 
@@ -164,7 +180,7 @@
         <div class="px-4 sm:px-6 py-4 flex items-start sm:items-center justify-between gap-3 flex-wrap">
             <div class="flex items-center gap-2">
                 <h2 class="text-xl font-semibold text-gray-900">Transaktionen</h2>
-                <span class="text-sm text-gray-500">({filteredTransactions.length}/{fiscalYear.transactions.length})</span>
+                <span class="text-sm text-gray-500">({filteredTransactions.length}/{paidTransactions.length})</span>
             </div>
             <div class="flex items-center gap-3 w-full sm:w-auto">
                 <button
@@ -218,16 +234,12 @@
                             <td class="px-4 sm:px-6 py-4 text-sm text-gray-700">
                                 {#if tx.direction === "in"}
                                     <span class="inline-flex items-center gap-2 text-green-600 font-semibold">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-graph-up-arrow" viewBox="0 0 16 16">
-                                            <path fill-rule="evenodd" d="M0 0h1v15h15v1H0zm10 3.5a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-1 0V4.9l-3.613 4.417a.5.5 0 0 1-.74.037L7.06 6.767l-3.656 5.027a.5.5 0 0 1-.808-.588l4-5.5a.5.5 0 0 1 .758-.06l2.609 2.61L13.445 4H10.5a.5.5 0 0 1-.5-.5"/>
-                                        </svg>
+                                        <span class="bi bi-graph-up-arrow"></span>
                                         <span>Eingang</span>
                                     </span>
                                 {:else}
                                     <span class="inline-flex items-center gap-2 text-red-500 font-semibold">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-graph-down-arrow" viewBox="0 0 16 16">
-                                            <path fill-rule="evenodd" d="M0 0h1v15h15v1H0zm10 11.5a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 0-1 0v2.6l-3.613-4.417a.5.5 0 0 0-.74-.037L7.06 8.233 3.404 3.206a.5.5 0 0 0-.808.588l4 5.5a.5.5 0 0 0 .758.06l2.609-2.61L13.445 11H10.5a.5.5 0 0 0-.5.5"/>
-                                        </svg>
+                                        <span class="bi bi-graph-down-arrow"></span>
                                         <span>Ausgang</span>
                                     </span>
                                 {/if}
@@ -247,7 +259,7 @@
 </div>
 
 {#if showTxModal}
-    <div class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 px-4">
+    <div class="fixed inset-0 bg-white/20 backdrop-blur-sm flex items-center justify-center z-50 px-4">
         <form method="post" action="?/addTransaction" class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-gray-200">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <div>
@@ -280,24 +292,65 @@
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Richtung</label>
-                        <select
-                                name="direction"
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                bind:value={txDirection}
-                        >
-                            <option value="in">Eingang</option>
-                            <option value="out">Ausgang</option>
-                        </select>
+                        <div class="relative" bind:this={dirDropdownRef}>
+                            <button
+                                    type="button"
+                                    class="w-full rounded-lg px-3 py-2 flex items-center justify-between gap-2 bg-white shadow-sm hover:shadow border border-gray-300"
+                                    on:click={() => (txDirectionOpen = !txDirectionOpen)}
+                            >
+                                <div class="flex items-center gap-2">
+                                    {#if txDirection === "in"}
+                                        <i class="bi bi-graph-up-arrow text-sm text-green-600"></i>
+                                        <span class="text-green-700 font-semibold">Eingang</span>
+                                    {:else}
+                                        <i class="bi bi-graph-down-arrow text-sm text-red-600"></i>
+                                        <span class="text-red-600 font-semibold">Ausgang</span>
+                                    {/if}
+                                </div>
+                                <i class={`bi ${txDirectionOpen ? "bi-chevron-up" : "bi-chevron-down"} text-gray-500 text-sm`}></i>
+                            </button>
+
+                            {#if txDirectionOpen}
+                                <ul class="absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow">
+                                    <li
+                                            class="px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-gray-100"
+                                            on:click={() => { txDirection = "in"; txDirectionOpen = false; }}
+                                    >
+                                        <i class="bi bi-graph-up-arrow text-sm text-green-600"></i>
+                                        <span class="text-green-600">Eingang</span>
+                                    </li>
+                                    <li
+                                            class="px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-gray-100"
+                                            on:click={() => { txDirection = "out"; txDirectionOpen = false; }}
+                                    >
+                                        <i class="bi bi-graph-down-arrow text-sm text-red-600"></i>
+                                        <span class="text-red-600">Ausgang</span>
+                                    </li>
+                                </ul>
+                            {/if}
+                        </div>
+                        <input type="hidden" name="direction" value={txDirection} />
                     </div>
                 </div>
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Typ</label>
+                    <select
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-2"
+                            bind:value={txKind}
+                            on:change={(e) => { txKind = (e.target as HTMLSelectElement).value; }}
+                    >
+                        <option value="Jahresbeitrag">Jahresbeitrag</option>
+                        <option value="Öffentlichkeitsarbeit">Öffentlichkeitsarbeit</option>
+                        <option value="Lager/Aktion">Lager/Aktion</option>
+                        <option value="Pfadverlag">Pfadverlag</option>
+                        <option value="custom">Anderer Typ</option>
+                    </select>
                     <input
                             name="kind"
                             type="text"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             bind:value={txKind}
-                            placeholder="z. B. dues, donation, equipment"
+                            placeholder="Typ eintragen oder aus Liste wählen"
                     />
                 </div>
                 <div>
@@ -352,4 +405,3 @@
         </form>
     </div>
 {/if}
-
