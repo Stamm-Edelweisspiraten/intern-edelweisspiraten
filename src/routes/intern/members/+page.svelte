@@ -418,7 +418,7 @@
                                         <a
                                                 href={`/intern/members/${member.id}/invite.pdf`}
                                                 target="_blank"
-                                                class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 shadow-sm"
+                                                class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-800 shadow-sm"
                                         >
                                             <span class="bi bi-filetype-pdf"></span> Einladung
                                         </a>
@@ -486,7 +486,7 @@
                                 <a
                                         href={`/intern/members/${member.id}/invite.pdf`}
                                         target="_blank"
-                                        class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 shadow-sm"
+                                        class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-800 shadow-sm"
                                 >
                                     <span class="bi bi-filetype-pdf"></span> Einladung
                                 </a>
