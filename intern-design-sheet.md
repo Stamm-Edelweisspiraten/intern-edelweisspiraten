@@ -35,6 +35,7 @@ Ableitung aus den Finance-Screens (`/intern/finance`, `/intern/finance/outstandi
 - Dropdown (custom): Button mit Border+Shadow; Liste `absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow`; Close-on-click-outside via `onMount` Listener.
 - Tags/Counter: `px-3 py-1 text-xs font-semibold rounded-full border` (z.B. `text-sky-800 bg-sky-100`).
 - Buttons/Aktionen: CTA-Block rechts im Kopf (`flex items-center gap-3 flex-wrap`), Primaer rechts aussen, Sekundaer links daneben; Zurueck-Link als neutraler Button links vor den CTAs. Karten-Footer-Buttons rechtsbuendig ausrichten.
+- Toasts: globaler Container oben rechts; Farbrollen wie Status (Success = Emerald, Error = Rot, Info = Blau); Icon + kurzer Text; Auto-Dismiss ~4s, Close-Button rechts.
 
 ## Interaktionsmuster
 - Suche/Filter: `search.trim().toLowerCase()`; Match ueber zusammengesetzten String aus Titel/Typ/Note/Betrag; Ergebnislisten + Counts reaktiv ableiten (`filteredItems`, `filteredTransactions`).
@@ -44,6 +45,7 @@ Ableitung aus den Finance-Screens (`/intern/finance`, `/intern/finance/outstandi
 - Modals: Body-Scroll sperren und wiederherstellen (`document.body.style.overflow`).
 - Forms: klassisches `<form method="post" action="?...">`; versteckte Inputs fuer IDs; Primaer-Button rechts.
 - CTA-Positionierung: In Seitenkopf immer rechts neben dem Titelbereich; auf Mobile umbrechen, Reihenfolge beibehalten. Innerhalb von Karten stehen Aktionen oben rechts oder unten rechts, nie mittig.
+- Kopf-Leiste: Zurueck-Button (neutral) + Primaer-CTA mit Icon+Label; Abstaende `gap-2/3`, Buttons `px-4 py-3 rounded-xl`.
 
 ## Beispiel-Skeleton (Svelte)
 ```svelte
