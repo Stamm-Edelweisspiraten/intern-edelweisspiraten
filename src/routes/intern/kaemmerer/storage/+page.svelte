@@ -20,10 +20,16 @@
             <h1 class="text-3xl font-bold text-gray-900">Lager</h1>
             <p class="text-sm text-gray-600 mt-1">Bestaende und Warnstufen im Blick.</p>
         </div>
-        <a href="/intern/kaemmerer" class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition">
-            <span class="bi bi-arrow-left"></span>
-            Zurueck
-        </a>
+        <div class="flex items-center gap-3 flex-wrap">
+            <a href="/intern/kaemmerer/storage/reorder" class="inline-flex items-center gap-2 px-4 py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-semibold border border-blue-200 shadow-sm transition">
+                <span class="bi bi-list-check"></span>
+                Bestellliste
+            </a>
+            <a href="/intern/kaemmerer" class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition">
+                <span class="bi bi-arrow-left"></span>
+                Zurueck
+            </a>
+        </div>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
