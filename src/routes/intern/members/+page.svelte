@@ -6,6 +6,7 @@
 
     let search = "";
     let selected = new Set<string>();
+    let allSelected = false;
     const groupMap = new Map(data.groups?.map((g) => [g.id, g.name]) ?? []);
 
     let filterOpen = false;
@@ -75,6 +76,12 @@
 
         return true;
     });
+
+    $: {
+        const visibleIds = filteredMembers.map((m) => m.id);
+        const hasAll = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
+        allSelected = hasAll;
+    }
 
     $: activeFilters = (() => {
         const items: { label: string; onRemove: () => void }[] = [];
@@ -178,7 +185,7 @@
             </div>
             <button
                     type="button"
-                    class="inline-flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm hover:bg-gray-50 text-gray-700"
+                    class="inline-flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm hover:bg-blue-50 text-blue-700"
                     on:click={() => filterOpen = !filterOpen}
             >
                 <span class="bi bi-funnel"></span>
@@ -322,7 +329,21 @@
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Auswahl</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" checked={allSelected} on:change={(e) => {
+                                const checked = (e.currentTarget as HTMLInputElement).checked;
+                                const next = new Set(selected);
+                                if (checked) {
+                                    filteredMembers.forEach((m) => next.add(m.id));
+                                } else {
+                                    filteredMembers.forEach((m) => next.delete(m.id));
+                                }
+                                selected = next;
+                            }} />
+                            Alle
+                        </label>
+                    </th>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Gruppe</th>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
