@@ -35,6 +35,7 @@
 - Formfelder: `border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500` (oder Emerald in Zahlungsmodals); Labels `text-sm font-semibold text-gray-700`.
 - Dropdown (custom): Button mit Border + Shadow; Liste `absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow`; Close-on-click-outside via Svelte `onMount` listener.
 - Tags fuer Counters: `px-3 py-1 text-xs font-semibold rounded-full border` (z.B. `text-sky-800 bg-sky-100`).
+- Buttons/Aktionen: CTA-Leiste rechts im Kopf (`flex items-center gap-3 flex-wrap`), Primaer rechts aussen, Sekundaer links daneben; Rueck-Link als neutraler Button links vor den CTAs. Footer-Buttons in Karten rechtsbuendig.
 
 ## Interaktionsmuster
 - Filter: Clientseitig via `search.trim().toLowerCase()`, Match ueber zusammengesetzten String aus Titel/Typ/Note/Betrag; Ergebnislisten und Counts aktualisieren sich reaktiv (`filteredItems`, `filteredTransactions`).
@@ -43,6 +44,7 @@
 - Statusfarben in Tabellenzeilen: aktuelles Jahr mit `bg-sky-50/70 ring-1 ring-sky-200`, archivierte in `bg-gray-50 text-gray-500`.
 - Scroll-Lock bei Modals: Body-Overflow sichern und beim Schliessen wiederherstellen (`document.body.style.overflow`).
 - Form-Submit: klassische `<form method="post" action="?...">` Buttons, versteckte Inputs fuer IDs.
+- CTA-Positionierung: Actions stehen im Kopf immer rechts vom Titelblock; auf Mobile umbrechen, Reihenfolge beibehalten. In Karten liegen Aktionen oben rechts oder unten rechts, nie mittig.
 
 ## Textbausteine
 - CTA-Texte: "Neues Geschaeftsjahr", "Transaktion", "Hat bezahlt", "Offene Rechnung".
@@ -96,3 +98,4 @@
 - Betragsfelder/Anzeigen immer ueber `euro()` formatieren.
 - Bei Modals Body-Scroll sperren, Buttons rechtsbuendig, Inputs mit Fokus-Ring.
 - Zaehler/Badges fuer Anzahl Eintraege oder Filterergebnisse anzeigen.
+- Button-Abstaende: horizontal `gap-3` in CTA-Leisten, vertikal `mt-4` unter Formulargruppen; Listen-Header-CTAs immer Icon+Label (Bootstrap Icon + Text).

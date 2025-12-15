@@ -34,6 +34,7 @@ Ableitung aus den Finance-Screens (`/intern/finance`, `/intern/finance/outstandi
 - Modals: Overlay `fixed inset-0 bg-black/50 backdrop-blur-sm flex center z-50 px-4`; Card `bg-white rounded-2xl border-gray-200 shadow-2xl max-w-lg w-full`, Header mit Titel + Close, Body `space-y-4`, Footer Buttons rechts.
 - Dropdown (custom): Button mit Border+Shadow; Liste `absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow`; Close-on-click-outside via `onMount` Listener.
 - Tags/Counter: `px-3 py-1 text-xs font-semibold rounded-full border` (z.B. `text-sky-800 bg-sky-100`).
+- Buttons/Aktionen: CTA-Block rechts im Kopf (`flex items-center gap-3 flex-wrap`), Primaer rechts aussen, Sekundaer links daneben; Zurueck-Link als neutraler Button links vor den CTAs. Karten-Footer-Buttons rechtsbuendig ausrichten.
 
 ## Interaktionsmuster
 - Suche/Filter: `search.trim().toLowerCase()`; Match ueber zusammengesetzten String aus Titel/Typ/Note/Betrag; Ergebnislisten + Counts reaktiv ableiten (`filteredItems`, `filteredTransactions`).
@@ -42,6 +43,7 @@ Ableitung aus den Finance-Screens (`/intern/finance`, `/intern/finance/outstandi
 - Statusfarben in Tabellen: aktuelles Jahr `bg-sky-50/70 ring-1 ring-sky-200`, Archiv `bg-gray-50 text-gray-500`.
 - Modals: Body-Scroll sperren und wiederherstellen (`document.body.style.overflow`).
 - Forms: klassisches `<form method="post" action="?...">`; versteckte Inputs fuer IDs; Primaer-Button rechts.
+- CTA-Positionierung: In Seitenkopf immer rechts neben dem Titelbereich; auf Mobile umbrechen, Reihenfolge beibehalten. Innerhalb von Karten stehen Aktionen oben rechts oder unten rechts, nie mittig.
 
 ## Beispiel-Skeleton (Svelte)
 ```svelte
@@ -78,8 +80,8 @@ Ableitung aus den Finance-Screens (`/intern/finance`, `/intern/finance/outstandi
 ```
 
 ## Navigation & Seitenmuster
-- Zurueck-Link als neutraler Button/Link rechts oben im Kopf oder oben rechts in Karten.
-- Haupt-CTA immer rechts vom Titel; bei zwei Aktionen: Primaer + Neutral.
+- Zurueck-Link als neutraler Button links vom CTA-Block im Kopf oder oben links in Karten.
+- Haupt-CTA immer rechts vom Titel; bei zwei Aktionen: Primaer rechts, Neutral links davon.
 - Stats/Meta-Blenden als kompakte Karten (Einnahmen/Ausgaben/Saldo) mit passenden Farben.
 - Empty States: einzeilige Info in grau innerhalb der Tabelle/Karte; kein separates Fullscreen-Empty.
 
@@ -100,3 +102,4 @@ Ableitung aus den Finance-Screens (`/intern/finance`, `/intern/finance/outstandi
 - Betrags- und Zahlenausgabe ueber `euro()`/fette Zahlen; Meta in `text-xs text-gray-500`.
 - Modals mit Body-Scroll-Lock, Buttons rechtsbuendig; Eingabefelder mit klaren Fokus-Ringen.
 - Zaehler/Badges fuer Anzahl Treffer/Items anzeigen; aktuelle Kontexte markieren (z.B. aktuelles Jahr Tag).
+- Button-Abstaende: horizontal `gap-3` in Leisten, vertikal `mt-4` unter Formulargruppen; immer Icon+Label bei Listen-Header-CTAs.
