@@ -1,4 +1,4 @@
-﻿import { db } from "$lib/server/mongo";
+import { db } from "$lib/server/mongo";
 import { env } from "$env/dynamic/private";
 import { ObjectId } from "mongodb";
 import * as crypto from "node:crypto";
@@ -198,8 +198,8 @@ E-Mail: ${email}
 Bitte setze dein eigenes Passwort über die Login-Seite (Passwort vergessen).`
         });
     }
-// ----------------------------------------------------
-    // 7) RÃ¼ckgabe
+    // ----------------------------------------------------
+    // 7) Rückgabe
     // ----------------------------------------------------
     return {
         mongoId: mongoRes.insertedId,
@@ -243,7 +243,7 @@ export async function deleteUser(id: string) {
     if (!user) return;
 
     // -------------------------------------------
-    // 1) Authentik -> User lÃ¶schen
+    // 1) Authentik -> User löschen
     // -------------------------------------------
     if (user.authentikId) {
         const res = await fetch(`${env.AUTHENTIK_URL}/api/v3/core/users/${user.authentikId}/`, {
@@ -259,7 +259,7 @@ export async function deleteUser(id: string) {
     }
 
     // -------------------------------------------
-    // 2) Member <-> User VerknÃ¼pfungen lÃ¶sen
+    // 2) Member <-> User Verknüpfungen lösen
     // -------------------------------------------
     await db.collection("members").updateMany(
         { users: id },
@@ -272,7 +272,7 @@ export async function deleteUser(id: string) {
     );
 
     // -------------------------------------------
-    // 3) MongoDB -> User lÃ¶schen
+    // 3) MongoDB -> User löschen
     // -------------------------------------------
     return await db.collection("users").deleteOne({ _id: mongoId });
 }
@@ -313,9 +313,3 @@ export async function removeMemberFromUser(userId: string, memberId: string) {
 
     return result.modifiedCount > 0;
 }
-
-
-
-
-
-
