@@ -16,6 +16,13 @@
             <h1 class="text-4xl font-bold text-gray-900">Berechtigungen</h1>
             <p class="text-sm text-gray-600 mt-1">Rollen und Zugriffsrechte verwalten.</p>
         </div>
+        <a
+                href="/intern/admin"
+                class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
+        >
+            <span class="bi bi-arrow-left"></span>
+            Zurück
+        </a>
     </div>
 
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-6">

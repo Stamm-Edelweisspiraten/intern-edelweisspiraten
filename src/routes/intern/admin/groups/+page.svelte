@@ -21,13 +21,22 @@
             <h1 class="text-4xl font-bold text-gray-900">Gruppenverwaltung</h1>
             <p class="text-sm text-gray-600 mt-1">Gruppen anlegen, suchen und öffnen.</p>
         </div>
-        <a
-                href="/intern/admin/groups/create"
-                class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
-        >
-            <span class="bi bi-plus-circle"></span>
-            Neue Gruppe
-        </a>
+        <div class="flex items-center gap-2 flex-wrap">
+            <a
+                    href="/intern/admin"
+                    class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
+            >
+                <span class="bi bi-arrow-left"></span>
+                Zurück
+            </a>
+            <a
+                    href="/intern/admin/groups/create"
+                    class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
+            >
+                <span class="bi bi-plus-circle"></span>
+                Neue Gruppe
+            </a>
+        </div>
     </div>
 
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">

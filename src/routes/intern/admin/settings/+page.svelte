@@ -49,6 +49,13 @@
             <h1 class="text-4xl font-bold text-gray-900">Einstellungen</h1>
             <p class="text-sm text-gray-600 mt-1">Stammdaten und Beiträge verwalten.</p>
         </div>
+        <a
+                href="/intern/admin"
+                class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
+        >
+            <span class="bi bi-arrow-left"></span>
+            Zurück
+        </a>
     </div>
 
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-6">
@@ -76,7 +83,7 @@
             </div>
 
             {#if canUpdate}
-                <div class="flex items-center justify-end gap-3">
+                <div class="flex items-center justify-end gap-3 flex-wrap">
                     {#if errorMsg}<span class="text-sm text-red-600">{errorMsg}</span>{/if}
                     {#if successMsg}<span class="text-sm text-emerald-700">{successMsg}</span>{/if}
                     <button
