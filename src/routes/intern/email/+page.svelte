@@ -1,5 +1,6 @@
 <script lang="ts">
     export let data;
+    export const csr = false;
     import { onDestroy, onMount } from "svelte";
 
     let subject = "";
