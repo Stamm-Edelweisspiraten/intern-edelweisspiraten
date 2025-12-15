@@ -1,6 +1,7 @@
 ﻿<script lang="ts">
     import { enhance } from "$app/forms";
     import type { SubmitFunction } from "@sveltejs/kit";
+    import { addToast } from "$lib/toastStore";
 
     export let data;
 
@@ -29,13 +30,16 @@
         return async ({ result }) => {
             if (result.type === "success") {
                 successMsg = "Einstellungen gespeichert.";
+                addToast(successMsg, "success");
                 if (result.data?.finance?.contributions) {
                     contributions = { ...result.data.finance.contributions };
                 }
             } else if (result.type === "failure") {
                 errorMsg = result.data?.error ?? "Speichern fehlgeschlagen.";
+                addToast(errorMsg, "error");
             } else if (result.type === "error") {
                 errorMsg = result.error?.message ?? "Speichern fehlgeschlagen.";
+                addToast(errorMsg, "error");
             }
             saving = false;
         };

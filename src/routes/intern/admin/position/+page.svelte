@@ -1,5 +1,6 @@
 ﻿<script lang="ts">
     export let data;
+    import { addToast } from "$lib/toastStore";
 
     let positions = data.positions ?? [];
     let members = data.members ?? [];
@@ -49,6 +50,7 @@
             };
             positions = [...positions, newPos];
             successMsg = "Amt angelegt.";
+            addToast("Amt wurde angelegt.", "success");
             name = "";
             email = "";
             description = "";
@@ -57,6 +59,7 @@
             type = "amt";
         } catch (err: any) {
             errorMsg = err.message ?? "Unbekannter Fehler";
+            addToast(errorMsg, "error");
         } finally {
             submitting = false;
         }
@@ -90,8 +93,10 @@
                     : p
             );
             editingId = null;
+            addToast("Amt wurde aktualisiert.", "success");
         } catch (err: any) {
             errorMsg = err.message ?? "Unbekannter Fehler";
+            addToast(errorMsg, "error");
         }
     };
 
@@ -102,9 +107,11 @@
         const res = await fetch("?/delete", { method: "POST", body: form });
         if (res.ok) {
             positions = positions.filter((p: any) => p.id !== id);
+            addToast("Amt wurde gelöscht.", "success");
         } else {
             const json = await res.json().catch(() => ({}));
             errorMsg = json.error || "Löschen fehlgeschlagen";
+            addToast(errorMsg, "error");
         }
     };
 </script>
