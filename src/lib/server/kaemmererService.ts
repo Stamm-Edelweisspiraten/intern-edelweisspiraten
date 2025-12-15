@@ -238,6 +238,20 @@ export async function listOrdersForMembers(memberIds: string[]) {
     return docs.map(mapOrderDoc);
 }
 
+export async function getOrderForUser(orderId: string, user: any): Promise<KaemmererOrder | null> {
+    if (!orderId || !user) return null;
+    const members = await getAccessibleMembersForUser(user);
+    const memberIds = members.map((m) => m.id);
+    if (memberIds.length === 0) return null;
+
+    const doc = await db.collection(ORDER_COLLECTION).findOne({
+        _id: new ObjectId(orderId),
+        memberIds: { $in: memberIds }
+    });
+
+    return doc ? mapOrderDoc(doc) : null;
+}
+
 export async function updateOrderStatus(id: string, status: KaemmererOrderStatus, paymentStatus?: KaemmererPaymentStatus) {
     const set: Record<string, any> = { status, updatedAt: new Date() };
     if (paymentStatus) set.paymentStatus = paymentStatus;

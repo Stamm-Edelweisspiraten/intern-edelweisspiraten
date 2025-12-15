@@ -52,7 +52,12 @@
                 {:else}
                     {#each orders as order}
                         <tr class="hover:bg-gray-50 transition">
-                            <td class="px-6 py-4 font-semibold text-gray-900">{order.number}</td>
+                            <td class="px-6 py-4 font-semibold text-gray-900">
+                                <a href={`/intern/kaemmerer/order/${order.id}`} class="text-blue-600 hover:text-blue-700 flex items-center gap-2">
+                                    <span>{order.number}</span>
+                                    <i class="bi bi-arrow-right-short text-lg"></i>
+                                </a>
+                            </td>
                             <td class="px-6 py-4 text-gray-700">
                                 <div class="flex flex-wrap gap-2">
                                     {#each order.members as member}
