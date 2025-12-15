@@ -1,5 +1,6 @@
 <script>
     export let data;
+    export const csr = false;
     import { can } from "$lib/can";
 
     const perms = data.permissions ?? [];
