@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     import { enhance } from "$app/forms";
     import type { SubmitFunction } from "@sveltejs/kit";
 
@@ -11,7 +11,7 @@
     let errorMsg = "";
     let saving = false;
     const levels = [
-        { key: "stamm", label: "Stamm (Edelweißpiraten)" },
+        { key: "stamm", label: "Stamm (Edelweisspiraten)" },
         { key: "gau", label: "Gau (Bremen)" },
         { key: "landesmark", label: "Landesmark (Achtern Diek)" },
         { key: "bund", label: "Bund (Christliche Pfadfinderschaft Deutschlands e.V.)" }
@@ -38,100 +38,59 @@
                 errorMsg = result.error?.message ?? "Speichern fehlgeschlagen.";
             }
             saving = false;
-            await update();
         };
     };
 </script>
 
-<div class="max-w-4xl mx-auto mt-12 space-y-8">
-    <div>
-        <h1 class="text-4xl font-bold text-gray-900 mb-2">Allgemeine Einstellungen</h1>
-        <p class="text-gray-600">Kasseneinstellungen und Beitragshöhen verwalten.</p>
-        {#if data.finance.updatedAt}
-            <p class="text-xs text-gray-500 mt-1">
-                Zuletzt geändert {new Date(data.finance.updatedAt).toLocaleString("de-DE")}
-                {#if data.finance.updatedBy} von {data.finance.updatedBy}{/if}
-            </p>
-        {/if}
+<div class="max-w-6xl mx-auto mt-16 space-y-8">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Admin</p>
+            <h1 class="text-4xl font-bold text-gray-900">Einstellungen</h1>
+            <p class="text-sm text-gray-600 mt-1">Stammdaten und Beiträge verwalten.</p>
+        </div>
     </div>
 
-    {#if successMsg}
-        <div class="px-4 py-3 rounded-lg bg-green-100 text-green-800 border border-green-200">
-            {successMsg}
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-6">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+            <h2 class="text-xl font-semibold text-gray-900">Beitragssätze</h2>
+            <div class="text-sm text-gray-600">Gesamt: <span class="font-semibold text-gray-900">{formatEuro(total)} EUR</span></div>
         </div>
-    {/if}
-    {#if errorMsg}
-        <div class="px-4 py-3 rounded-lg bg-red-100 text-red-800 border border-red-200">
-            {errorMsg}
-        </div>
-    {/if}
 
-    <form method="post" action="?/updateFinance" use:enhance={canUpdate ? onSubmit : undefined} class="space-y-6">
-        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-5">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h2 class="text-2xl font-semibold text-gray-900">Kasse</h2>
-                    <p class="text-gray-600 text-sm">Beiträge pro Ebene in EUR pro Mitglied festlegen.</p>
+        <form method="post" use:enhance={onSubmit} class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {#each levels as lvl}
+                    <label class="text-sm font-semibold text-gray-700 flex flex-col gap-2 border border-gray-200 rounded-xl p-4 bg-gray-50">
+                        {lvl.label}
+                        <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                class="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 text-sm"
+                                bind:value={(contributions as any)[lvl.key]}
+                                name={lvl.key}
+                                {disabled:!canUpdate}
+                        />
+                    </label>
+                {/each}
+            </div>
+
+            {#if canUpdate}
+                <div class="flex items-center justify-end gap-3">
+                    {#if errorMsg}<span class="text-sm text-red-600">{errorMsg}</span>{/if}
+                    {#if successMsg}<span class="text-sm text-emerald-700">{successMsg}</span>{/if}
+                    <button
+                            type="submit"
+                            class="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition disabled:opacity-60"
+                            disabled={saving}
+                    >
+                        <span class="bi bi-save"></span>
+                        {saving ? "Speichern..." : "Speichern"}
+                    </button>
                 </div>
-                {#if !canUpdate}
-                    <span class="text-xs text-gray-500">Nur Ansicht</span>
-                {/if}
-            </div>
-
-            <div class="mt-3 overflow-x-auto rounded-2xl border border-gray-200 shadow-sm">
-                <table class="min-w-[720px] w-full divide-y divide-gray-200 text-sm">
-                    <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-5 py-3 text-left font-semibold text-gray-700 w-2/3">Ebene</th>
-                        <th class="px-5 py-3 text-right font-semibold text-gray-700 w-1/3">Beitrag / Mitglied</th>
-                    </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100">
-                    {#each levels as lvl}
-                        <tr class="bg-white">
-                            <td class="px-5 py-4 text-gray-800">{lvl.label}</td>
-                            <td class="px-5 py-4 text-right">
-                                {#if canUpdate}
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        name={`contrib_${lvl.key}`}
-                                        bind:value={(contributions as any)[lvl.key]}
-                                        class="w-40 md:w-48 px-3 py-2 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500 text-right"
-                                    />
-                                {:else}
-                                    <span class="font-mono text-gray-900">{formatEuro(Number((contributions as any)[lvl.key]) || 0)} €</span>
-                                {/if}
-                            </td>
-                        </tr>
-                    {/each}
-                    <tr class="bg-blue-50">
-                        <td class="px-5 py-4 font-semibold text-gray-900">Summe pro Mitglied</td>
-                        <td class="px-5 py-4 text-right font-mono font-semibold text-gray-900">{formatEuro(total)} €</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        {#if canUpdate}
-            <div class="flex gap-4">
-                <button
-                    type="submit"
-                    class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow disabled:opacity-70"
-                    disabled={saving}
-                >
-                    {saving ? "Speichert..." : "Speichern"}
-                </button>
-                <a href="/intern/admin" class="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg">
-                    Zurück
-                </a>
-            </div>
-        {:else}
-            <a href="/intern/admin" class="inline-block px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg">
-                Zurück
-            </a>
-        {/if}
-    </form>
+            {:else}
+                <p class="text-sm text-gray-500">Du hast keine Berechtigung zum Aktualisieren.</p>
+            {/if}
+        </form>
+    </div>
 </div>

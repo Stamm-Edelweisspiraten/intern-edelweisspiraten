@@ -1,127 +1,114 @@
-<script lang="ts">
+﻿<script lang="ts">
     export let data;
 
     let search = "";
 
-    // Hilfsfunktion: Member-Name anhand einer ID holen
-    function getMemberName(id: string | null) {
-        if (!id) return "—";
-        const m = data.members.find((m) => m.id === id);
-        return m ? m.name : id; // Fallback falls Member gelöscht wurde
-    }
+    const getMemberName = (id: string | null) => {
+        if (!id) return "";
+        const m = data.members.find((m: any) => m.id === id);
+        return m ? m.name : id;
+    };
 
-    // Live gefilterte User-Liste
-    $: filteredUsers = data.users.filter((user) => {
+    $: filteredUsers = (data.users ?? []).filter((user: any) => {
         const q = search.toLowerCase();
-
         return (
             user.name.toLowerCase().includes(q) ||
             user.email.toLowerCase().includes(q) ||
             user.id.toLowerCase().includes(q) ||
-            (getMemberName(user.memberId).toLowerCase().includes(q))
+            getMemberName(user.memberId).toLowerCase().includes(q)
         );
     });
 </script>
 
-<div class="max-w-5xl mx-auto mt-12">
-
-    <!-- Titel + Aktionen -->
-    <div class="flex justify-between items-center mb-8">
-        <h1 class="text-4xl font-bold text-gray-900">Benutzerverwaltung</h1>
-
+<div class="max-w-6xl mx-auto mt-16 space-y-8">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Admin</p>
+            <h1 class="text-4xl font-bold text-gray-900">Benutzerverwaltung</h1>
+            <p class="text-sm text-gray-600 mt-1">Benutzer suchen, ansehen und verwalten.</p>
+        </div>
         <a
                 href="/intern/admin/user/create"
-                class="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition font-medium"
+                class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
         >
-            + Neuer Benutzer
+            <span class="bi bi-person-plus"></span>
+            Neuer Benutzer
         </a>
     </div>
 
-    <!-- SUCHFELD -->
-    <div class="mb-6">
-        <input
-                type="text"
-                placeholder="Suche nach Name, E-Mail, ID oder Member-ID..."
-                bind:value={search}
-                class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
-                   focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-700"
-        />
-    </div>
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+            <div class="w-full md:w-80">
+                <label class="text-sm font-semibold text-gray-700">Suchen</label>
+                <div class="mt-1 relative">
+                    <span class="bi bi-search absolute left-3 top-2.5 text-gray-400"></span>
+                    <input
+                            type="text"
+                            placeholder="Name, E-Mail, ID oder Mitglied"
+                            bind:value={search}
+                            class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 text-sm text-gray-700"
+                    />
+                </div>
+            </div>
+            <span class="text-sm text-gray-500">{filteredUsers.length} Einträge</span>
+        </div>
 
-    <div class="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-left">
-            <thead class="bg-gray-100 border-b border-gray-300">
-            <tr>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700">Name</th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700">E-Mail</th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700">Member</th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700 text-right">Aktionen</th>
-            </tr>
-            </thead>
-
-            <tbody class="divide-y divide-gray-200">
-            {#each filteredUsers as user}
-                <tr class="hover:bg-gray-50 transition">
-
-                    <td class="px-6 py-4 font-medium text-gray-900">
-                        {user.name}
-                    </td>
-
-                    <td class="px-6 py-4 text-gray-700">
-                        {user.email}
-                    </td>
-
-                    <td class="px-6 py-4 text-gray-700">
-                        {getMemberName(user.memberId) ?? "—"}
-                    </td>
-
-                    <td class="px-6 py-4 text-right whitespace-nowrap flex justify-end gap-2">
-
-                        <!-- Ansehen -->
-                        <a
-                                href={`/intern/admin/user/${user.id}`}
-                                class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition text-gray-700 shadow-sm"
-                                data-tip="Ansehen"
-                        >
-                            👁️
-                        </a>
-
-                        <!-- Bearbeiten -->
-                        <a
-                                href={`/intern/admin/user/${user.id}?scope=edit`}
-                                class="px-3 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 transition text-blue-700 shadow-sm"
-                                data-tip="Bearbeiten"
-                        >
-                            ✏️
-                        </a>
-
-                        <!-- Löschen -->
-                        <form method="post" action="?/delete" class="inline">
-                            <input type="hidden" name="id" value={user.id} />
-
-                            <button
-                                    type="submit"
-                                    class="px-3 py-2 rounded-lg bg-red-100 hover:bg-red-200 transition text-red-700 shadow-sm"
-                                    data-tip="Löschen"
-                                    on:click={() => confirm("Willst du diesen Benutzer wirklich löschen?")}
-                            >
-                                🗑️
-                            </button>
-                        </form>
-
-                    </td>
-                </tr>
-            {/each}
-
-            {#if filteredUsers.length === 0}
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
                 <tr>
-                    <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                        Keine Benutzer gefunden.
-                    </td>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">E-Mail</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Mitglied</th>
+                    <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Aktionen</th>
                 </tr>
-            {/if}
-            </tbody>
-        </table>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                {#if filteredUsers.length === 0}
+                    <tr>
+                        <td colspan="4" class="px-6 py-6 text-center text-gray-500">Keine Benutzer gefunden.</td>
+                    </tr>
+                {:else}
+                    {#each filteredUsers as user}
+                        <tr class="hover:bg-gray-50 transition">
+                            <td class="px-6 py-4 font-semibold text-gray-900">{user.name}</td>
+                            <td class="px-6 py-4 text-gray-700">{user.email}</td>
+                            <td class="px-6 py-4 text-gray-700">{getMemberName(user.memberId) || "-"}</td>
+                            <td class="px-6 py-4">
+                                <div class="flex items-center justify-end gap-2 text-xs">
+                                    <a
+                                            href={`/intern/admin/user/${user.id}`}
+                                            class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+                                            aria-label="Benutzer ansehen"
+                                    >
+                                        <span class="bi bi-eye"></span> Ansehen
+                                    </a>
+                                    <a
+                                            href={`/intern/admin/user/${user.id}?scope=edit`}
+                                            class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
+                                            aria-label="Benutzer bearbeiten"
+                                    >
+                                        <span class="bi bi-pencil"></span> Bearbeiten
+                                    </a>
+                                    <form method="post" action="?/delete" class="inline" on:submit={(e) => {
+                                        if (!confirm("Willst du diesen Benutzer wirklich löschen?")) e.preventDefault();
+                                    }}>
+                                        <input type="hidden" name="id" value={user.id} />
+                                        <button
+                                                type="submit"
+                                                class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 shadow-sm"
+                                                aria-label="Benutzer löschen"
+                                        >
+                                            <span class="bi bi-trash"></span> Löschen
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {/each}
+                {/if}
+                </tbody>
+            </table>
+        </div>
     </div>
-
 </div>
