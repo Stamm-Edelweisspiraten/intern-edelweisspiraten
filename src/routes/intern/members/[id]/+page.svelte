@@ -8,6 +8,17 @@
     let lastname = data.member.lastname;
     let fahrtenname = data.member.fahrtenname;
     let birthday = data.member.birthday;
+    const calcAge = (iso: string | null | undefined) => {
+        if (!iso) return null;
+        const b = new Date(iso);
+        if (Number.isNaN(b.getTime())) return null;
+        const now = new Date();
+        let age = now.getFullYear() - b.getFullYear();
+        const m = now.getMonth() - b.getMonth();
+        if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+        return age >= 0 ? age : null;
+    };
+    $: age = calcAge(birthday);
 
     let address_street = data.member.address.street;
     let address_city = data.member.address.city;
@@ -205,8 +216,15 @@
             </div>
         </div>
 
-        <div>
-            <label>Geburtstag</label>
+        <div class="space-y-2">
+            <div class="flex items-center justify-between gap-3">
+                <label class="font-medium text-gray-800">Geburtstag</label>
+                {#if age !== null}
+                    <span class="px-2.5 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-gray-50 text-gray-700">
+                        {age} Jahre
+                    </span>
+                {/if}
+            </div>
             <input type="date" name="birthday" bind:value={birthday} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
         </div>
 
