@@ -88,7 +88,6 @@
         numbers = numbers.filter((_, idx) => idx !== i);
     }
 
-    // User-Zuordnung
     let userSearch = "";
     let showUserList = false;
     const memberId = data.member.id;
@@ -119,9 +118,10 @@
     const lastChanged = data.member.updatedAt ? formatDate(data.member.updatedAt) : null;
 </script>
 
-<div class="max-w-3xl mx-auto mt-12 p-8 bg-white rounded-2xl shadow-xl border">
-    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
+<div class="max-w-6xl mx-auto mt-12 space-y-6">
+    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div>
+            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Mitglieder</p>
             <h1 class="text-4xl font-bold text-gray-900">
                 {mode === "view" ? "Mitglied ansehen" : "Mitglied bearbeiten"}
             </h1>
@@ -131,45 +131,55 @@
                 </p>
             {/if}
         </div>
-        <a
-            href={`/intern/members/${data.member.id}/log`}
-            class="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-            Änderungslog
-        </a>
+        <div class="flex items-center gap-2 flex-wrap">
+            <a
+                    href="/intern/members"
+                    class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
+            >
+                <span class="bi bi-arrow-left"></span>
+                Zurück
+            </a>
+            <a
+                href={`/intern/members/${data.member.id}/log`}
+                class="inline-flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 shadow-sm"
+            >
+                <span class="bi bi-clock-history"></span>
+                Änderungslog
+            </a>
+        </div>
     </div>
 
-    <form method="post" enctype={mode === "edit" ? "multipart/form-data" : undefined} action={mode === "edit" ? "?/update" : undefined} class="space-y-7">
+    <form method="post" enctype={mode === "edit" ? "multipart/form-data" : undefined} action={mode === "edit" ? "?/update" : undefined} class="space-y-7 bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
         <input type="hidden" name="id" value={data.member.id} />
         <input type="hidden" name="groups" value={JSON.stringify(selectedGroups)} />
 
-        <div class="grid grid-cols-2 gap-5">
-            <div>
-                <label>Vorname</label>
-                <input type="text" name="firstname" bind:value={firstname} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="space-y-2">
+                <label class="font-medium text-gray-800">Vorname</label>
+                <input type="text" name="firstname" bind:value={firstname} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
             </div>
 
-            <div>
-                <label>Nachname</label>
-                <input type="text" name="lastname" bind:value={lastname} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
+            <div class="space-y-2">
+                <label class="font-medium text-gray-800">Nachname</label>
+                <input type="text" name="lastname" bind:value={lastname} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
             </div>
         </div>
 
-        <div>
-            <label>Fahrtenname (optional)</label>
-            <input type="text" name="fahrtenname" bind:value={fahrtenname} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
+        <div class="space-y-2">
+            <label class="font-medium text-gray-800">Fahrtenname (optional)</label>
+            <input type="text" name="fahrtenname" bind:value={fahrtenname} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <label class="flex items-center gap-2">
+            <label class="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" name="consent_social" bind:checked={consentSocial} disabled={disabled} />
                 <span>Social Media erlaubt</span>
             </label>
-            <label class="flex items-center gap-2">
+            <label class="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" name="consent_website" bind:checked={consentWebsite} disabled={disabled} />
                 <span>Stammeswebsite erlaubt</span>
             </label>
-            <label class="flex items-center gap-2">
+            <label class="flex items-center gap-2 text-sm text-gray-700">
                 <input type="checkbox" name="consent_print" bind:checked={consentPrint} disabled={disabled} />
                 <span>Print erlaubt</span>
             </label>
@@ -177,17 +187,17 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-2">
-                <label>Datenschutzerklaerung / Einwilligung (PDF/JPG/PNG)</label>
+                <label class="font-medium text-gray-800">Datenschutzerklärung / Einwilligung (PDF/JPG/PNG)</label>
                 <input type="file" name="consent_file" accept=".pdf,image/png,image/jpeg" disabled={disabled} class="w-full border rounded-lg px-3 py-2 bg-gray-50 disabled:opacity-70" />
                 {#if data.member.consentFile}
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-3 text-sm">
                         <a class="text-blue-600 underline" href={`/intern/members/${data.member.id}/files/consent`} target="_blank" rel="noreferrer">
                             {data.member.consentFile.filename} ({Math.round(data.member.consentFile.size / 1024)} KB)
                         </a>
                         {#if mode === "edit"}
                             <input type="hidden" name="remove_consent" value={removeConsent ? "true" : ""} />
                             <button type="button"
-                                    class="px-3 py-2 bg-red-100 text-red-700 rounded"
+                                    class={`px-3 py-2 rounded border text-sm ${removeConsent ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}
                                     on:click={() => { removeConsent = !removeConsent; }}>
                                 {removeConsent ? "Entfernen rückgängig" : "Datei entfernen"}
                             </button>
@@ -196,17 +206,17 @@
                 {/if}
             </div>
             <div class="space-y-2">
-                <label>Stammesanmeldung (PDF/JPG/PNG)</label>
+                <label class="font-medium text-gray-800">Stammesanmeldung (PDF/JPG/PNG)</label>
                 <input type="file" name="application_file" accept=".pdf,image/png,image/jpeg" disabled={disabled} class="w-full border rounded-lg px-3 py-2 bg-gray-50 disabled:opacity-70" />
                 {#if data.member.applicationFile}
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-3 text-sm">
                         <a class="text-blue-600 underline" href={`/intern/members/${data.member.id}/files/application`} target="_blank" rel="noreferrer">
                             {data.member.applicationFile.filename} ({Math.round(data.member.applicationFile.size / 1024)} KB)
                         </a>
                         {#if mode === "edit"}
                             <input type="hidden" name="remove_application" value={removeApplication ? "true" : ""} />
                             <button type="button"
-                                    class="px-3 py-2 bg-red-100 text-red-700 rounded"
+                                    class={`px-3 py-2 rounded border text-sm ${removeApplication ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}
                                     on:click={() => { removeApplication = !removeApplication; }}>
                                 {removeApplication ? "Entfernen rückgängig" : "Datei entfernen"}
                             </button>
@@ -225,238 +235,197 @@
                     </span>
                 {/if}
             </div>
-            <input type="date" name="birthday" bind:value={birthday} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
+            <input type="date" name="birthday" bind:value={birthday} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
         </div>
 
-        <div>
-            <label>Adresse</label>
-            <input type="text" name="address_street" bind:value={address_street} disabled={disabled} placeholder="Strasse" class="w-full px-4 py-3 border rounded-lg bg-gray-50 mb-2 disabled:opacity-70" />
-            <input type="text" name="address_zip" bind:value={address_zip} disabled={disabled} placeholder="PLZ" class="w-full px-4 py-3 border rounded-lg bg-gray-50 mb-2 disabled:opacity-70" />
-            <input type="text" name="address_city" bind:value={address_city} disabled={disabled} placeholder="Stadt" class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
-        </div>
-
-        <div class="grid grid-cols-3 gap-5">
-            <div>
-                <label>Stand</label>
-                <select name="stand" bind:value={stand} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70">
-                    <option>Neuling-Wölfling</option>
-                    <option>Wölfling</option>
-                    <option>Neuling-Pfadinder</option>
-                    <option>Jungpfadfinder</option>
-                    <option>Knappe</option>
-                    <option>Pfadfinder</option>
-                    <option>Späher</option>
-                    <option>Kreuzpfadfinder</option>
-                </select>
+        <div class="space-y-2">
+            <label class="font-medium text-gray-800">Adresse</label>
+            <input type="text" name="address_street" bind:value={address_street} disabled={disabled} placeholder="Straße" class="w-full px-4 py-3 border rounded-lg bg-gray-50 mb-2 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input type="text" name="address_zip" bind:value={address_zip} disabled={disabled} placeholder="PLZ" class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
+                <input type="text" name="address_city" bind:value={address_city} disabled={disabled} placeholder="Stadt" class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
             </div>
+        </div>
 
-            <div>
-                <label>Status</label>
-                <select name="status" bind:value={status} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70">
-                    <option>aktiv</option>
-                    <option>passiv</option>
-                    <option>gekündigt</option>
-                </select>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div class="space-y-2">
+                <label class="font-medium text-gray-800">Stand</label>
+                <input type="text" name="stand" bind:value={stand} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div class="space-y-2">
+                <label class="font-medium text-gray-800">Status</label>
+                <input type="text" name="status" bind:value={status} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div class="space-y-2">
+                <label class="font-medium text-gray-800">Eintrittsdatum</label>
+                <input type="date" name="entryDate" bind:value={entryDate} disabled={disabled} class="w-full px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70 focus:ring-2 focus:ring-blue-500" />
             </div>
         </div>
 
         <div class="space-y-3">
-            <label class="flex items-center gap-2 text-gray-800">
-                <input type="checkbox" name="is_second_member" bind:checked={isSecondMember} disabled={disabled} class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                <span>Zweitmitglied</span>
-            </label>
+            <div class="flex items-center gap-3">
+                <label class="font-medium text-gray-800">Ist Zweitmitglied?</label>
+                <input type="checkbox" name="isSecondMember" bind:checked={isSecondMember} disabled={disabled} />
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                {#each ["stamm","gau","landesmark","bund"] as key}
+                    <label class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
+                        <input type="checkbox" name={`contributionDues_${key}`} bind:checked={contributionDues[key]} disabled={disabled} />
+                        <span class="capitalize">{key}</span>
+                    </label>
+                {/each}
+            </div>
+        </div>
 
-            {#if isSecondMember}
-                {#if mode === "edit"}
-                    <input type="hidden" name="dues_stamm" value="on" />
+        <div class="space-y-2">
+            <div class="flex items-center justify-between">
+                <label class="font-medium text-gray-800">Gruppen</label>
+                {#if !disabled}
+                    <button type="button" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50" on:click={addGroup}>
+                        <span class="bi bi-plus"></span>
+                        Gruppe hinzufügen
+                    </button>
                 {/if}
-                <div class="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <label class="flex items-center gap-2 text-gray-800">
-                            <input type="checkbox" checked disabled class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                            <span>Stamm (immer fällig)</span>
-                        </label>
-                        <label class="flex items-center gap-2 text-gray-800">
-                            <input type="checkbox" name="dues_gau" bind:checked={contributionDues.gau} disabled={disabled} class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                            <span>Gau</span>
-                        </label>
-                        <label class="flex items-center gap-2 text-gray-800">
-                            <input type="checkbox" name="dues_landesmark" bind:checked={contributionDues.landesmark} disabled={disabled} class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                            <span>Landesmark</span>
-                        </label>
-                        <label class="flex items-center gap-2 text-gray-800">
-                            <input type="checkbox" name="dues_bund" bind:checked={contributionDues.bund} disabled={disabled} class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                            <span>Bund</span>
-                        </label>
+            </div>
+            <div class="space-y-2">
+                {#if selectedGroups.length === 0}
+                    <p class="text-sm text-gray-500">Keine Gruppen zugeordnet.</p>
+                {:else}
+                    {#each selectedGroups as gid, idx}
+                        <div class="flex items-center gap-2">
+                            <select
+                                    class="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm"
+                                    value={gid}
+                                    disabled={disabled}
+                                    on:change={(e) => updateGroup(idx, (e.currentTarget as HTMLSelectElement).value)}
+                            >
+                                {#each data.groups as g}
+                                    <option value={g.id} selected={g.id === gid}>{g.name}</option>
+                                {/each}
+                            </select>
+                            {#if !disabled}
+                                <button type="button" class="px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm" on:click={() => removeGroup(idx)}>
+                                    <span class="bi bi-trash"></span>
+                                </button>
+                            {/if}
+                        </div>
+                    {/each}
+                {/if}
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <label class="font-medium text-gray-800">E-Mails</label>
+                    {#if !disabled}
+                        <button type="button" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50" on:click={addEmail}>
+                            <span class="bi bi-plus"></span>
+                            Hinzufügen
+                        </button>
+                    {/if}
+                </div>
+                <div class="space-y-2">
+                    {#each emails as email, idx}
+                        <div class="flex items-center gap-2">
+                            <input type="text" name="email_label" value={email.label} disabled={disabled} placeholder="Label" class="w-28 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
+                            <input type="email" name="email_email" value={email.email} disabled={disabled} placeholder="email@example.de" class="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
+                            {#if !disabled}
+                                <button type="button" class="px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm" on:click={() => removeEmail(idx)}>
+                                    <span class="bi bi-trash"></span>
+                                </button>
+                            {/if}
+                        </div>
+                    {/each}
+                </div>
+            </div>
+
+            <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                    <label class="font-medium text-gray-800">Telefon</label>
+                    {#if !disabled}
+                        <button type="button" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm hover:bg-gray-50" on:click={addNumber}>
+                            <span class="bi bi-plus"></span>
+                            Hinzufügen
+                        </button>
+                    {/if}
+                </div>
+                <div class="space-y-2">
+                    {#each numbers as number, idx}
+                        <div class="flex items-center gap-2">
+                            <input type="text" name="number_label" value={number.label} disabled={disabled} placeholder="Label" class="w-28 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
+                            <input type="text" name="number_number" value={number.number} disabled={disabled} placeholder="+49..." class="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
+                            {#if !disabled}
+                                <button type="button" class="px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm" on:click={() => removeNumber(idx)}>
+                                    <span class="bi bi-trash"></span>
+                                </button>
+                            {/if}
+                        </div>
+                    {/each}
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-2">
+            <label class="font-medium text-gray-800">Benutzer-Zuordnung</label>
+            <div class="space-y-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                    {#each memberUserIds as uid}
+                        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-sm">
+                            {uid}
+                            {#if !disabled}
+                                <button type="button" class="text-blue-700 hover:text-blue-900" on:click={() => removeUser(uid)}>
+                                    <span class="bi bi-x-lg"></span>
+                                </button>
+                            {/if}
+                        </span>
+                    {/each}
+                    {#if memberUserIds.length === 0}
+                        <span class="text-sm text-gray-500">Keine User zugeordnet.</span>
+                    {/if}
+                </div>
+
+                {#if !disabled}
+                    <div class="space-y-2">
+                        <input
+                                type="text"
+                                placeholder="Nach Benutzer suchen (Name/E-Mail/ID)"
+                                bind:value={userSearch}
+                                on:focus={() => showUserList = true}
+                                class="w-full px-4 py-2.5 rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 text-sm"
+                        />
+                        {#if showUserList && userSearch.length > 0}
+                            <div class="border border-gray-200 rounded-lg shadow max-h-48 overflow-auto bg-white">
+                                {#each filteredUsers as u}
+                                    <button type="button" class="w-full text-left px-3 py-2 hover:bg-blue-50 flex justify-between text-sm" on:click={() => addUser(u.id)}>
+                                        <span>{u.name} ({u.email})</span>
+                                        <span class="text-gray-400">{u.id}</span>
+                                    </button>
+                                {/each}
+                                {#if filteredUsers.length === 0}
+                                    <div class="px-3 py-2 text-sm text-gray-500">Kein Treffer.</div>
+                                {/if}
+                            </div>
+                        {/if}
                     </div>
-                </div>
-            {/if}
+                {/if}
+            </div>
         </div>
 
-        <div class="space-y-3">
-            <label>Gruppen</label>
-            {#if selectedGroups.length === 0}
-                <p class="text-sm text-gray-500">Keine Gruppe ausgewählt.</p>
-            {/if}
-            {#each selectedGroups as gid, i}
-                <div class="flex gap-3 items-center">
-                    <select
-                            class="flex-1 px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70"
-                            bind:value={selectedGroups[i]}
-                            disabled={disabled}
-                            on:change={(e) => updateGroup(i, (e.target as HTMLSelectElement).value)}
-                    >
-                        {#each data.groups as g}
-                            <option value={g.id}>{g.name} ({g.type})</option>
-                        {/each}
-                    </select>
-                    {#if !disabled}
-                        <button type="button"
-                                class="px-4 py-3 bg-red-100 text-red-700 rounded-lg h-full"
-                                on:click={() => removeGroup(i)}>
-                            Entfernen
-                        </button>
-                    {/if}
-                </div>
-            {/each}
-            {#if !disabled}
-                <button type="button" on:click={addGroup}
-                        class="px-4 py-3 bg-blue-100 text-blue-700 rounded-lg">
-                    + Gruppe hinzufügen
-                </button>
-            {/if}
-        </div>
-
-        <div>
-            <label>E-Mails</label>
-            {#each emails as e, i}
-                <div class="flex gap-3 mb-3">
-                    <input name={`email_label_${i}`} bind:value={e.label} disabled={disabled} placeholder="Bezeichnung" class="flex-1 px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
-                    <input name={`email_email_${i}`} bind:value={e.email} disabled={disabled} placeholder="E-Mail" class="flex-1 px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
-                    {#if !disabled}
-                        <button type="button" on:click={() => removeEmail(i)} class="px-3 py-2 bg-red-100 text-red-700 rounded-lg">
-                            Entfernen
-                        </button>
-                    {/if}
-                </div>
-            {/each}
-            {#if !disabled}
-                <button type="button" on:click={addEmail} class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg">
-                    + E-Mail hinzufuegen
-                </button>
-            {/if}
-        </div>
-
-        <div>
-            <label>Telefonnummern</label>
-            {#each numbers as n, i}
-                <div class="flex gap-3 mb-3">
-                    <input name={`number_label_${i}`} bind:value={n.label} disabled={disabled} placeholder="Bezeichnung" class="flex-1 px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
-                    <input name={`number_number_${i}`} bind:value={n.number} disabled={disabled} placeholder="Nummer" class="flex-1 px-4 py-3 border rounded-lg bg-gray-50 disabled:opacity-70" />
-                    {#if !disabled}
-                        <button type="button" on:click={() => removeNumber(i)} class="px-3 py-2 bg-red-100 text-red-700 rounded-lg">
-                            Entfernen
-                        </button>
-                    {/if}
-                </div>
-            {/each}
-            {#if !disabled}
-                <button type="button" on:click={addNumber} class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg">
-                    + Nummer hinzufuegen
-                </button>
-            {/if}
-        </div>
-
-        {#if mode === "edit"}
-            <div class="flex gap-4 pt-8">
-                <button type="submit" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+        <div class="flex items-center justify-end gap-3">
+            <a
+                    href="/intern/members"
+                    class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
+            >
+                <span class="bi bi-arrow-left"></span>
+                Abbrechen
+            </a>
+            {#if mode === "edit"}
+                <button type="submit" class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm">
+                    <span class="bi bi-save"></span>
                     Speichern
                 </button>
-                <a href="/intern/members" class="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg">
-                    Abbrechen
-                </a>
-            </div>
-        {/if}
-
-        {#if mode === "view"}
-            <div class="flex gap-4 mt-10">
-                <a href={`/intern/members/${data.member.id}?scope=edit`} data-sveltekit-reload class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
-                    Bearbeiten
-                </a>
-                <a href="/intern/members" class="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg">
-                    Zurueck
-                </a>
-            </div>
-        {/if}
+            {/if}
+        </div>
     </form>
-</div>
-
-<div class="max-w-3xl mx-auto mt-12 p-8 bg-white rounded-2xl shadow-xl border border-gray-200">
-    <h2 class="text-2xl font-semibold mb-4 text-gray-900">
-        Benutzerzuordnung (User zu Mitglied)
-    </h2>
-
-    {#if mode === "edit"}
-        <form method="post" action="?/update-users" class="space-y-6">
-            <input type="hidden" name="memberId" value={memberId} />
-            <input type="hidden" name="userIds" value={JSON.stringify(memberUserIds)} />
-
-            <div class="relative">
-                <label class="block text-sm font-medium text-gray-600 mb-1">User hinzufuegen</label>
-                <input
-                    type="text"
-                    placeholder="Name, E-Mail oder User-ID eingeben..."
-                    bind:value={userSearch}
-                    on:focus={() => (showUserList = true)}
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition"
-                />
-
-                {#if showUserList && filteredUsers.length > 0}
-                    <ul class="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
-                        {#each filteredUsers as u}
-                            {#if !memberUserIds.includes(u.id)}
-                                <li class="px-4 py-2 hover:bg-blue-50 cursor-pointer" on:click={() => addUser(u.id)}>
-                                    <strong>{u.name}</strong>
-                                    <span class="text-gray-500 ml-2">({u.email})</span>
-                                </li>
-                            {/if}
-                        {/each}
-                    </ul>
-                {/if}
-            </div>
-
-            <div class="space-y-3 mt-4">
-                {#if memberUserIds.length > 0}
-                    {#each memberUserIds as uid}
-                        {#each (data.allUsers ?? []).filter((u) => u.id === uid) as u}
-                            <div class="flex justify-between items-center bg-white border rounded-lg px-4 py-3 shadow-sm">
-                                <span>{u.name} ({u.email})</span>
-                                <button type="button" on:click={() => removeUser(uid)} class="px-3 py-2 bg-red-100 text-red-700 rounded-lg">
-                                    Entfernen
-                                </button>
-                            </div>
-                        {/each}
-                    {/each}
-                {:else}
-                    <p class="text-gray-500">Noch keine Benutzer zugeordnet.</p>
-                {/if}
-            </div>
-
-            <button type="submit" class="mt-4 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg shadow">
-                Benutzer-Zuordnung speichern
-            </button>
-        </form>
-    {:else}
-        {#if (data.member.userIds ?? []).length > 0}
-            <ul class="list-disc ml-5">
-                {#each (data.member.userIds ?? []) as uid}
-                    {#each (data.allUsers ?? []).filter((u) => u.id === uid) as u}
-                        <li>{u.name} ({u.email})</li>
-                    {/each}
-                {/each}
-            </ul>
-        {:else}
-            <span class="text-gray-500">Keine Benutzer zugeordnet.</span>
-        {/if}
-    {/if}
 </div>
