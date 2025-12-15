@@ -83,6 +83,13 @@
         allSelected = hasAll;
     }
 
+    const statusTone = (status?: string) => {
+        if (status === "active") return "bg-emerald-50 border-emerald-200 text-emerald-800";
+        if (status === "trial") return "bg-amber-50 border-amber-200 text-amber-800";
+        if (status === "inactive") return "bg-red-50 border-red-200 text-red-700";
+        return "bg-gray-100 border-gray-200 text-gray-700";
+    };
+
     $: activeFilters = (() => {
         const items: { label: string; onRemove: () => void }[] = [];
         filterGroups.forEach((gid) => {
@@ -325,7 +332,7 @@
             <h2 class="text-lg font-semibold text-gray-900">Mitglieder</h2>
             <span class="text-sm text-gray-500">{filteredMembers.length} Einträge</span>
         </div>
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto hidden md:block">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -379,7 +386,7 @@
                                     </div>
                                 </td>
                                 <td class="px-6 py-4 text-gray-700">
-                                    <span class="px-2.5 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-gray-50 text-gray-700">
+                                    <span class={`px-2.5 py-1 text-xs font-semibold rounded-full border ${statusTone(member.status)}`}>
                                         {member.status ?? "-"}
                                     </span>
                                 </td>
@@ -422,6 +429,64 @@
                 {/if}
                 </tbody>
             </table>
+        </div>
+
+        <div class="md:hidden divide-y divide-gray-200">
+            {#if filteredMembers.length === 0}
+                <div class="px-4 py-4 text-sm text-gray-500 text-center">Keine Mitglieder gefunden.</div>
+            {:else}
+                {#each filteredMembers as member}
+                    {#if member}
+                        <div class="p-4 space-y-3">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <div class="text-lg font-semibold text-gray-900">{member.firstname} {member.lastname}</div>
+                                    {#if member.fahrtenname}<div class="text-xs text-gray-500">{member.fahrtenname}</div>{/if}
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        {#each member.groups ?? [] as gid}
+                                            <span class="px-2 py-1 text-[11px] rounded-full border border-sky-200 bg-sky-50 text-sky-800 font-semibold">{groupMap.get(gid) ?? gid}</span>
+                                        {/each}
+                                        {#if (member.groups ?? []).length === 0}
+                                            <span class="text-xs text-gray-500">Keine Gruppe</span>
+                                        {/if}
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end gap-2">
+                                    <input type="checkbox" checked={selected.has(member.id)} on:change={() => toggleRow(member.id)} />
+                                    <span class={`px-2 py-1 text-[11px] font-semibold rounded-full border ${statusTone(member.status)}`}>
+                                        {member.status ?? "-"}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 text-sm text-gray-700 flex-wrap">
+                                {#if getAge(member.birthday) !== null}
+                                    <span class="px-2 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs">{getAge(member.birthday)} Jahre</span>
+                                {/if}
+                                {#if member.emails?.length}
+                                    <span class="text-xs">{member.emails[0].email}</span>
+                                {/if}
+                                {#if member.numbers?.length}
+                                    <span class="text-xs text-gray-600">{member.numbers[0].number}</span>
+                                {/if}
+                            </div>
+                            <div class="flex justify-end gap-2 text-xs">
+                                <a
+                                        href={`/intern/members/${member.id}`}
+                                        class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+                                >
+                                    <span class="bi bi-eye"></span> Öffnen
+                                </a>
+                                <a
+                                        href={`/intern/members/${member.id}?scope=edit`}
+                                        class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
+                                >
+                                    <span class="bi bi-pencil"></span> Bearbeiten
+                                </a>
+                            </div>
+                        </div>
+                    {/if}
+                {/each}
+            {/if}
         </div>
     </div>
 </div>
