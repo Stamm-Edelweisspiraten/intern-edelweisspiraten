@@ -338,8 +338,8 @@
                 <div class="space-y-2">
                     {#each emails as email, idx}
                         <div class="flex items-center gap-2">
-                            <input type="text" name="email_label" value={email.label} disabled={disabled} placeholder="Label" class="w-28 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
-                            <input type="email" name="email_email" value={email.email} disabled={disabled} placeholder="email@example.de" class="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
+                            <input type="text" name={`email_label_${idx}`} value={email.label} disabled={disabled} placeholder="Label" class="w-28 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
+                            <input type="email" name={`email_email_${idx}`} value={email.email} disabled={disabled} placeholder="email@example.de" class="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
                             {#if !disabled}
                                 <button type="button" class="px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm" on:click={() => removeEmail(idx)}>
                                     <span class="bi bi-trash"></span>
@@ -363,8 +363,8 @@
                 <div class="space-y-2">
                     {#each numbers as number, idx}
                         <div class="flex items-center gap-2">
-                            <input type="text" name="number_label" value={number.label} disabled={disabled} placeholder="Label" class="w-28 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
-                            <input type="text" name="number_number" value={number.number} disabled={disabled} placeholder="+49..." class="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
+                            <input type="text" name={`number_label_${idx}`} value={number.label} disabled={disabled} placeholder="Label" class="w-28 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
+                            <input type="text" name={`number_number_${idx}`} value={number.number} disabled={disabled} placeholder="+49..." class="flex-1 px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm" />
                             {#if !disabled}
                                 <button type="button" class="px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm" on:click={() => removeNumber(idx)}>
                                     <span class="bi bi-trash"></span>
@@ -379,11 +379,9 @@
         <div class="space-y-2">
             <label class="font-medium text-gray-800">Benutzer-Zuordnung</label>
             <div class="space-y-2">
+                <input type="hidden" name="userIds" value={JSON.stringify(memberUserIds)} />
                 <div class="flex items-center gap-2 flex-wrap">
                     {#each memberUserIds as uid}
-                        {#if userById.get(uid)}
-                            {#if false}{/if}
-                        {/if}
                         {#if userById.get(uid)}
                             <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-sm">
                                 <span class="bi bi-person"></span>

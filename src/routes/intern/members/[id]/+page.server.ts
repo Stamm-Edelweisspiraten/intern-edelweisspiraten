@@ -111,12 +111,12 @@ export const actions: Actions = {
 
         const entryDate = form.get("entryDate")?.toString() ?? "";
 
-        const isSecondMember = form.get("is_second_member") === "on";
+        const isSecondMember = form.get("isSecondMember") === "on";
         const contributionDues = {
             stamm: isSecondMember ? true : false,
-            gau: isSecondMember && form.get("dues_gau") === "on",
-            landesmark: isSecondMember && form.get("dues_landesmark") === "on",
-            bund: isSecondMember && form.get("dues_bund") === "on"
+            gau: isSecondMember && form.get("contributionDues_gau") === "on",
+            landesmark: isSecondMember && form.get("contributionDues_landesmark") === "on",
+            bund: isSecondMember && form.get("contributionDues_bund") === "on"
         };
 
         // --- Gruppen-Array ---
@@ -141,7 +141,6 @@ export const actions: Actions = {
                 const index = key.split("_")[2];
                 const label = value.toString();
                 const email = form.get(`email_email_${index}`)?.toString() ?? "";
-
                 if (label || email) emails.push({ label, email });
             }
         }
@@ -152,7 +151,6 @@ export const actions: Actions = {
                 const index = key.split("_")[2];
                 const label = value.toString();
                 const number = form.get(`number_number_${index}`)?.toString() ?? "";
-
                 if (label || number) numbers.push({ label, number });
             }
         }
@@ -209,7 +207,30 @@ export const actions: Actions = {
             return fail(400, { error: err?.message ?? "Datei-Upload fehlgeschlagen." });
         }
 
+        // userIds from form (optional)
+        const userIdsRaw = form.get("userIds")?.toString();
+        let userIds: string[] = [];
+        if (userIdsRaw) {
+            try {
+                userIds = JSON.parse(userIdsRaw);
+            } catch (e) {
+                // ignore parse errors
+            }
+        }
+        (updatedMember as any).userIds = userIds;
+
         await updateMember(id, updatedMember, updatedBy);
+
+        if (userIds && Array.isArray(userIds)) {
+            await db.collection("users").updateMany(
+                { memberIds: id },
+                { $pull: { memberIds: id } }
+            );
+            await db.collection("users").updateMany(
+                { _id: { $in: userIds.map((uid) => new ObjectId(uid)) } },
+                { $addToSet: { memberIds: id } }
+            );
+        }
 
         throw redirect(303, `/intern/members/${id}`);
     },
