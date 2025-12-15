@@ -1,5 +1,7 @@
-﻿<script lang="ts">
+<script lang="ts">
     export let data;
+
+    import { addToast } from "$lib/toastStore";
 
     let search = "";
     let selected = new Set<string>();
@@ -40,7 +42,6 @@
     const baseMembers = [...data.members].sort((a, b) => a.lastname.localeCompare(b.lastname));
 
     $: filteredMembers = baseMembers.filter((member) => {
-        // ensure reactivity on filter changes
         filterGroups;
         filterStands;
         filterStatuses;
@@ -126,178 +127,77 @@
     })();
 </script>
 
-<div class="max-w-6xl mx-auto mt-12">
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <h1 class="text-4xl font-bold text-gray-900">Mitgliederverwaltung</h1>
-
-        <div class="flex gap-3 flex-wrap">
+<div class="max-w-6xl mx-auto mt-16 space-y-8">
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Mitglieder</p>
+            <h1 class="text-4xl font-bold text-gray-900">Mitgliederverwaltung</h1>
+            <p class="text-sm text-gray-600 mt-1">Mitglieder suchen, filtern, anlegen.</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
             <a
-                    href="/intern/members/create"
-                    class="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow transition font-medium"
+                    href="/intern/dashboard"
+                    class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
             >
-                + Neues Mitglied
+                <span class="bi bi-arrow-left"></span>
+                Zurück
             </a>
             <a
-                    class={`px-5 py-3 rounded-lg shadow transition font-medium ${selected.size > 0 ? "bg-green-600 hover:bg-green-700 text-white" : "bg-gray-200 text-gray-500 cursor-not-allowed"}`}
+                    href="/intern/members/create"
+                    class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
+            >
+                <span class="bi bi-person-plus"></span>
+                Neues Mitglied
+            </a>
+            <a
+                    class={`inline-flex items-center gap-2 px-4 py-3 rounded-xl font-semibold shadow-sm transition ${selected.size > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100" : "bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed"}`}
                     aria-disabled={selected.size === 0}
                     href={selected.size > 0 ? `/intern/email?members=${Array.from(selected).join(",")}` : undefined}
-                    on:click={(e) => { if (selected.size === 0) e.preventDefault(); }}
+                    on:click={(e) => { if (selected.size === 0) { e.preventDefault(); addToast("Bitte zuerst Mitglieder auswählen.", "info"); } }}
             >
+                <span class="bi bi-envelope"></span>
                 E-Mail an Auswahl ({selected.size})
             </a>
         </div>
     </div>
 
-    <div class="mb-6 flex flex-col md:flex-row md:items-center gap-3">
-        <input
-                type="text"
-                placeholder="Suche nach Name, Gruppe, Status, E-Mail, Telefon..."
-                bind:value={search}
-                class="flex-1 px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
-               focus:ring-2 focus:ring-blue-500 outline-none transition text-gray-700"
-        />
-        <button
-                type="button"
-                class="px-4 py-3 border rounded-lg bg-white shadow-sm hover:bg-gray-50 text-gray-700"
-                on:click={() => filterOpen = !filterOpen}
-        >
-            Filter {filterOpen ? "schliessen" : "oeffnen"}
-        </button>
-    </div>
-
-    {#if activeFilters.length}
-        <div class="mb-4 flex flex-wrap gap-2">
-            {#each activeFilters as filter}
-                <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
-                    {filter.label}
-                    <button type="button" class="text-blue-800 hover:text-blue-900" on:click={filter.onRemove} aria-label="Filter entfernen">×</button>
-                </span>
-            {/each}
-            <button
-                    type="button"
-                    class="text-sm text-gray-600 underline"
-                    on:click={() => {
-                        filterGroups = new Set();
-                        filterStands = new Set();
-                        filterStatuses = new Set();
-                        filterMinAge = null;
-                        filterMaxAge = null;
-                    }}>
-                Alle Filter loeschen
-            </button>
-        </div>
-    {/if}
-
-    {#if filterOpen}
-        <div class="mb-6 border border-gray-200 rounded-xl p-4 bg-white shadow-sm space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div class="relative">
-                    <label class="text-sm text-gray-600">Gruppe</label>
-                    <button type="button"
-                            class="w-full border rounded-lg px-3 py-2 bg-gray-50 text-left"
-                            on:click={() => {
-                                groupMenuOpen = !groupMenuOpen;
-                                standMenuOpen = false;
-                                statusMenuOpen = false;
-                            }}>
-                        Gruppe waehlen ({filterGroups.size || "alle"})
-                    </button>
-                    {#if groupMenuOpen}
-                        <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
-                            {#each data.groups as g}
-                                <button type="button"
-                                        class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
-                                        on:click={() => {
-                                            const next = new Set(filterGroups);
-                                            next.has(g.id) ? next.delete(g.id) : next.add(g.id);
-                                            filterGroups = next;
-                                        }}>
-                                    <span>{g.name} ({g.type})</span>
-                                    {#if filterGroups.has(g.id)}<span aria-hidden="true">&#10003;</span>{/if}
-                                </button>
-                            {/each}
-                        </div>
-                    {/if}
-                </div>
-
-                <div class="relative">
-                    <label class="text-sm text-gray-600">Stand</label>
-                    <button type="button"
-                            class="w-full border rounded-lg px-3 py-2 bg-gray-50 text-left"
-                            on:click={() => {
-                                standMenuOpen = !standMenuOpen;
-                                groupMenuOpen = false;
-                                statusMenuOpen = false;
-                            }}>
-                        Stand waehlen ({filterStands.size || "alle"})
-                    </button>
-                    {#if standMenuOpen}
-                        <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
-                            {#each ["Wildling-Woelfling","Woelfling","Jungpfadfinder","Knappe","Wildling-Pfadfinder","Pfadfinder","Spaeher","Kreuzpfadfinder"] as st}
-                                <button type="button"
-                                        class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
-                                        on:click={() => {
-                                            const next = new Set(filterStands);
-                                            next.has(st) ? next.delete(st) : next.add(st);
-                                            filterStands = next;
-                                        }}>
-                                    <span>{st}</span>
-                                    {#if filterStands.has(st)}<span aria-hidden="true">&#10003;</span>{/if}
-                                </button>
-                            {/each}
-                        </div>
-                    {/if}
-                </div>
-
-                <div class="relative">
-                    <label class="text-sm text-gray-600">Status</label>
-                    <button type="button"
-                            class="w-full border rounded-lg px-3 py-2 bg-gray-50 text-left"
-                            on:click={() => {
-                                statusMenuOpen = !statusMenuOpen;
-                                groupMenuOpen = false;
-                                standMenuOpen = false;
-                            }}>
-                        Status waehlen ({filterStatuses.size || "alle"})
-                    </button>
-                    {#if statusMenuOpen}
-                        <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
-                            {#each ["aktiv","passiv","gekuendigt"] as st}
-                                <button type="button"
-                                        class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
-                                        on:click={() => {
-                                            const next = new Set(filterStatuses);
-                                            next.has(st) ? next.delete(st) : next.add(st);
-                                            filterStatuses = next;
-                                        }}>
-                                    <span>{st}</span>
-                                    {#if filterStatuses.has(st)}<span aria-hidden="true">&#10003;</span>{/if}
-                                </button>
-                            {/each}
-                        </div>
-                    {/if}
-                </div>
-
-                <div>
-                    <label class="text-sm text-gray-600">Alter (min/max)</label>
-                    <div class="flex gap-2">
-                        <input type="number" min="0" placeholder="min"
-                               class="w-full border rounded-lg px-3 py-2 bg-gray-50"
-                               bind:value={filterMinAge}
-                               on:input={(e) => filterMinAge = (e.target as HTMLInputElement).value ? Number((e.target as HTMLInputElement).value) : null}
-                        />
-                        <input type="number" min="0" placeholder="max"
-                               class="w-full border rounded-lg px-3 py-2 bg-gray-50"
-                               bind:value={filterMaxAge}
-                               on:input={(e) => filterMaxAge = (e.target as HTMLInputElement).value ? Number((e.target as HTMLInputElement).value) : null}
-                        />
-                    </div>
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
+        <div class="flex flex-col md:flex-row md:items-center gap-3">
+            <div class="flex-1">
+                <label class="text-sm font-semibold text-gray-700">Suchen</label>
+                <div class="mt-1 relative">
+                    <span class="bi bi-search absolute left-3 top-2.5 text-gray-400"></span>
+                    <input
+                            type="text"
+                            placeholder="Name, Gruppe, Status, E-Mail, Telefon..."
+                            bind:value={search}
+                            class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 text-sm text-gray-700"
+                    />
                 </div>
             </div>
+            <button
+                    type="button"
+                    class="inline-flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm hover:bg-gray-50 text-gray-700"
+                    on:click={() => filterOpen = !filterOpen}
+            >
+                <span class="bi bi-funnel"></span>
+                Filter {filterOpen ? "schließen" : "öffnen"}
+            </button>
+        </div>
 
-            <div class="flex gap-3">
-                <button type="button"
-                        class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg"
+        {#if activeFilters.length}
+            <div class="flex flex-wrap gap-2">
+                {#each activeFilters as filter}
+                    <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
+                        {filter.label}
+                        <button type="button" class="text-blue-800 hover:text-blue-900" on:click={filter.onRemove} aria-label="Filter entfernen">
+                            <span class="bi bi-x-lg"></span>
+                        </button>
+                    </span>
+                {/each}
+                <button
+                        type="button"
+                        class="text-sm text-gray-600 underline"
                         on:click={() => {
                             filterGroups = new Set();
                             filterStands = new Set();
@@ -305,202 +205,201 @@
                             filterMinAge = null;
                             filterMaxAge = null;
                         }}>
-                    Filter zuruecksetzen
+                    Alle Filter löschen
                 </button>
             </div>
-        </div>
-    {/if}
+        {/if}
 
-    <div class="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden hidden md:block">
-        <table class="w-full text-left">
-            <thead class="bg-gray-100 border-b border-gray-300">
-            <tr>
-                <th class="px-4 py-4 text-sm font-semibold text-gray-700 w-12">
-                    <input type="checkbox"
-                           aria-label="Alle auswaehlen"
-                           on:change={(e) => {
-                               const checked = (e.target as HTMLInputElement).checked;
-                               if (checked) {
-                                   selected = new Set(filteredMembers.map((m: any) => m.id));
-                               } else {
-                                   selected = new Set();
-                               }
-                           }}
-                           checked={selected.size === filteredMembers.length && filteredMembers.length > 0}
-                    />
-                </th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700">Name</th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700">Gruppen</th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700">Status</th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700">E-Mails</th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700">Telefon</th>
-                <th class="px-6 py-4 text-sm font-semibold text-gray-700 text-right">Aktionen</th>
-            </tr>
-            </thead>
-
-            <tbody class="divide-y divide-gray-200">
-            {#each filteredMembers as m}
-                <tr
-                        class={`hover:bg-gray-50 transition cursor-pointer ${selected.has(m.id) ? "bg-blue-50" : ""}`}
-                        on:click={() => toggleRow(m.id)}
-                >
-                    <td class="px-4 py-4">
-                        <input type="checkbox"
-                               aria-label="Mitglied auswaehlen"
-                               value={m.id}
-                               checked={selected.has(m.id)}
-                               on:click|stopPropagation
-                               on:change={(e) => {
-                                   const checked = (e.target as HTMLInputElement).checked;
-                                   const newSet = new Set(selected);
-                                   if (checked) newSet.add(m.id); else newSet.delete(m.id);
-                                   selected = newSet;
-                               }}
-                        />
-                    </td>
-
-                    <td class="px-6 py-4 font-medium text-gray-900">
-                        {m.firstname} {m.lastname}{m.fahrtenname ? ` (${m.fahrtenname})` : ""}
-                    </td>
-
-                    <td class="px-6 py-4 text-gray-700">
-                        {#if m.groups?.length > 0}
-                            {m.groups.map((gid: string) => groupMap.get(gid) ?? gid).join(", ")}
-                        {:else}
-                            -
-                        {/if}
-                    </td>
-
-                    <td class="px-6 py-4">
-                        <span class="px-2 py-1 rounded text-sm
-                                {m.status === 'aktiv' ? 'bg-green-100 text-green-700' : ''}
-                                {m.status === 'passiv' ? 'bg-yellow-100 text-yellow-700' : ''}
-                                {m.status === 'gekuendigt' ? 'bg-red-100 text-red-700' : ''}"
-                        >
-                            {m.status ?? "-"}
-                        </span>
-                    </td>
-
-                    <td class="px-6 py-4 text-gray-700">
-                        {#if m.emails?.length > 0}
-                            {m.emails.map((e) => e.email).join(", ")}
-                        {:else}
-                            -
-                        {/if}
-                    </td>
-
-                    <td class="px-6 py-4 text-gray-700">
-                        {#if m.numbers?.length > 0}
-                            {m.numbers.map((n) => n.number).join(", ")}
-                        {:else}
-                            -
-                        {/if}
-                    </td>
-
-                    <td class="px-6 py-4 text-right whitespace-nowrap">
-                        <div class="flex justify-center md:justify-end items-center gap-2" on:click|stopPropagation>
-                        <a
-                                href={`/intern/members/${m.id}`}
-                                class="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition text-gray-700 shadow-sm flex items-center gap-2"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-eye-fill" viewBox="0 0 16 16" aria-hidden="true">
-                                <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0"/>
-                                <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8m8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7"/>
-                            </svg>
-                            <span class="sr-only">Ansehen</span>
-                        </a>
-
-                        <a
-                                href={`/intern/members/${m.id}?scope=edit`}
-                                class="px-3 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 transition text-blue-700 shadow-sm flex items-center gap-2"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil-square" viewBox="0 0 16 16" aria-hidden="true">
-                                <path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/>
-                                <path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5z"/>
-                            </svg>
-                            <span class="sr-only">Bearbeiten</span>
-                        </a>
-
-                        <form method="post" action="?/delete" class="inline" on:click|stopPropagation>
-                            <input type="hidden" name="id" value={m.id} />
-                            <button
-                                    type="submit"
-                                class="px-3 py-2 rounded-lg bg-red-100 hover:bg-red-200 transition text-red-700 shadow-sm flex items-center gap-2"
-                                on:click={(event) => { if (!confirm("Willst du dieses Mitglied wirklich loeschen?")) event.preventDefault(); }}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash3" viewBox="0 0 16 16" aria-hidden="true">
-                                    <path d="M6.5 1h3a.5.5 0 0 1 .5.5v1H6v-1a.5.5 0 0 1 .5-.5M11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3A1.5 1.5 0 0 0 5 1.5v1H1.5a.5.5 0 0 0 0 1h.538l.853 10.66A2 2 0 0 0 4.885 16h6.23a2 2 0 0 0 1.994-1.84l.853-10.66h.538a.5.5 0 0 0 0-1zm1.958 1-.846 10.58a1 1 0 0 1-.997.92h-6.23a1 1 0 0 1-.997-.92L3.042 3.5zm-7.487 1a.5.5 0 0 1 .528.47l.5 8.5a.5.5 0 0 1-.998.06L5 5.03a.5.5 0 0 1 .47-.53Zm5.058 0a.5.5 0 0 1 .47.53l-.5 8.5a.5.5 0 1 1-.998-.06l.5-8.5a.5.5 0 0 1 .528-.47M8 4.5a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-1 0V5a.5.5 0 0 1 .5-.5"/>
-                                </svg>
-                                <span class="sr-only">Loeschen</span>
-                            </button>
-                        </form>
-
-                        <a
-                                href={`/intern/members/${m.id}/invite.pdf`}
-                                class="px-3 py-2 rounded-lg bg-red-400 hover:bg-red-500 transition text-white shadow-sm flex items-center gap-2"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-pdf" viewBox="0 0 16 16" aria-hidden="true">
-                                <path d="M14 14V4.5L9.5 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2M9.5 3A1.5 1.5 0 0 0 11 4.5h2V14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h5.5z"/>
-                                <path d="M4.603 14.087a.8.8 0 0 1-.438-.42c-.195-.388-.13-.776.08-1.102.198-.307.526-.568.897-.787a7.7 7.7 0 0 1 1.482-.645 20 20 0 0 0 1.062-2.227 7.3 7.3 0 0 1-.43-1.295c-.086-.4-.119-.796-.046-1.136.075-.354.274-.672.65-.823.192-.077.4-.12.602-.077a.7.7 0 0 1 .477.365c.088.164.12.356.127.538.007.188-.012.396-.047.614-.084.51-.27 1.134-.52 1.794a11 11 0 0 0 .98 1.686 5.8 5.8 0 0 1 1.334.05c.364.066.734.195.96.465.12.144.193.32.2.518.007.192-.047.382-.138.563a1.04 1.04 0 0 1-.354.416.86.86 0 0 1-.51.138c-.331-.014-.654-.196-.933-.417a5.7 5.7 0 0 1-.911-.95 11.7 11.7 0 0 0-1.997.406 11.3 11.3 0 0 1-1.02 1.51c-.292.35-.609.656-.927.787a.8.8 0 0 1-.58.029m1.379-1.901q-.25.115-.459.238c-.328.194-.541.383-.647.547-.094.145-.096.25-.04.361q.016.032.026.044l.035-.012c.137-.056.355-.235.635-.572a8 8 0 0 0 .45-.606m1.64-1.33a13 13 0 0 1 1.01-.193 12 12 0 0 1-.51-.858 21 21 0 0 1-.5 1.05zm2.446.45q.226.245.435.41c.24.19.407.253.498.256a.1.1 0 0 0 .07-.015.3.3 0 0 0 .094-.125.44.44 0 0 0 .059-.2.1.1 0 0 0-.026-.063c-.052-.062-.2-.152-.518-.209a4 4 0 0 0-.612-.053zM8.078 7.8a7 7 0 0 0 .2-.828q.046-.282.038-.465a.6.6 0 0 0-.032-.198.5.5 0 0 0-.145.04c-.087.035-.158.106-.196.283-.04.192-.03.469.046.822q.036.167.09.346z"/>
-                            </svg>
-                            <span class="sr-only">Einladung PDF</span>
-                        </a>
-                        </div>
-                    </td>
-                </tr>
-            {/each}
-
-            {#if filteredMembers.length === 0}
-                <tr>
-                    <td colspan="7" class="px-6 py-8 text-center text-gray-500">
-                        Keine Mitglieder gefunden.
-                    </td>
-                </tr>
-            {/if}
-
-            </tbody>
-        </table>
-    </div>
-
-    <div class="space-y-4 md:hidden">
-        {#each filteredMembers as m}
-            <div class="card p-4 border border-gray-200 rounded-xl">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <div class="font-semibold text-lg text-gray-900">{m.firstname} {m.lastname}{m.fahrtenname ? ` (${m.fahrtenname})` : ""}</div>
-                        <div class="text-sm text-gray-500">{m.status ?? "-"}</div>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <button
-                                class="px-2 py-1 border rounded-lg text-sm"
+        {#if filterOpen}
+            <div class="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div class="relative">
+                        <label class="text-sm text-gray-700">Gruppe</label>
+                        <button type="button"
+                                class="w-full border rounded-lg px-3 py-2 bg-white text-left shadow-sm"
                                 on:click={() => {
-                                    const newSet = new Set(selected);
-                                    newSet.has(m.id) ? newSet.delete(m.id) : newSet.add(m.id);
-                                    selected = newSet;
-                                }}
-                        >
-                            {selected.has(m.id) ? "Ausgewaehlt" : "Waehlen"}
+                                    groupMenuOpen = !groupMenuOpen;
+                                    standMenuOpen = false;
+                                    statusMenuOpen = false;
+                                }}>
+                            Gruppe wählen ({filterGroups.size || "alle"})
                         </button>
+                        {#if groupMenuOpen}
+                            <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
+                                {#each data.groups as g}
+                                    <button type="button"
+                                            class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
+                                            on:click={() => {
+                                                const next = new Set(filterGroups);
+                                                next.has(g.id) ? next.delete(g.id) : next.add(g.id);
+                                                filterGroups = next;
+                                            }}>
+                                        <span>{g.name} ({g.type})</span>
+                                        {#if filterGroups.has(g.id)}<span aria-hidden="true">&#10003;</span>{/if}
+                                    </button>
+                                {/each}
+                            </div>
+                        {/if}
                     </div>
-                </div>
-                <div class="text-sm text-gray-700 mt-2">
-                    <strong>Gruppen:</strong> {m.groups?.length > 0 ? m.groups.map((gid: string) => groupMap.get(gid) ?? gid).join(", ") : "-"}
-                </div>
-                <div class="text-sm text-gray-700">
-                    <strong>E-Mail:</strong> {m.emails?.length > 0 ? m.emails.map((e) => e.email).join(", ") : "-"}
-                </div>
-                <div class="text-sm text-gray-700">
-                    <strong>Telefon:</strong> {m.numbers?.length > 0 ? m.numbers.map((n) => n.number).join(", ") : "-"}
-                </div>
-                <div class="flex gap-2 mt-3 flex-wrap">
-                    <a href={`/intern/members/${m.id}`} class="px-3 py-2 bg-gray-100 rounded-lg text-sm">Details</a>
-                    <a href={`/intern/members/${m.id}?scope=edit`} class="px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-sm">Bearbeiten</a>
-                    <a href={`/intern/members/${m.id}/invite.pdf`} class="px-3 py-2 bg-red-400 text-white rounded-lg text-sm">Einladung</a>
+
+                    <div class="relative">
+                        <label class="text-sm text-gray-700">Stand</label>
+                        <button type="button"
+                                class="w-full border rounded-lg px-3 py-2 bg-white text-left shadow-sm"
+                                on:click={() => {
+                                    standMenuOpen = !standMenuOpen;
+                                    groupMenuOpen = false;
+                                    statusMenuOpen = false;
+                                }}>
+                            Stand wählen ({filterStands.size || "alle"})
+                        </button>
+                        {#if standMenuOpen}
+                            <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
+                                {#each ["Wildling-Woelfling","Woelfling","Jungpfadfinder","Knappe","Wildling-Pfadfinder","Pfadfinder","Spaeher","Kreuzpfadfinder"] as st}
+                                    <button type="button"
+                                            class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
+                                            on:click={() => {
+                                                const next = new Set(filterStands);
+                                                next.has(st) ? next.delete(st) : next.add(st);
+                                                filterStands = next;
+                                            }}>
+                                        <span>{st}</span>
+                                        {#if filterStands.has(st)}<span aria-hidden="true">&#10003;</span>{/if}
+                                    </button>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+
+                    <div class="relative">
+                        <label class="text-sm text-gray-700">Status</label>
+                        <button type="button"
+                                class="w-full border rounded-lg px-3 py-2 bg-white text-left shadow-sm"
+                                on:click={() => {
+                                    statusMenuOpen = !statusMenuOpen;
+                                    groupMenuOpen = false;
+                                    standMenuOpen = false;
+                                }}>
+                            Status wählen ({filterStatuses.size || "alle"})
+                        </button>
+                        {#if statusMenuOpen}
+                            <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
+                                {#each ["active","trial","alumni","inactive"] as st}
+                                    <button type="button"
+                                            class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
+                                            on:click={() => {
+                                                const next = new Set(filterStatuses);
+                                                next.has(st) ? next.delete(st) : next.add(st);
+                                                filterStatuses = next;
+                                            }}>
+                                        <span>{st}</span>
+                                        {#if filterStatuses.has(st)}<span aria-hidden="true">&#10003;</span>{/if}
+                                    </button>
+                                {/each}
+                            </div>
+                        {/if}
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="text-sm text-gray-700">Alter</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="number" min="0" placeholder="von" bind:value={filterMinAge} class="border rounded-lg px-3 py-2 text-sm" />
+                            <input type="number" min="0" placeholder="bis" bind:value={filterMaxAge} class="border rounded-lg px-3 py-2 text-sm" />
+                        </div>
+                    </div>
                 </div>
             </div>
-        {/each}
-        {#if filteredMembers.length === 0}
-            <div class="text-center text-gray-500 text-sm py-4">Keine Mitglieder gefunden.</div>
         {/if}
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-900">Mitglieder</h2>
+            <span class="text-sm text-gray-500">{filteredMembers.length} Einträge</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Auswahl</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Gruppe</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Alter</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Kontakt</th>
+                    <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Aktionen</th>
+                </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                {#if filteredMembers.length === 0}
+                    <tr>
+                        <td colspan="7" class="px-6 py-6 text-center text-sm text-gray-500">Keine Mitglieder gefunden.</td>
+                    </tr>
+                {:else}
+                    {#each filteredMembers as member}
+                        {#if member}
+                            <tr class="hover:bg-gray-50 transition">
+                                <td class="px-6 py-4">
+                                    <input type="checkbox" checked={selected.has(member.id)} on:change={() => toggleRow(member.id)} />
+                                </td>
+                                <td class="px-6 py-4 font-semibold text-gray-900">
+                                    <div>{member.firstname} {member.lastname}</div>
+                                    {#if member.fahrtenname}<div class="text-xs text-gray-500">{member.fahrtenname}</div>{/if}
+                                </td>
+                                <td class="px-6 py-4 text-gray-700">
+                                    <div class="flex flex-wrap gap-2">
+                                        {#each member.groups ?? [] as gid}
+                                            <span class="px-2 py-1 text-[11px] rounded-full border border-sky-200 bg-sky-50 text-sky-800 font-semibold">{groupMap.get(gid) ?? gid}</span>
+                                        {/each}
+                                        {#if (member.groups ?? []).length === 0}
+                                            <span class="text-xs text-gray-500">Keine Gruppe</span>
+                                        {/if}
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 text-gray-700">
+                                    <span class="px-2.5 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-gray-50 text-gray-700">
+                                        {member.status ?? "-"}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 text-gray-700">
+                                    {#if getAge(member.birthday) !== null}
+                                        {getAge(member.birthday)} Jahre
+                                    {:else}
+                                        <span class="text-xs text-gray-500">-</span>
+                                    {/if}
+                                </td>
+                                <td class="px-6 py-4 text-gray-700">
+                                    <div class="space-y-1 text-xs">
+                                        {#if member.emails?.length}
+                                            <div class="text-gray-700">{member.emails[0].email}</div>
+                                        {/if}
+                                        {#if member.numbers?.length}
+                                            <div class="text-gray-600">{member.numbers[0].number}</div>
+                                        {/if}
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="flex justify-end gap-2 text-xs">
+                                        <a
+                                                href={`/intern/members/${member.id}`}
+                                                class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+                                        >
+                                            <span class="bi bi-eye"></span> Öffnen
+                                        </a>
+                                        <a
+                                                href={`/intern/members/${member.id}?scope=edit`}
+                                                class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
+                                        >
+                                            <span class="bi bi-pencil"></span> Bearbeiten
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        {/if}
+                    {/each}
+                {/if}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
