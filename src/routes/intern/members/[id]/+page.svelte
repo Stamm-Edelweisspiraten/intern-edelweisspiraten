@@ -92,6 +92,7 @@
     let showUserList = false;
     const memberId = data.member.id;
     let memberUserIds = Array.isArray(data.member.userIds) ? [...data.member.userIds] : [];
+    const userById = new Map((data.allUsers ?? []).map((u: any) => [u.id, u]));
 
     $: filteredUsers = (data.allUsers ?? []).filter(
         (u) =>
@@ -139,6 +140,15 @@
                 <span class="bi bi-arrow-left"></span>
                 Zurück
             </a>
+            {#if mode === "view"}
+                <a
+                        href={`/intern/members/${data.member.id}?scope=edit`}
+                        class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
+                >
+                    <span class="bi bi-pencil-square"></span>
+                    Bearbeiten
+                </a>
+            {/if}
             <a
                 href={`/intern/members/${data.member.id}/log`}
                 class="inline-flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 shadow-sm"
@@ -371,14 +381,30 @@
             <div class="space-y-2">
                 <div class="flex items-center gap-2 flex-wrap">
                     {#each memberUserIds as uid}
-                        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-sm">
-                            {uid}
-                            {#if !disabled}
-                                <button type="button" class="text-blue-700 hover:text-blue-900" on:click={() => removeUser(uid)}>
-                                    <span class="bi bi-x-lg"></span>
-                                </button>
-                            {/if}
-                        </span>
+                        {#if userById.get(uid)}
+                            {#if false}{/if}
+                        {/if}
+                        {#if userById.get(uid)}
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-sm">
+                                <span class="bi bi-person"></span>
+                                <span>{userById.get(uid)?.name} ({userById.get(uid)?.email})</span>
+                                {#if !disabled}
+                                    <button type="button" class="text-blue-700 hover:text-blue-900" on:click={() => removeUser(uid)}>
+                                        <span class="bi bi-x-lg"></span>
+                                    </button>
+                                {/if}
+                            </span>
+                        {:else}
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-200 bg-gray-50 text-gray-600 text-sm">
+                                <span class="bi bi-question-circle"></span>
+                                <span>{uid}</span>
+                                {#if !disabled}
+                                    <button type="button" class="text-gray-600 hover:text-gray-800" on:click={() => removeUser(uid)}>
+                                        <span class="bi bi-x-lg"></span>
+                                    </button>
+                                {/if}
+                            </span>
+                        {/if}
                     {/each}
                     {#if memberUserIds.length === 0}
                         <span class="text-sm text-gray-500">Keine User zugeordnet.</span>
