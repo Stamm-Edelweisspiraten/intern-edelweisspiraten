@@ -1,22 +1,22 @@
-<script>
+ï»¿<script>
     export let data;
     import { can } from "$lib/can";
 
     const permissions = data.permissions ?? [];
 
     const baseNav = [
-        { name: "Dashboard", href: "/intern/dashboard" },
-        { name: "Termine", href: "/intern/termine" },
-        { name: "Downloads", href: "/intern/downloads" },
-        { name: "Kasse", href: "/intern/finance" },
-        { name: "Profil", href: "/intern/profil" }
+        { name: "Dashboard", href: "/intern/dashboard", icon: "speedometer2" },
+        { name: "Termine", href: "/intern/termine", icon: "calendar-event" },
+        { name: "Downloads", href: "/intern/downloads", icon: "cloud-download" },
+        { name: "Kasse", href: "/intern/finance", icon: "wallet2" },
+        { name: "Profil", href: "/intern/profil", icon: "person-circle" }
     ];
 
     const extraNav = [
-        { name: "Kaemmerer", href: "/intern/kaemmerer", perm: "kaemmerer.access" },
-        { name: "Mitgliedverwaltung", href: "/intern/members", perm: "members.view" },
-        { name: "Gruppen", href: "/intern/groups", perm: "groups.view" },
-        { name: "Adminbereich", href: "/intern/admin", perm: "admin.view" }
+        { name: "Kaemmerer", href: "/intern/kaemmerer", perm: "kaemmerer.access", icon: "piggy-bank" },
+        { name: "Mitgliedverwaltung", href: "/intern/members", perm: "members.view", icon: "people" },
+        { name: "Gruppen", href: "/intern/groups", perm: "groups.view", icon: "diagram-3" },
+        { name: "Adminbereich", href: "/intern/admin", perm: "admin.view", icon: "gear-fill" }
     ];
 
     const visibleNav = [
@@ -45,7 +45,7 @@
                         href={item.href}
                         class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition font-medium"
                 >
-                    <span class="text-sm uppercase tracking-wide text-gray-400">ƒ?"</span>
+                    <i class={`bi bi-${item.icon} text-lg text-gray-400`} aria-hidden="true"></i>
                     <span class="text-base">{item.name}</span>
                 </a>
             {/each}
@@ -70,8 +70,9 @@
         <button
                 class="p-2 rounded-lg bg-blue-50 text-blue-600"
                 on:click={() => (mobileOpen = true)}
+                aria-label="MenÃ¼ Ã¶ffnen"
         >
-            ƒ~ø
+            <i class="bi bi-list text-2xl"></i>
         </button>
     </header>
 
@@ -87,8 +88,10 @@
                 class={`fixed top-0 left-0 h-full w-full bg-white border-b border-gray-200 shadow-2xl p-5 z-50 transform transition-transform duration-200 ${mobileOpen ? "translate-y-0" : "-translate-y-full"}`}
         >
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold text-blue-600">MenA¬</h2>
-                <button class="text-3xl leading-none" on:click={() => (mobileOpen = false)}>A-</button>
+                <h2 class="text-xl font-bold text-blue-600">MenÃ¼</h2>
+                <button class="text-3xl leading-none" on:click={() => (mobileOpen = false)} aria-label="MenÃ¼ schlieÃŸen">
+                    <i class="bi bi-x-lg"></i>
+                </button>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -96,9 +99,10 @@
                     <a
                             href={item.href}
                             on:click={() => (mobileOpen = false)}
-                            class="block px-4 py-3 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-600 font-medium transition border border-gray-100"
+                            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-600 font-medium transition border border-gray-100"
                     >
-                        {item.name}
+                        <i class={`bi bi-${item.icon} text-lg text-gray-400`} aria-hidden="true"></i>
+                        <span>{item.name}</span>
                     </a>
                 {/each}
             </div>
