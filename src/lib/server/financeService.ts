@@ -270,14 +270,25 @@ export function calculateMemberDues(dues: Dues, member: any) {
 // Helper: aktives Geschäftsjahr holen
 // ---------------------------------------------
 export async function getActiveFiscalYear(): Promise<FiscalYear | null> {
-    const doc = await db.collection(COLLECTION)
+    const currentYear = new Date().getFullYear();
+
+    // 1) Bevorzugt das laufende Jahr, falls aktiv
+    const current = await db.collection(COLLECTION)
+        .find({ status: "active", year: currentYear })
+        .sort({ updatedAt: -1 })
+        .limit(1)
+        .next();
+    if (current) return mapDocToFiscalYear(current);
+
+    // 2) Fallback: neuestes aktives Jahr
+    const latest = await db.collection(COLLECTION)
         .find({ status: "active" })
         .sort({ year: -1 })
         .limit(1)
         .next();
 
-    if (!doc) return null;
-    return mapDocToFiscalYear(doc);
+    if (!latest) return null;
+    return mapDocToFiscalYear(latest);
 }
 
 // ---------------------------------------------
