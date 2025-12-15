@@ -108,7 +108,7 @@
             if (!res.ok || json.error) {
                 throw new Error(json.error || "Versand fehlgeschlagen");
             }
-            successMsg = `Mail an ${json.sent} Empfaenger gesendet.`;
+            successMsg = `Mail an ${json.sent} Empfänger gesendet.`;
             subject = "";
             bodyHtml = "";
             selectedFiles.forEach(({ url }) => URL.revokeObjectURL(url));
@@ -123,103 +123,147 @@
 </script>
 
 <div class="max-w-6xl mx-auto mt-12 space-y-8">
-    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-            <p class="text-sm text-gray-500">E-Mail</p>
-            <h1 class="text-3xl font-bold text-gray-900 mt-1">
-                {data.mode === "group" ? data.group.name : "Ausgewählte Mitglieder"}
-            </h1>
-            <p class="text-gray-600 mt-2">
+    <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div class="space-y-2">
+            <p class="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500">E-Mail</p>
+            <div class="flex items-center gap-3 flex-wrap">
+                <h1 class="text-3xl font-bold text-gray-900">
+                    {data.mode === "group" ? data.group.name : "Ausgewählte Mitglieder"}
+                </h1>
+                <span class="px-3 py-1 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700">
+                    {data.mode === "group" ? "Gruppe" : "Custom Auswahl"}
+                </span>
+            </div>
+            <p class="text-gray-600 max-w-3xl">
                 {data.mode === "group"
-                    ? `${data.group.description || "Keine Beschreibung"} · Treffen: ${data.group.meeting_time || "k.A."}`
+                    ? `${data.group.description || "Keine Beschreibung"} • Treffen: ${data.group.meeting_time || "k.A."}`
                     : "Versende eine Nachricht an die ausgewählten Mitglieder."}
             </p>
+            <div class="flex flex-wrap gap-2">
+                <a
+                        href="/intern/members"
+                        class="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
+                >
+                    <span class="bi bi-arrow-left"></span>
+                    Zurück
+                </a>
+                {#if data.mode === "group"}
+                    <a
+                            href={`/intern/groups/${data.group.id}`}
+                            class="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
+                    >
+                        <span class="bi bi-people"></span>
+                        Gruppe öffnen
+                    </a>
+                {/if}
+            </div>
         </div>
-        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm w-full sm:w-72">
-            <div class="flex justify-between text-sm text-gray-600">
-                <span>Mitglieder</span>
-                <span class="font-semibold text-gray-900">{data.members.length}</span>
+        <div class="grid grid-cols-2 gap-3 w-full md:w-[320px]">
+            <div class="p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
+                <p class="text-xs text-gray-500">Mitglieder</p>
+                <p class="text-2xl font-bold text-gray-900">{data.members.length}</p>
             </div>
-            <div class="flex justify-between text-sm text-gray-600 mt-2">
-                <span>E-Mail Empfaenger</span>
-                <span class="font-semibold text-gray-900">{recipients.length}</span>
+            <div class="p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
+                <p class="text-xs text-gray-500">E-Mail Empfänger</p>
+                <p class="text-2xl font-bold text-gray-900">{recipients.length}</p>
             </div>
-            {#if data.mode === "group"}
-                <div class="mt-3 text-xs text-gray-500">
-                    Gruppe: {data.group.name}
-                </div>
-            {:else}
-                <div class="mt-3 text-xs text-gray-500">
-                    Ausgewählte Mitglieder
-                </div>
-            {/if}
         </div>
     </div>
 
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-        <div class="flex items-center justify-between">
-            <h2 class="text-xl font-semibold text-gray-900">Empfaenger</h2>
-            {#if data.mode === "group"}
-                <a href={`/intern/groups/${data.group.id}`} class="text-sm text-blue-600 hover:underline">Zur Gruppe</a>
-            {:else}
-                <a href={`/intern/members`} class="text-sm text-blue-600 hover:underline">Zur Mitgliederliste</a>
-            {/if}
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 class="text-xl font-semibold text-gray-900">Empfänger</h2>
+            <div class="flex flex-wrap gap-2">
+                <span class="px-3 py-1 text-xs rounded-full border border-gray-200 bg-gray-50 text-gray-700">
+                    {data.members.length} Personen
+                </span>
+                <span class="px-3 py-1 text-xs rounded-full border border-blue-200 bg-blue-50 text-blue-700">
+                    {recipients.length} E-Mail-Adressen
+                </span>
+            </div>
         </div>
-        <div class="divide-y divide-gray-200">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {#each data.members as m}
-                <div class="py-3 flex justify-between items-center">
-                    <div>
-                        <div class="font-medium text-gray-900">{m.firstname} {m.lastname}</div>
-                        <div class="text-sm text-gray-600">{m.emails?.map((e) => e.email).join(", ") || "-"}</div>
+                <div class="border border-gray-200 rounded-xl p-3 flex items-start justify-between gap-3">
+                    <div class="space-y-1">
+                        <div class="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                            <span class="bi bi-person-circle text-gray-500"></span>
+                            {m.firstname} {m.lastname}
+                        </div>
+                        <div class="flex flex-wrap gap-2 text-xs text-gray-700">
+                            {#if m.emails?.length}
+                                {#each m.emails as e}
+                                    <span class="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-blue-100 bg-blue-50 text-blue-700">
+                                        <span class="bi bi-envelope"></span>{e.email}
+                                    </span>
+                                {/each}
+                            {:else}
+                                <span class="text-gray-400">Keine E-Mail hinterlegt</span>
+                            {/if}
+                        </div>
                     </div>
-                    <a href={`/intern/members/${m.id}`} class="text-blue-600 text-sm hover:underline">Details</a>
+                    <a href={`/intern/members/${m.id}`} class="text-blue-600 text-xs font-semibold hover:underline whitespace-nowrap mt-1">Details</a>
                 </div>
             {/each}
             {#if data.members.length === 0}
-                <div class="py-4 text-gray-500 text-sm">Keine Mitglieder in dieser Gruppe.</div>
+                <div class="p-4 text-gray-500 text-sm border border-dashed border-gray-300 rounded-xl">Keine Mitglieder in dieser Auswahl.</div>
             {/if}
         </div>
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-        <h2 class="text-xl font-semibold text-gray-900">E-Mail an Gruppenmitglieder</h2>
-        <form class="space-y-3" on:submit|preventDefault={submit}>
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-5">
+        <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Betreff</label>
-                <input
-                        class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                        bind:value={subject}
-                        placeholder="Betreff"
-                        required
-                />
+                <h2 class="text-xl font-semibold text-gray-900">E-Mail verfassen</h2>
+                <p class="text-sm text-gray-600">Definiere Betreff, Absender und Nachricht. Anhänge sind möglich.</p>
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Absender / Reply-To</label>
-                <select
-                        class="w-full px-4 py-2 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                        bind:value={replyTo}
-                        required
-                >
-                    {#each data.replyToOptions as opt}
-                        <option value={opt.email}>{opt.label} ({opt.email})</option>
-                    {/each}
-                    {#if !data.replyToOptions?.length}
-                        <option value={replyTo}>Keine Auswahl verfügbar</option>
-                    {/if}
-                </select>
-                <p class="text-xs text-gray-500 mt-1">Die Mail wird mit dieser Adresse als Absender/Reply-To verschickt.</p>
+            <div class="flex items-center gap-2">
+                <span class="px-3 py-1 text-xs rounded-full border border-amber-200 bg-amber-50 text-amber-800">
+                    HTML-Editor (Quill)
+                </span>
             </div>
+        </div>
+        <form class="space-y-4" on:submit|preventDefault={submit}>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1">
+                    <label class="block text-sm font-medium text-gray-700">Betreff</label>
+                    <input
+                            class="w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            bind:value={subject}
+                            placeholder="Betreff"
+                            required
+                    />
+                </div>
+                <div class="space-y-1">
+                    <label class="block text-sm font-medium text-gray-700">Absender / Reply-To</label>
+                    <select
+                            class="w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            bind:value={replyTo}
+                            required
+                    >
+                        {#each data.replyToOptions as opt}
+                            <option value={opt.email}>{opt.label} ({opt.email})</option>
+                        {/each}
+                        {#if !data.replyToOptions?.length}
+                            <option value={replyTo}>Keine Auswahl verfügbar</option>
+                        {/if}
+                    </select>
+                    <p class="text-xs text-gray-500">Die Mail wird mit dieser Adresse als Absender/Reply-To verschickt.</p>
+                </div>
+            </div>
+
             <div class="space-y-2">
                 <label class="block text-sm font-medium text-gray-700">Nachricht</label>
-                <div class="border rounded-lg">
-                    <div id={editorId} class="min-h-[220px]"></div>
+                <div class="border rounded-xl">
+                    <div id={editorId} class="min-h-[240px] px-3"></div>
                 </div>
                 {#if !editorReady}
                     <p class="text-xs text-gray-400">Editor wird geladen ...</p>
                 {/if}
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Anhaenge</label>
+
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700">Anhänge</label>
                 <input
                         type="file"
                         multiple
@@ -261,14 +305,22 @@
                     </ul>
                 {/if}
             </div>
-            <div class="flex items-center gap-3">
+
+            <div class="flex flex-wrap items-center gap-3">
                 <button
-                        class="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-60"
+                        class="px-5 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition disabled:opacity-60"
                         type="submit"
                         disabled={sending}
                 >
                     {sending ? "Senden..." : "E-Mail senden"}
                 </button>
+                <a
+                        href="/intern/members"
+                        class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
+                >
+                    <span class="bi bi-arrow-left"></span>
+                    Zurück
+                </a>
                 {#if successMsg}
                     <span class="text-green-600 text-sm">{successMsg}</span>
                 {/if}
