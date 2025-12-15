@@ -19,14 +19,17 @@
     };
 </script>
 
-<div class="max-w-5xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center gap-3 text-sm text-gray-600">
-        <a href="/intern/kaemmerer/order" class="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-semibold">
-            <i class="bi bi-arrow-left"></i>
-            Zur Übersicht
-        </a>
-        <span>•</span>
-        <span>Bestellung {order.number}</span>
+<div class="max-w-6xl mx-auto mt-16 space-y-8">
+    <div class="flex items-center justify-between flex-wrap gap-3 text-sm text-gray-600">
+        <div class="flex items-center gap-3">
+            <a href="/intern/kaemmerer/order" class="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-gray-800 bg-white hover:bg-gray-50 shadow-sm transition">
+                <i class="bi bi-arrow-left"></i>
+                Zur Übersicht
+            </a>
+            <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-sky-200 text-sky-800 bg-sky-100">
+                Bestellung {order.number}
+            </span>
+        </div>
     </div>
 
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
@@ -39,8 +42,8 @@
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
-                <span class={`px-3 py-1 text-xs font-semibold rounded-full border ${statusTone(order.status)}`}>Status: {order.status}</span>
-                <span class={`px-3 py-1 text-xs font-semibold rounded-full border ${paymentTone(order.paymentStatus)}`}>Zahlung: {order.paymentStatus}</span>
+                <span class={`px-3 py-1 text-[11px] font-semibold rounded-full border ${statusTone(order.status)}`}>Status: {order.status}</span>
+                <span class={`px-3 py-1 text-[11px] font-semibold rounded-full border ${paymentTone(order.paymentStatus)}`}>Zahlung: {order.paymentStatus}</span>
             </div>
         </div>
 
