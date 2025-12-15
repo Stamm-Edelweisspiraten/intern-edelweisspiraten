@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     export let data;
     export const csr = false;
 
@@ -196,7 +196,7 @@
                     on:click={() => filterOpen = !filterOpen}
             >
                 <span class="bi bi-funnel"></span>
-                Filter {filterOpen ? "schließen" : "öffnen"}
+                Filter {filterOpen ? "schließen" : "Öffnen"}
             </button>
         </div>
 
@@ -416,6 +416,13 @@
                                             <span class="bi bi-eye"></span> Öffnen
                                         </a>
                                         <a
+                                                href={`/intern/members/${member.id}/invite.pdf`}
+                                                target="_blank"
+                                                class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 shadow-sm"
+                                        >
+                                            <span class="bi bi-filetype-pdf"></span> Einladung
+                                        </a>
+                                        <a
                                                 href={`/intern/members/${member.id}?scope=edit`}
                                                 class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
                                         >
@@ -475,6 +482,13 @@
                                         class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
                                 >
                                     <span class="bi bi-eye"></span> Öffnen
+                                </a>
+                                <a
+                                        href={`/intern/members/${member.id}/invite.pdf`}
+                                        target="_blank"
+                                        class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 shadow-sm"
+                                >
+                                    <span class="bi bi-filetype-pdf"></span> Einladung
                                 </a>
                                 <a
                                         href={`/intern/members/${member.id}?scope=edit`}
