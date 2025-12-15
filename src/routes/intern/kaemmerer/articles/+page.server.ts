@@ -18,10 +18,11 @@ export const actions: Actions = {
         const stock = Number(form.get("stock") ?? 0);
         const minStock = Number(form.get("minStock") ?? 0);
         const sizes = form.get("sizes")?.toString();
+        const orderUrl = form.get("orderUrl")?.toString() ?? "";
 
         if (!name) return fail(400, { error: "Name erforderlich" });
 
-        await createArticle({ name, description, price, stock, minStock, active: true, sizes });
+        await createArticle({ name, description, price, stock, minStock, active: true, sizes, orderUrl });
         throw redirect(303, "/intern/kaemmerer/articles");
     },
     toggle: async ({ request }) => {
@@ -48,8 +49,9 @@ export const actions: Actions = {
         const price = Number(form.get("price") ?? 0);
         const minStock = Number(form.get("minStock") ?? 0);
         const sizes = form.get("sizes")?.toString();
+        const orderUrl = form.get("orderUrl")?.toString() ?? "";
         if (!id || !name) return fail(400, { error: "Ungueltige Daten" });
-        await updateArticle(id, { name, description, price, minStock, sizes });
+        await updateArticle(id, { name, description, price, minStock, sizes, orderUrl });
         throw redirect(303, "/intern/kaemmerer/articles");
     }
 };

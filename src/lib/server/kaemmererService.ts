@@ -10,10 +10,11 @@ export interface KaemmererArticle {
     name: string;
     description?: string;
     price: number;
-    sizes?: { name: string; price: number; stock?: number }[];
+    sizes?: { name: string; price: number; stock?: number; orderUrl?: string }[];
     stock?: number;
     minStock?: number;
     active?: boolean;
+    orderUrl?: string;
     createdAt?: string;
     updatedAt?: string;
 }
@@ -60,12 +61,14 @@ const mapArticleDoc = (doc: any): KaemmererArticle => ({
         ? doc.sizes.map((s: any) => ({
             name: s.name ?? "",
             price: Number(s.price) || 0,
-            stock: Number(s.stock) || 0
+            stock: Number(s.stock) || 0,
+            orderUrl: s.orderUrl ?? ""
         }))
         : undefined,
     stock: Number(doc.stock) || 0,
     minStock: Number(doc.minStock) || 0,
     active: doc.active ?? true,
+    orderUrl: doc.orderUrl ?? "",
     createdAt: doc.createdAt?.toISOString?.() ?? doc.createdAt,
     updatedAt: doc.updatedAt?.toISOString?.() ?? doc.updatedAt
 });
@@ -103,11 +106,11 @@ function generateOrderNumber() {
     return `ORD-${ts}-${short}`;
 }
 
-function normalizeSizes(raw: any): { name: string; price: number; stock?: number }[] | undefined {
+function normalizeSizes(raw: any): { name: string; price: number; stock?: number; orderUrl?: string }[] | undefined {
     if (!raw) return undefined;
     if (Array.isArray(raw)) {
         return raw
-            .map((s) => ({ name: s.name ?? "", price: Number(s.price) || 0, stock: Number(s.stock) || 0 }))
+            .map((s) => ({ name: s.name ?? "", price: Number(s.price) || 0, stock: Number(s.stock) || 0, orderUrl: s.orderUrl ?? "" }))
             .filter((s) => s.name);
     }
 
@@ -119,17 +122,17 @@ function normalizeSizes(raw: any): { name: string; price: number; stock?: number
             .map((entry) => {
                 const [name, rest] = entry.split(/[:=]/).map((p) => p.trim());
                 if (!name) return null;
-                const [priceRaw, stockRaw] = (rest ?? "").split("|").map((p) => p.trim());
-                return { name, price: Number(priceRaw ?? 0) || 0, stock: stockRaw !== undefined ? Number(stockRaw) || 0 : 0 };
+                const [priceRaw, stockRaw, urlRaw] = (rest ?? "").split("|").map((p) => p.trim());
+                return { name, price: Number(priceRaw ?? 0) || 0, stock: stockRaw !== undefined ? Number(stockRaw) || 0 : 0, orderUrl: urlRaw ?? "" };
             })
-            .filter((s): s is { name: string; price: number; stock?: number } => !!s?.name);
+            .filter((s): s is { name: string; price: number; stock?: number; orderUrl?: string } => !!s?.name);
 
     if (typeof raw === "string") {
         try {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
                 return parsed
-                    .map((s: any) => ({ name: s.name ?? "", price: Number(s.price) || 0 }))
+                    .map((s: any) => ({ name: s.name ?? "", price: Number(s.price) || 0, stock: Number(s.stock) || 0, orderUrl: s.orderUrl ?? "" }))
                     .filter((s) => s.name);
             }
         } catch (e) {
@@ -160,10 +163,11 @@ export async function createArticle(payload: {
     name: string;
     description?: string;
     price: number;
-    sizes?: { name: string; price: number; stock?: number }[] | string;
+    sizes?: { name: string; price: number; stock?: number; orderUrl?: string }[] | string;
     stock?: number;
     minStock?: number;
     active?: boolean;
+    orderUrl?: string;
 }): Promise<KaemmererArticle> {
     const now = new Date();
     const normalizedSizes = normalizeSizes(payload.sizes) ?? [];
@@ -176,6 +180,7 @@ export async function createArticle(payload: {
         stock: payload.stock !== undefined ? Number(payload.stock) || 0 : sizeStock,
         minStock: Number(payload.minStock) || 0,
         active: payload.active ?? true,
+        orderUrl: payload.orderUrl ?? "",
         createdAt: now,
         updatedAt: now
     };
@@ -196,6 +201,7 @@ export async function updateArticle(id: string, data: Partial<KaemmererArticle>)
     if (data.stock !== undefined) update.stock = Number(data.stock) || 0;
     if (data.minStock !== undefined) update.minStock = Number(data.minStock) || 0;
     if (data.active !== undefined) update.active = data.active;
+    if (data.orderUrl !== undefined) update.orderUrl = data.orderUrl;
 
     const res = await db.collection(ARTICLE_COLLECTION).updateOne(
         { _id: new ObjectId(id) },

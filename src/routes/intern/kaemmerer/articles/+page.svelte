@@ -2,7 +2,7 @@
     export let data;
     const articles = data.articles ?? [];
     const euro = (v: number) => `${(Number(v) || 0).toFixed(2)} EUR`;
-    let newSizes: { name: string; price: number; stock?: number }[] = [];
+    let newSizes: { name: string; price: number; stock?: number; orderUrl?: string }[] = [];
     const addSizeRow = () => {
         newSizes = [...newSizes, { name: "", price: 0, stock: 0 }];
     };
@@ -12,9 +12,9 @@
     $: normalizedSizes = newSizes
         .filter((s) => s.name.trim())
         .map((s) => ({ ...s, stock: Number(s.stock) || 0, price: Number(s.price) || 0 }));
-    const formatSizeList = (sizes: { name?: string; price?: number; stock?: number }[] = []) =>
+    const formatSizeList = (sizes: { name?: string; price?: number; stock?: number; orderUrl?: string }[] = []) =>
         sizes
-            .map((s) => `${s.name ?? ""}=${Number(s.price) || 0}|${Number(s.stock) || 0}`)
+            .map((s) => `${s.name ?? ""}=${Number(s.price) || 0}|${Number(s.stock) || 0}${s.orderUrl ? `|${s.orderUrl}` : ""}`)
             .filter(Boolean)
             .join(", ");
 </script>
@@ -47,6 +47,10 @@
                 Beschreibung
                 <input name="description" type="text" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
             </label>
+            <label class="text-sm text-gray-700 flex flex-col gap-1">
+                Bestell-URL (gesamt)
+                <input name="orderUrl" type="url" placeholder="https://..." class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
+            </label>
             <div class="grid grid-cols-2 gap-3">
                 <label class="text-sm text-gray-700 flex flex-col gap-1">
                     Bestand
@@ -73,13 +77,14 @@
                                 <input name={`size-name-${idx}`} placeholder="z.B. S" class="sm:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={size.name} />
                                 <input name={`size-price-${idx}`} type="number" step="0.01" class="sm:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={size.price} />
                                 <input name={`size-stock-${idx}`} type="number" step="1" class="sm:col-span-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={size.stock} placeholder="Bestand" />
+                                <input name={`size-url-${idx}`} type="url" placeholder="Bestell-URL" class="sm:col-span-3 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={size.orderUrl} />
                                 <button type="button" class="text-sm text-red-500 hover:text-red-600" on:click={() => removeSizeRow(idx)}>Entfernen</button>
                             </div>
                         {/each}
                     </div>
                 {/if}
                 <input type="hidden" name="sizes" value={JSON.stringify(normalizedSizes)} />
-                <p class="text-xs text-gray-500">Format: Name und Preis je Groesse. Preise koennen pro Groesse variieren.</p>
+                <p class="text-xs text-gray-500">Format: Name, Preis, Bestand und optionale Bestell-URL pro Groesse. Preise koennen pro Groesse variieren.</p>
             </div>
             <div class="md:col-span-2 flex justify-end">
                 <button type="submit" class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm">
@@ -117,10 +122,24 @@
                             <td class="px-6 py-4 text-gray-900 font-semibold">
                                 {article.name}
                                 <div class="text-xs text-gray-500">{article.description}</div>
+                                {#if article.orderUrl}
+                                    <div class="text-xs mt-1">
+                                        <a class="inline-flex items-center gap-1 text-blue-700 hover:text-blue-800" href={article.orderUrl} target="_blank" rel="noreferrer">
+                                            <span class="bi bi-link-45deg"></span> Gesamt-Bestelllink
+                                        </a>
+                                    </div>
+                                {/if}
                                 {#if article.sizes?.length}
-                                    <div class="flex flex-wrap gap-2 mt-1">
+                                    <div class="flex flex-wrap gap-2 mt-2">
                                         {#each article.sizes as size}
-                                            <span class="px-2 py-1 text-[11px] rounded-full border border-sky-200 bg-sky-50 text-sky-800 font-semibold">{size.name} ({euro(size.price)})</span>
+                                            <span class="px-2 py-1 text-[11px] rounded-full border border-sky-200 bg-sky-50 text-sky-800 font-semibold inline-flex items-center gap-2">
+                                                {size.name} ({euro(size.price)})
+                                                {#if size.orderUrl}
+                                                    <a href={size.orderUrl} target="_blank" rel="noreferrer" class="text-blue-700 hover:text-blue-800">
+                                                        <span class="bi bi-box-arrow-up-right"></span>
+                                                    </a>
+                                                {/if}
+                                            </span>
                                         {/each}
                                     </div>
                                 {/if}
@@ -146,7 +165,8 @@
                                     <input type="text" name="name" value={article.name} class="border border-gray-300 rounded-lg px-2 py-1 lg:col-span-2" />
                                     <input type="number" step="0.01" name="price" value={article.price} class="border border-gray-300 rounded-lg px-2 py-1" />
                                     <input type="number" name="minStock" value={article.minStock ?? 0} class="border border-gray-300 rounded-lg px-2 py-1" />
-                                    <input type="text" name="sizes" value={formatSizeList(article.sizes)} placeholder="S=0|5, M=1.50|0" class="border border-gray-300 rounded-lg px-2 py-1 lg:col-span-2 sm:col-span-2" />
+                                    <input type="text" name="sizes" value={formatSizeList(article.sizes)} placeholder="S=0|5|https://..." class="border border-gray-300 rounded-lg px-2 py-1 lg:col-span-2 sm:col-span-2" />
+                                    <input type="text" name="orderUrl" value={article.orderUrl ?? ""} placeholder="Gesamt-Bestell-URL" class="border border-gray-300 rounded-lg px-2 py-1 lg:col-span-2 sm:col-span-2" />
                                     <input type="text" name="description" value={article.description} class="border border-gray-300 rounded-lg px-2 py-1 lg:col-span-4 sm:col-span-2" />
                                     <button type="submit" class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold lg:col-span-1 sm:col-span-2">Update</button>
                                 </form>
