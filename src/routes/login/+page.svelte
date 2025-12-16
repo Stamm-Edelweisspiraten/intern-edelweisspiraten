@@ -1,4 +1,4 @@
-<script>
+﻿<script>
     function login() {
         window.location.href = "/login/start";
     }
