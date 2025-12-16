@@ -3,8 +3,11 @@ import { error, redirect } from "@sveltejs/kit";
 import { addInvoice, addTransaction, calculateMemberDues, getFiscalYear, updateInvoice, updateTransaction } from "$lib/server/financeService";
 import { getAllMembers, getMember } from "$lib/server/memberService";
 import { fail } from "@sveltejs/kit";
+import { requirePermission } from "$lib/server/permissionGuard";
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async (event) => {
+    requirePermission(event, "finance.view");
+    const { params } = event;
     const fiscalYear = await getFiscalYear(params.id);
     if (!fiscalYear) {
         throw error(404, "Fiscal year not found");
@@ -96,7 +99,9 @@ export const load: PageServerLoad = async ({ params }) => {
 };
 
 export const actions: Actions = {
-    addPending: async ({ request, params }) => {
+    addPending: async (event) => {
+        requirePermission(event, "finance.manage");
+        const { request, params } = event;
         const form = await request.formData();
         const fiscalYearId = params.id;
         const memberId = form.get("memberId")?.toString() ?? "";
@@ -139,7 +144,9 @@ export const actions: Actions = {
         throw redirect(303, `/intern/finance/fiscal-years/${fiscalYearId}/outstanding`);
     },
 
-    pay: async ({ request, params }) => {
+    pay: async (event) => {
+        requirePermission(event, "finance.manage");
+        const { request, params } = event;
         const form = await request.formData();
         const fiscalYearId = form.get("fiscalYearId")?.toString() ?? "";
         const itemId = form.get("itemId")?.toString() ?? "";

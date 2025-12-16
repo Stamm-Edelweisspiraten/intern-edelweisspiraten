@@ -14,7 +14,7 @@ interface UpcomingBirthday {
 }
 
 export const load: PageServerLoad = async (event) => {
-    requirePermission(event, "members.view");
+    requirePermission(event, "dashboard.view");
 
     const userName = event.locals.user?.userinfo?.name ?? event.locals.user?.userinfo?.email ?? "Willkommen";
 

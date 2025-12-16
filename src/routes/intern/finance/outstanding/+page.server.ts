@@ -2,8 +2,11 @@ import type { Actions, PageServerLoad } from "./$types";
 import { addTransaction, getFiscalYear, listFiscalYears, updateInvoice } from "$lib/server/financeService";
 import { getMember } from "$lib/server/memberService";
 import { fail, redirect } from "@sveltejs/kit";
+import { requirePermission } from "$lib/server/permissionGuard";
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+    requirePermission(event, "finance.view");
+
     const fiscalYears = await listFiscalYears();
     const openYears = fiscalYears.filter((fy) => (fy.status ?? "active") !== "archived");
 
@@ -69,7 +72,10 @@ export const load: PageServerLoad = async () => {
 };
 
 export const actions: Actions = {
-    pay: async ({ request }) => {
+    pay: async (event) => {
+        requirePermission(event, "finance.manage");
+
+        const { request } = event;
         const form = await request.formData();
         const fiscalYearId = form.get("fiscalYearId")?.toString() ?? "";
         const itemId = form.get("itemId")?.toString() ?? "";

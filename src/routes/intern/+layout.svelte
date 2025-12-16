@@ -6,10 +6,9 @@
     const permissions = data.permissions ?? [];
 
     const baseNav = [
-        { name: "Dashboard", href: "/intern/dashboard", icon: "speedometer2" },
+        { name: "Dashboard", href: "/intern/dashboard", icon: "speedometer2", perm: "dashboard.view" },
         { name: "Termine", href: "/intern/termine", icon: "calendar-event" },
         { name: "Downloads", href: "/intern/downloads", icon: "cloud-download" },
-        { name: "Kasse", href: "/intern/finance", icon: "wallet2" },
         { name: "Profil", href: "/intern/profil", icon: "person-circle" }
     ];
 
@@ -17,11 +16,12 @@
         { name: "Kaemmerer", href: "/intern/kaemmerer", perm: "kaemmerer.access", icon: "piggy-bank" },
         { name: "Mitgliedverwaltung", href: "/intern/members", perm: "members.view", icon: "people" },
         { name: "Gruppen", href: "/intern/groups", perm: "groups.view", icon: "diagram-3" },
+        { name: "Kasse", href: "/intern/finance", perm: "finance.view", icon: "wallet2" },
         { name: "Adminbereich", href: "/intern/admin", perm: "admin.view", icon: "gear-fill" }
     ];
 
     const visibleNav = [
-        ...baseNav,
+        ...baseNav.filter((item) => !item.perm || can(permissions, item.perm)),
         ...extraNav.filter((item) => can(permissions, item.perm))
     ];
 
@@ -29,13 +29,15 @@
 
     // Clear old caches/service workers to avoid stale bundles causing flicker
     onMount(() => {
-        if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
-            navigator.serviceWorker.getRegistrations().then((regs) => {
-                regs.forEach((reg) => reg.unregister());
-            });
-        }
-        if (typeof caches !== "undefined" && caches?.keys) {
-            caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+        if (import.meta.env.DEV) {
+            if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+                navigator.serviceWorker.getRegistrations().then((regs) => {
+                    regs.forEach((reg) => reg.unregister());
+                });
+            }
+            if (typeof caches !== "undefined" && caches?.keys) {
+                caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+            }
         }
     });
 </script>

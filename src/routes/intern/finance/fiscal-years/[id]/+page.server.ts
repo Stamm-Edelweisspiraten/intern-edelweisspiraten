@@ -2,8 +2,11 @@ import type { Actions, PageServerLoad } from "./$types";
 import { error, fail, redirect } from "@sveltejs/kit";
 import { addTransaction, getFiscalYear } from "$lib/server/financeService";
 import { getAllMembers, getMember } from "$lib/server/memberService";
+import { requirePermission } from "$lib/server/permissionGuard";
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async (event) => {
+    requirePermission(event, "finance.view");
+    const { params } = event;
     const fiscalYear = await getFiscalYear(params.id);
     if (!fiscalYear) {
         throw error(404, "Fiscal year not found");
@@ -50,7 +53,9 @@ export const load: PageServerLoad = async ({ params }) => {
 };
 
 export const actions: Actions = {
-    addTransaction: async ({ request, params }) => {
+    addTransaction: async (event) => {
+        requirePermission(event, "finance.manage");
+        const { request, params } = event;
         const form = await request.formData();
 
         const amount = Number(form.get("amount") ?? 0);

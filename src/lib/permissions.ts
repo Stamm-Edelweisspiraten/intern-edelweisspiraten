@@ -9,6 +9,11 @@ export const ALL_PERMISSIONS = [
     "members.*",
 
     // -----------------------
+    // Dashboard
+    // -----------------------
+    "dashboard.view",
+
+    // -----------------------
     // Groups
     // -----------------------
     "groups.view",
@@ -47,6 +52,12 @@ export const ALL_PERMISSIONS = [
     "kaemmerer.articles.manage",
     "kaemmerer.storage.manage",
     "kaemmerer.*",
+
+    // -----------------------
+    // Finanzen
+    // -----------------------
+    "finance.view",
+    "finance.manage",
 
     // -----------------------
     // Test / Misc

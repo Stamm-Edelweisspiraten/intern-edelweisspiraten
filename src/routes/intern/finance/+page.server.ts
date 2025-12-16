@@ -1,8 +1,11 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { archiveFiscalYear, getFiscalYear, listFiscalYears } from "$lib/server/financeService";
-import { redirect } from "@sveltejs/kit";
+import { redirect, error } from "@sveltejs/kit";
+import { requirePermission } from "$lib/server/permissionGuard";
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = async (event) => {
+    requirePermission(event, "finance.view");
+
     const fiscalYears = await listFiscalYears();
     const openYears = fiscalYears.filter((fy) => (fy.status ?? "active") !== "archived");
 
@@ -41,7 +44,10 @@ export const load: PageServerLoad = async () => {
 };
 
 export const actions: Actions = {
-    archive: async ({ request }) => {
+    archive: async (event) => {
+        requirePermission(event, "finance.manage");
+
+        const { request } = event;
         const form = await request.formData();
         const id = form.get("id");
 
