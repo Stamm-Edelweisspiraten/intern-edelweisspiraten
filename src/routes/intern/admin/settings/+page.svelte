@@ -80,7 +80,7 @@
                                 class="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 text-sm"
                                 bind:value={(contributions as any)[lvl.key]}
                                 name={lvl.key}
-                                {disabled:!canUpdate}
+                                disabled={!canUpdate}
                         />
                     </label>
                 {/each}
