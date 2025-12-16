@@ -67,12 +67,18 @@
         </nav>
 
         <!-- Logout area fixed bottom -->
-        <div class="p-4 border-t border-gray-200">
+        <div class="p-4 border-t border-gray-200 space-y-2">
+            <a
+                    href="/intern/profil"
+                    class="block w-full text-center py-3 bg-white hover:bg-gray-50 text-gray-800 rounded-lg font-semibold transition border border-gray-200"
+            >
+                <span class="bi bi-person-circle mr-2"></span> Profil
+            </a>
             <a
                     href="/logout"
-                    class="block w-full text-center py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold transition"
+                    class="block w-full text-center py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg font-semibold transition shadow-md"
             >
-                Logout
+                <span class="bi bi-box-arrow-right mr-2"></span> Logout
             </a>
         </div>
     </aside>
@@ -122,12 +128,19 @@
                 {/each}
             </div>
 
-            <div class="mt-6">
+            <div class="mt-6 space-y-2">
+                <a
+                        href="/intern/profil"
+                        class="block w-full px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 rounded-lg font-semibold text-center"
+                        on:click={() => (mobileOpen = false)}
+                >
+                    <span class="bi bi-person-circle mr-2"></span> Profil
+                </a>
                 <a
                         href="/logout"
-                        class="block w-full px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold text-center"
+                        class="block w-full px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg font-semibold text-center shadow-md"
                 >
-                    Logout
+                    <span class="bi bi-box-arrow-right mr-2"></span> Logout
                 </a>
             </div>
         </aside>
