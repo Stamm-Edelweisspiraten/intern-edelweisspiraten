@@ -157,8 +157,11 @@ export async function createUser({
     // ----------------------------------------------------
     // 4) GRUPPEN SETZEN
     // ----------------------------------------------------
-    // ensure ep-member is always present
-    const finalGroups = Array.from(new Set([...(groups ?? []), "ep-member"]));
+    // ensure ep-member is always present (configured via env to avoid invalid UUID)
+    const memberGroup = env.AUTHENTIK_MEMBER_GROUP_ID;
+    const finalGroups = Array.from(
+        new Set([...(groups ?? []), ...(memberGroup ? [memberGroup] : [])])
+    );
     await setAuthentikUserGroups(akUser.pk, finalGroups);
 
     // ----------------------------------------------------
