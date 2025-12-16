@@ -5,6 +5,10 @@ import * as crypto from "node:crypto";
 
 import { welcomeTemplate } from "$lib/server/emailTemplates/welcome";
 
+function isUUID(val: string) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
 // -----------------------------------------------------
 //  Passwort Generator
 // -----------------------------------------------------
@@ -39,6 +43,39 @@ async function patchAuthentikUser(pk: number, data: Record<string, any>) {
 // -----------------------------------------------------
 export async function setAuthentikUserGroups(pk: number, groups: string[]) {
     return await patchAuthentikUser(pk, { groups });
+}
+
+async function resolveAuthentikGroupIds(namesOrIds: string[]) {
+    const unique = Array.from(new Set(namesOrIds.filter(Boolean)));
+    if (unique.length === 0) return [];
+
+    const ids = unique.filter(isUUID);
+    const names = unique.filter((g) => !isUUID(g));
+    if (names.length === 0) return ids;
+
+    const res = await fetch(`${env.AUTHENTIK_URL}/api/v3/core/groups/?page_size=1000`, {
+        headers: { Authorization: `Bearer ${env.AUTHENTIK_TOKEN}` }
+    });
+    if (!res.ok) {
+        const err = await res.text();
+        console.error("AUTHENTIK GROUP FETCH ERROR:", err);
+        throw new Error("Authentik group lookup failed");
+    }
+    const payload = await res.json();
+    const map = new Map<string, string>(
+        (payload.results ?? []).map((g: any) => [g.name, g.pk?.toString?.() ?? g.id ?? ""])
+    );
+
+    names.forEach((name) => {
+        const found = map.get(name);
+        if (found && isUUID(found)) {
+            ids.push(found);
+        } else {
+            console.warn(`Authentik group not found for name "${name}"`);
+        }
+    });
+
+    return Array.from(new Set(ids));
 }
 
 // -----------------------------------------------------
@@ -157,14 +194,13 @@ export async function createUser({
     // ----------------------------------------------------
     // 4) GRUPPEN SETZEN
     // ----------------------------------------------------
-    // ensure ep-member is always present (prefer UUID, optionally fallback to configured name)
     const memberGroupId = env.AUTHENTIK_MEMBER_GROUP_ID;
     const memberGroupName = env.AUTHENTIK_MEMBER_GROUP_NAME;
-    const memberGroup = memberGroupId || memberGroupName;
-    const finalGroups = Array.from(
-        new Set([...(groups ?? []), ...(memberGroup ? [memberGroup] : [])])
-    );
-    await setAuthentikUserGroups(akUser.pk, finalGroups);
+    const defaults = memberGroupId ? [memberGroupId] : memberGroupName ? [memberGroupName] : ["ep-member"];
+
+    // resolve provided groups + defaults by name or keep UUIDs
+    const resolvedGroups = await resolveAuthentikGroupIds([...(groups ?? []), ...defaults]);
+    await setAuthentikUserGroups(akUser.pk, resolvedGroups);
 
     // ----------------------------------------------------
     // 5) AUTHENTIK-ID in Mongo speichern
