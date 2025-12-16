@@ -1,6 +1,7 @@
 ﻿<script>
     export let data;
     import { can } from "$lib/can";
+    import { onMount } from "svelte";
 
     const permissions = data.permissions ?? [];
 
@@ -25,6 +26,18 @@
     ];
 
     let mobileOpen = false;
+
+    // Clear old caches/service workers to avoid stale bundles causing flicker
+    onMount(() => {
+        if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistrations().then((regs) => {
+                regs.forEach((reg) => reg.unregister());
+            });
+        }
+        if (typeof caches !== "undefined" && caches?.keys) {
+            caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+        }
+    });
 </script>
 
 <div class="min-h-screen flex bg-transparent">
