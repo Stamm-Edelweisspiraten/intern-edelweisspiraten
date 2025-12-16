@@ -8,8 +8,7 @@
     const baseNav = [
         { name: "Dashboard", href: "/intern/dashboard", icon: "speedometer2", perm: "dashboard.view" },
         { name: "Termine", href: "/intern/termine", icon: "calendar-event" },
-        { name: "Downloads", href: "/intern/downloads", icon: "cloud-download" },
-        { name: "Profil", href: "/intern/profil", icon: "person-circle" }
+        { name: "Downloads", href: "/intern/downloads", icon: "cloud-download" }
     ];
 
     const extraNav = [
