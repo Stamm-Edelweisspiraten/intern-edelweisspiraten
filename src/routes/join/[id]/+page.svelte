@@ -9,7 +9,7 @@
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500">Einladung bestätigen</p>
-                <h1 class="text-2xl font-bold text-gray-900">Beitritt für {data.member.firstname} {data.member.lastname}</h1>
+                <h1 class="text-2xl font-bold text-gray-900">Beitritt für {data.member.firstname} {data.member.lastname?.slice(0,1)}.</h1>
                 <p class="text-sm text-gray-600 mt-1">Sicherer Zugang für Dich und deine Familie.</p>
             </div>
             <span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700">
