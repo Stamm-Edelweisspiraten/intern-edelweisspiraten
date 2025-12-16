@@ -157,7 +157,9 @@ export async function createUser({
     // ----------------------------------------------------
     // 4) GRUPPEN SETZEN
     // ----------------------------------------------------
-    await setAuthentikUserGroups(akUser.pk, groups);
+    // ensure ep-member is always present
+    const finalGroups = Array.from(new Set([...(groups ?? []), "ep-member"]));
+    await setAuthentikUserGroups(akUser.pk, finalGroups);
 
     // ----------------------------------------------------
     // 5) AUTHENTIK-ID in Mongo speichern
