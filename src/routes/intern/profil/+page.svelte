@@ -116,20 +116,5 @@
         </div>
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-        <div class="flex items-center justify-between flex-wrap gap-3">
-            <h2 class="text-lg font-semibold text-gray-900">Technische Daten (JWT)</h2>
-            <span class="text-sm text-gray-500">Readonly</span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {#each Object.entries(userinfo) as [key, value]}
-                {#if !["email", "name", "groups", "sub", "iss"].includes(key)}
-                    <div class="bg-gray-50 px-4 py-3 rounded-lg border border-gray-200">
-                        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{key}</p>
-                        <p class="text-gray-800 font-mono break-all text-sm">{value}</p>
-                    </div>
-                {/if}
-            {/each}
-        </div>
-    </div>
+    <!-- JWT-Details bewusst entfernt -->
 </div>
