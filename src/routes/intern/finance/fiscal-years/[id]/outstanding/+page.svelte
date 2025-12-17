@@ -3,6 +3,7 @@
     export let data;
 
     const fiscalYear = data.fiscalYear;
+    const isArchived = (fiscalYear.status ?? "active") === "archived";
     const outstanding = data.outstanding ?? { total: 0, items: [] };
     const memberSuggestions = data.memberSuggestions ?? [];
     const euro = (value: number) => `${value.toFixed(2)} EUR`;
@@ -97,8 +98,21 @@
     <div class="flex items-center justify-between flex-wrap gap-4">
         <div>
             <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Ausstehende Einnahmen</p>
-            <h1 class="text-4xl font-bold text-gray-900 mt-1">Geschaeftsjahr {fiscalYear.year}</h1>
-            <p class="text-sm text-gray-600 mt-1">{filteredItems.length} offene Position{filteredItems.length === 1 ? "" : "en"}.</p>
+            <div class="flex items-center gap-3 mt-1">
+                <h1 class="text-4xl font-bold text-gray-900">Geschaeftsjahr {fiscalYear.year}</h1>
+                {#if isArchived}
+                    <span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                        Archiviert
+                    </span>
+                {/if}
+            </div>
+            <p class="text-sm text-gray-600 mt-1">
+                {#if isArchived}
+                    Archivierte Geschaeftsjahre koennen nicht bearbeitet werden.
+                {:else}
+                    {filteredItems.length} offene Position{filteredItems.length === 1 ? "" : "en"}.
+                {/if}
+            </p>
         </div>
         <a
                 href={`/intern/finance/fiscal-years/${fiscalYear.id}`}
@@ -125,8 +139,9 @@
                 />
                 <button
                         type="button"
-                        class="inline-flex items-center gap-2 px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-semibold shadow-sm transition"
-                        on:click={() => { showCreateModal = true; }}
+                        class={`inline-flex items-center gap-2 px-4 py-3 rounded-xl font-semibold shadow-sm transition ${isArchived ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-blue-500 hover:bg-blue-600 text-white"}`}
+                        on:click={() => { if (isArchived) return; showCreateModal = true; }}
+                        disabled={isArchived}
                 >
                     <span class="bi bi-file-earmark-plus"></span>
                     Offene Rechnung
@@ -171,8 +186,9 @@
                             <td class="px-6 py-4 text-right">
                                 <button
                                         type="button"
-                                        class="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
-                                        on:click={() => openModal(item)}
+                                        class={`inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg transition ${isArchived ? "text-gray-500 bg-gray-100 border border-gray-200 cursor-not-allowed" : "text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200"}`}
+                                        on:click={() => !isArchived && openModal(item)}
+                                        disabled={isArchived}
                                 >
                                     <span class="bi bi-check2-circle"></span>
                                     Hat bezahlt
@@ -206,6 +222,12 @@
                 <input type="hidden" name="itemId" value={selected.invoiceId ?? selected.id} />
                 <input type="hidden" name="memberId" value={selected.memberId} />
                 <input type="hidden" name="memberName" value={selected.title} />
+
+                {#if isArchived}
+                    <p class="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                        Dieses Geschaeftsjahr ist archiviert. Zahlungen koennen nicht mehr erfasst werden.
+                    </p>
+                {/if}
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label class="flex flex-col gap-1 text-sm text-gray-700">
@@ -251,7 +273,8 @@
                     </button>
                     <button
                             type="submit"
-                            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+                            class={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold shadow-sm ${isArchived ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
+                            disabled={isArchived}
                     >
                         <span class="bi bi-check2-circle"></span>
                         Hat bezahlt
@@ -276,6 +299,11 @@
             </div>
 
             <form method="post" action="?/addPending" class="p-5 space-y-4">
+                {#if isArchived}
+                    <p class="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                        Dieses Geschaeftsjahr ist archiviert. Neue offene Posten koennen nicht angelegt werden.
+                    </p>
+                {/if}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label class="flex flex-col gap-1 text-sm text-gray-700 relative">
                         Mitglied (Name)
@@ -401,7 +429,8 @@
                     </button>
                     <button
                             type="submit"
-                            class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+                            class={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold shadow-sm ${isArchived ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
+                            disabled={isArchived}
                     >
                         <span class="bi bi-plus-circle"></span>
                         Offene Rechnung anlegen

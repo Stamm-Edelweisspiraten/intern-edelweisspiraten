@@ -58,6 +58,12 @@ export const actions: Actions = {
         const { request, params } = event;
         const form = await request.formData();
 
+        const fiscalYear = await getFiscalYear(params.id);
+        if (!fiscalYear) return fail(404, { error: "Fiscal year not found" });
+        if (fiscalYear.status === "archived") {
+            return fail(400, { error: "Archivierte Geschaeftsjahre koennen nicht bearbeitet werden." });
+        }
+
         const amount = Number(form.get("amount") ?? 0);
         const date = form.get("date")?.toString() ?? "";
         const direction = form.get("direction")?.toString() === "out" ? "out" : "in";

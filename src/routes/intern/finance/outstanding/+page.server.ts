@@ -14,7 +14,7 @@ export const load: PageServerLoad = async (event) => {
         await Promise.all(
             openYears.map(async (fy) => {
                 const full = fy.id ? await getFiscalYear(fy.id) : null;
-                if (!full) return null;
+                if (!full || full.status === "archived") return null;
 
                 const pendingInvoices = (full.invoices ?? [])
                     .filter((inv) => (inv.status ?? "pending") === "pending")
@@ -91,6 +91,9 @@ export const actions: Actions = {
 
         const fiscalYear = await getFiscalYear(fiscalYearId);
         if (!fiscalYear) return fail(404, { error: "Fiscal year not found" });
+        if (fiscalYear.status === "archived") {
+            return fail(400, { error: "Archivierte Geschaeftsjahre koennen nicht bearbeitet werden." });
+        }
 
         let memberName = memberNameInput || "Unbekannt";
         if (memberId) {

@@ -98,6 +98,11 @@ const mapDocToFiscalYear = (doc: any): FiscalYear => ({
     updatedAt: doc.updatedAt?.toISOString?.() ?? doc.updatedAt
 });
 
+const editableYearFilter = (id: string) => ({
+    _id: new ObjectId(id),
+    status: { $ne: "archived" }
+});
+
 // Create a fiscal year with optional seed transactions
 export async function createFiscalYear(payload: {
     year: number;
@@ -192,7 +197,7 @@ export async function addTransaction(
     const withId = { ...tx, id: tx.id ?? new ObjectId().toString(), status: tx.status ?? "pending" };
 
     const res = await db.collection(COLLECTION).updateOne(
-        { _id: new ObjectId(fiscalYearId) },
+        editableYearFilter(fiscalYearId),
         { $push: { transactions: withId }, $set: { updatedAt: new Date() } }
     );
 
@@ -203,7 +208,7 @@ export async function addTransaction(
 // Remove a transaction by id
 export async function removeTransaction(fiscalYearId: string, transactionId: string): Promise<boolean> {
     const res = await db.collection(COLLECTION).updateOne(
-        { _id: new ObjectId(fiscalYearId) },
+        editableYearFilter(fiscalYearId),
         { $pull: { transactions: { id: transactionId } }, $set: { updatedAt: new Date() } }
     );
     return res.modifiedCount > 0;
@@ -229,7 +234,7 @@ export async function updateTransaction(
     if (data.invoiceId !== undefined) setFields[prefix + "invoiceId"] = data.invoiceId;
 
     const res = await db.collection(COLLECTION).updateOne(
-        { _id: new ObjectId(fiscalYearId), "transactions.id": transactionId },
+        { ...editableYearFilter(fiscalYearId), "transactions.id": transactionId },
         { $set: setFields }
     );
     return res.matchedCount > 0 && res.modifiedCount > 0;
@@ -368,7 +373,7 @@ export async function addInvoice(
     };
 
     const res = await db.collection(COLLECTION).updateOne(
-        { _id: new ObjectId(fiscalYearId) },
+        editableYearFilter(fiscalYearId),
         { $push: { invoices: payload }, $set: { updatedAt: new Date() } }
     );
 
@@ -395,7 +400,7 @@ export async function updateInvoice(
     if (data.orderId !== undefined) setFields[prefix + "orderId"] = data.orderId;
 
     const res = await db.collection(COLLECTION).updateOne(
-        { _id: new ObjectId(fiscalYearId), "invoices.id": invoiceId },
+        { ...editableYearFilter(fiscalYearId), "invoices.id": invoiceId },
         { $set: setFields }
     );
 

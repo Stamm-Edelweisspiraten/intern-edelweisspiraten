@@ -2,6 +2,7 @@
     export let data;
 
     const fiscalYear = data.fiscalYear;
+    const isArchived = (fiscalYear.status ?? "active") === "archived";
     const outstanding = data.outstanding ?? { total: 0, items: [] };
     const actions = data.actions ?? [];
     const memberOrders = data.memberOrders ?? [];
@@ -88,8 +89,21 @@
             <div class="flex items-center justify-between flex-wrap gap-3">
                 <div>
                     <p class="text-sm font-semibold text-sky-700 uppercase tracking-wide">Geschaeftsjahr</p>
-                    <h1 class="text-3xl font-bold text-gray-900">Jahr {fiscalYear.year}</h1>
-                    <p class="text-sm text-gray-600 mt-1">Beitraege, Transaktionen und offene Posten im Blick.</p>
+                    <div class="flex items-center gap-3">
+                        <h1 class="text-3xl font-bold text-gray-900">Jahr {fiscalYear.year}</h1>
+                        {#if isArchived}
+                            <span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-700 border border-gray-200">
+                                Archiviert
+                            </span>
+                        {/if}
+                    </div>
+                    <p class="text-sm text-gray-600 mt-1">
+                        {#if isArchived}
+                            Archivierte Geschaeftsjahre koennen nicht bearbeitet werden.
+                        {:else}
+                            Beitraege, Transaktionen und offene Posten im Blick.
+                        {/if}
+                    </p>
                 </div>
                 <div class="flex items-center gap-3">
                     <a
@@ -101,8 +115,10 @@
                     </a>
                     <button
                             type="button"
-                            class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow"
+                            class={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold shadow ${isArchived ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+                            disabled={isArchived}
                             on:click={() => {
+                                if (isArchived) return;
                                 showTxModal = true;
                                 txAmount = 0;
                                 txDate = new Date().toISOString().slice(0, 10);
@@ -236,8 +252,9 @@
             </div>
             <div class="flex items-center gap-3 w-full sm:w-auto">
                 <button
-                        class="flex-1 sm:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg"
+                        class={`flex-1 sm:flex-none px-4 py-2 text-sm font-semibold rounded-lg ${isArchived ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
                         on:click={() => {
+                            if (isArchived) return;
                             showTxModal = true;
                             txAmount = 0;
                             txDate = new Date().toISOString().slice(0, 10);
@@ -248,6 +265,7 @@
                             txMemberId = "";
                         }}
                         type="button"
+                        disabled={isArchived}
                 >
                     Transaktion hinzufuegen
                 </button>
@@ -352,6 +370,11 @@
                 </div>
                 <button type="button" class="text-gray-400 hover:text-gray-600" on:click={() => (showTxModal = false)}>X</button>
             </div>
+            {#if isArchived}
+                <div class="px-6 py-3 bg-amber-50 text-amber-800 border-b border-amber-100 text-sm">
+                    Dieses Geschaeftsjahr ist archiviert. Neue Transaktionen koennen nicht erfasst werden.
+                </div>
+            {/if}
             <div class="px-6 py-5 space-y-4 overflow-y-auto">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Betrag</label>
@@ -479,12 +502,13 @@
                 >
                     Abbrechen
                 </button>
-                <button
-                        type="submit"
-                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg"
-                >
-                    Speichern
-                </button>
+        <button
+                type="submit"
+                class={`px-4 py-2 text-sm font-semibold rounded-lg ${isArchived ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 text-white"}`}
+                disabled={isArchived}
+        >
+            Speichern
+        </button>
             </div>
         </form>
     </div>

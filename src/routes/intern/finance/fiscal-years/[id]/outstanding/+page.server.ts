@@ -12,32 +12,34 @@ export const load: PageServerLoad = async (event) => {
     if (!fiscalYear) {
         throw error(404, "Fiscal year not found");
     }
+    const isArchived = fiscalYear.status === "archived";
 
     const members = await getAllMembers();
-    const sumAll = fiscalYear.dues.stamm + fiscalYear.dues.gau + fiscalYear.dues.landesmark + fiscalYear.dues.bund;
 
     let invoices = [...(fiscalYear.invoices ?? [])];
 
     // Ensure there is a pending invoice per member for the yearly dues
-    for (const m of members) {
-        const memberId = m._id?.toString?.() ?? m.id ?? "";
-        if (!memberId) continue;
+    if (!isArchived) {
+        for (const m of members) {
+            const memberId = m._id?.toString?.() ?? m.id ?? "";
+            if (!memberId) continue;
 
-        const existing = invoices.find((inv) => inv.memberId === memberId && inv.kind === "Jahresbeitrag");
-        if (!existing) {
-            const { payable } = calculateMemberDues(fiscalYear.dues, m);
-            const memberName = `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt";
-            const inv = await addInvoice(fiscalYear.id!, {
-                memberId,
-                member: memberName,
-                kind: "Jahresbeitrag",
-                amount: payable,
-                date: new Date().toISOString(),
-                note: m.isSecondMember ? "Zweitmitglied" : undefined,
-                status: "pending"
-            });
-            if (inv) {
-                invoices.push(inv);
+            const existing = invoices.find((inv) => inv.memberId === memberId && inv.kind === "Jahresbeitrag");
+            if (!existing) {
+                const { payable } = calculateMemberDues(fiscalYear.dues, m);
+                const memberName = `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt";
+                const inv = await addInvoice(fiscalYear.id!, {
+                    memberId,
+                    member: memberName,
+                    kind: "Jahresbeitrag",
+                    amount: payable,
+                    date: new Date().toISOString(),
+                    note: m.isSecondMember ? "Zweitmitglied" : undefined,
+                    status: "pending"
+                });
+                if (inv) {
+                    invoices.push(inv);
+                }
             }
         }
     }
@@ -119,6 +121,9 @@ export const actions: Actions = {
         if (!fiscalYear) {
             return fail(404, { error: "Fiscal year not found" });
         }
+        if (fiscalYear.status === "archived") {
+            return fail(400, { error: "Archivierte Geschaeftsjahre koennen nicht bearbeitet werden." });
+        }
 
         let memberName = memberNameInput || "Unbekannt";
         if (memberId) {
@@ -164,6 +169,9 @@ export const actions: Actions = {
         const fiscalYear = await getFiscalYear(params.id);
         if (!fiscalYear || fiscalYear.id !== fiscalYearId) {
             return fail(400, { error: "Fiscal year mismatch" });
+        }
+        if (fiscalYear.status === "archived") {
+            return fail(400, { error: "Archivierte Geschaeftsjahre koennen nicht bearbeitet werden." });
         }
 
         let memberName = memberNameInput || "Unbekannt";
