@@ -332,7 +332,7 @@
             <h2 class="text-lg font-semibold text-gray-900">Mitglieder</h2>
             <span class="text-sm text-gray-500">{filteredMembers.length} Einträge</span>
         </div>
-        <div class="overflow-x-auto hidden md:block">
+        <div class="overflow-x-auto hidden lg:block">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -438,7 +438,7 @@
             </table>
         </div>
 
-        <div class="md:hidden divide-y divide-gray-200">
+        <div class="lg:hidden divide-y divide-gray-200">
             {#if filteredMembers.length === 0}
                 <div class="px-4 py-4 text-sm text-gray-500 text-center">Keine Mitglieder gefunden.</div>
             {:else}
