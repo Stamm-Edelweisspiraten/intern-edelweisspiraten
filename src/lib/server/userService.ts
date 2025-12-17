@@ -331,6 +331,12 @@ export async function getAllUsers() {
     return await db.collection("users").find().toArray();
 }
 
+export async function getUserByEmail(email: string) {
+    if (!email) return null;
+    const normalized = email.toLowerCase?.() ?? email;
+    return await db.collection("users").findOne({ email: normalized });
+}
+
 export async function assignMemberToUser(userId: string, memberId: string) {
     const mongoId = new ObjectId(userId);
 

@@ -5,7 +5,20 @@
 
     import PublicFooter from "$lib/components/PublicFooter.svelte";
 
-    let accountType: "child" | "parent" = "child";
+    const age = (birthday?: string) => {
+        if (!birthday) return null;
+        const b = new Date(birthday);
+        if (isNaN(b.getTime())) return null;
+        const today = new Date();
+        let years = today.getFullYear() - b.getFullYear();
+        const m = today.getMonth() - b.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < b.getDate())) years--;
+        return years;
+    };
+
+    const isAdult = (age(data.member.birthday) ?? 0) >= 18;
+
+    let accountType: "child" | "parent" = isAdult ? "parent" : "child";
     let password = "";
     let password2 = "";
 
@@ -23,7 +36,13 @@
                 <div>
                     <p class="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500">Benutzerkonto erstellen</p>
                     <h1 class="text-2xl font-bold text-gray-900">Für {data.member.firstname} {data.member.lastname}</h1>
-                    <p class="text-sm text-gray-600 mt-1">Wähle, ob du dich als Kind oder Elternteil registrierst.</p>
+                    <p class="text-sm text-gray-600 mt-1">
+                        {#if isAdult}
+                            Für volljährige Mitglieder wird automatisch ein Eltern-/Erwachsenen-Konto erstellt.
+                        {:else}
+                            Wähle, ob du dich als Kind oder Elternteil registrierst.
+                        {/if}
+                    </p>
                 </div>
                 <span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700">
                     <span class="bi bi-shield-lock"></span> Datenschutz
@@ -33,8 +52,9 @@
             <div class="grid grid-cols-2 gap-2">
                 <button
                         type="button"
-                        class={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl border ${accountType === "child" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700"}`}
-                        on:click={() => accountType = "child"}
+                        class={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl border ${accountType === "child" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700"} ${isAdult ? "opacity-50 cursor-not-allowed" : ""}`}
+                        on:click={() => { if (!isAdult) accountType = "child"; }}
+                        aria-disabled={isAdult}
                 >
                     <span class="bi bi-person"></span> Kind
                 </button>

@@ -6,41 +6,48 @@ import { requirePermission } from "$lib/server/permissionGuard";
 export const load: PageServerLoad = async (event) => {
     requirePermission(event, "finance.view");
 
-    const fiscalYears = await listFiscalYears();
-    const openYears = fiscalYears.filter((fy) => (fy.status ?? "active") !== "archived");
+    const summaries = await listFiscalYears();
+    const enriched = await Promise.all(
+        summaries.map(async (summary) => {
+            const full = summary.id ? await getFiscalYear(summary.id) : null;
+            if (!full) {
+                return { ...summary, income: 0, outcome: 0, saldo: 0, outstanding: 0 };
+            }
 
-    const outstandingTotal = (
-        await Promise.all(
-            openYears.map(async (fy) => {
-                const full = fy.id ? await getFiscalYear(fy.id) : null;
-                if (!full) return 0;
+            const paidTx = (full.transactions ?? []).filter((tx) => (tx.status ?? "paid") === "paid");
+            const income = paidTx.filter((tx) => tx.direction === "in").reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+            const outcome = paidTx.filter((tx) => tx.direction === "out").reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
 
-                const pendingInvoices = (full.invoices ?? [])
-                    .filter((inv) => (inv.status ?? "pending") === "pending")
-                    .map((inv) => {
-                        const paidSum = (full.transactions ?? [])
-                            .filter(
-                                (tx) =>
-                                    (tx.invoiceId === inv.id ||
-                                        (!tx.invoiceId &&
-                                            tx.memberId &&
-                                            tx.memberId === inv.memberId &&
-                                            tx.kind === inv.kind)) &&
-                                    (tx.status ?? "paid") === "paid"
-                            )
-                            .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+            const outstanding = (full.invoices ?? [])
+                .filter((inv) => (inv.status ?? "pending") === "pending")
+                .map((inv) => {
+                    const paidSum = paidTx
+                        .filter(
+                            (tx) =>
+                                tx.invoiceId === inv.id ||
+                                (!tx.invoiceId && tx.memberId && tx.memberId === inv.memberId && tx.kind === inv.kind)
+                        )
+                        .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+                    return Math.max((Number(inv.amount) || 0) - paidSum, 0);
+                })
+                .filter((amount) => amount > 0)
+                .reduce((sum, amount) => sum + amount, 0);
 
-                        return Math.max((Number(inv.amount) || 0) - paidSum, 0);
-                    })
-                    .filter((amount) => amount > 0)
-                    .reduce((sum, amount) => sum + amount, 0);
+            return {
+                ...summary,
+                income,
+                outcome,
+                saldo: income - outcome,
+                outstanding
+            };
+        })
+    );
 
-                return pendingInvoices;
-            })
-        )
-    ).reduce((sum, val) => sum + val, 0);
+    const outstandingTotal = enriched
+        .filter((fy) => (fy.status ?? "active") !== "archived")
+        .reduce((sum, fy) => sum + (fy.outstanding ?? 0), 0);
 
-    return { fiscalYears, outstandingTotal };
+    return { fiscalYears: enriched, outstandingTotal };
 };
 
 export const actions: Actions = {

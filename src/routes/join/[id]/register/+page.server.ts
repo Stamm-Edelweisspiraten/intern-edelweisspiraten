@@ -22,7 +22,8 @@ export const load = async ({ params, cookies }) => {
         member: {
             id: params.id,
             firstname: member.firstname,
-            lastname: member.lastname
+            lastname: member.lastname,
+            birthday: member.birthday ?? null
         }
     };
 };
@@ -30,6 +31,7 @@ export const load = async ({ params, cookies }) => {
 export const actions = {
     default: async ({ request, params, cookies }) => {
         const memberId = params.id;
+        const member = await getMember(memberId);
 
         const inviteSession = verifySignedSession(cookies.get(`join_verified_${memberId}`) ?? undefined);
         if (!inviteSession || inviteSession.type !== "invite" || inviteSession.memberId !== memberId) {
@@ -42,15 +44,28 @@ export const actions = {
         const email = form.get("email")?.toString();
         const password = form.get("password")?.toString();
         const password2 = form.get("password2")?.toString();
-        const type = form.get("accountType")?.toString() || "parent"; // fallback
+        const requestedType = form.get("accountType")?.toString() || "parent"; // fallback
 
-        if (!name || !email || !password || !password2 || !type) {
+        if (!name || !email || !password || !password2 || !requestedType) {
             return fail(400, { error: "Bitte alle Felder ausfüllen." });
         }
 
         if (password !== password2) {
             return fail(400, { error: "Passwörter stimmen nicht überein." });
         }
+
+        const isAdult = (() => {
+            if (!member?.birthday) return false;
+            const b = new Date(member.birthday);
+            if (isNaN(b.getTime())) return false;
+            const today = new Date();
+            let years = today.getFullYear() - b.getFullYear();
+            const m = today.getMonth() - b.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < b.getDate())) years--;
+            return years >= 18;
+        })();
+
+        const type = isAdult ? "parent" : requestedType;
 
         const GROUP_MAP = {
             child: ["6d1940af-e162-48f2-9fc1-eb4fcd59ed37"],
