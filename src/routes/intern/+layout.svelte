@@ -1,4 +1,4 @@
-﻿<script>
+<script>
     export let data;
     import { can } from "$lib/can";
     import { onMount } from "svelte";
@@ -25,6 +25,7 @@
     ];
 
     let mobileOpen = false;
+    let collapsed = false;
 
     // Clear old caches/service workers to avoid stale bundles causing flicker
     onMount(() => {
@@ -44,12 +45,23 @@
 <div class="min-h-screen flex bg-transparent">
 
     <!-- Sidebar desktop -->
-    <aside class="hidden lg:flex w-72 h-screen fixed left-0 top-0 bg-white border-r border-gray-200 shadow-sm flex-col">
+    <aside class={`hidden lg:flex ${collapsed ? "w-20" : "w-72"} h-screen fixed left-0 top-0 bg-white border-r border-gray-200 shadow-sm flex-col transition-all duration-200`}>
 
         <!-- Header -->
-        <div class="px-6 py-7 border-b border-gray-200">
-            <h1 class="text-2xl font-bold text-blue-600 tracking-tight">Edelweisspiraten</h1>
-            <p class="text-sm text-gray-500 mt-1">Interner Bereich</p>
+        <div class={`px-4 py-6 border-b border-gray-200 flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
+            <div class={`${collapsed ? "text-center" : ""}`}>
+                <h1 class={`font-bold text-blue-600 tracking-tight ${collapsed ? "text-xl" : "text-2xl"}`}>{collapsed ? "EP" : "Edelweisspiraten"}</h1>
+                {#if !collapsed}
+                    <p class="text-sm text-gray-500 mt-1">Interner Bereich</p>
+                {/if}
+            </div>
+            <button
+                    class="hidden lg:inline-flex items-center justify-center w-10 h-10 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-600"
+                    on:click={() => (collapsed = !collapsed)}
+                    aria-label={collapsed ? "Sidebar oeffnen" : "Sidebar einklappen"}
+            >
+                <i class={`bi ${collapsed ? "bi-chevron-right" : "bi-chevron-left"}`}></i>
+            </button>
         </div>
 
         <!-- Navigation -->
@@ -58,9 +70,10 @@
                 <a
                         href={item.href}
                         class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition font-medium"
+                        title={collapsed ? item.name : ""}
                 >
                     <i class={`bi bi-${item.icon} text-lg text-gray-400`} aria-hidden="true"></i>
-                    <span class="text-base">{item.name}</span>
+                    <span class={`text-base ${collapsed ? "hidden" : "block"}`}>{item.name}</span>
                 </a>
             {/each}
         </nav>
@@ -69,15 +82,17 @@
         <div class="p-4 border-t border-gray-200 space-y-2">
             <a
                     href="/intern/profil"
-                    class="block w-full text-center py-3 bg-white hover:bg-gray-50 text-gray-800 rounded-lg font-semibold transition border border-gray-200"
+                    class="flex items-center justify-center gap-2 w-full text-center py-3 bg-white hover:bg-gray-50 text-gray-800 rounded-lg font-semibold transition border border-gray-200"
+                    title={collapsed ? "Profil" : ""}
             >
-                <span class="bi bi-person-circle mr-2"></span> Profil
+                <span class="bi bi-person-circle"></span> <span class={collapsed ? "hidden" : "inline"}>Profil</span>
             </a>
             <a
                     href="/logout"
-                    class="block w-full text-center py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg font-semibold transition shadow-md drop-shadow-[0_4px_10px_rgba(239,68,68,0.35)]"
+                    class="flex items-center justify-center gap-2 w-full text-center py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg font-semibold transition shadow-md drop-shadow-[0_4px_10px_rgba(239,68,68,0.35)]"
+                    title={collapsed ? "Logout" : ""}
             >
-                <span class="bi bi-box-arrow-right mr-2"></span> Logout
+                <span class="bi bi-box-arrow-right"></span> <span class={collapsed ? "hidden" : "inline"}>Logout</span>
             </a>
         </div>
     </aside>
@@ -90,7 +105,7 @@
         <button
                 class="p-2 rounded-lg bg-blue-50 text-blue-600"
                 on:click={() => (mobileOpen = true)}
-                aria-label="Menü öffnen"
+                aria-label="Menue oeffnen"
         >
             <i class="bi bi-list text-2xl"></i>
         </button>
@@ -112,9 +127,9 @@
             <div class="flex justify-between items-center mb-6">
                 <div>
                     <p class="text-[11px] uppercase tracking-[0.2em] text-gray-400 font-semibold">Navigation</p>
-                    <h2 class="text-xl font-bold text-blue-600">Menü</h2>
+                    <h2 class="text-xl font-bold text-blue-600">Menue</h2>
                 </div>
-                <button class="text-3xl leading-none" on:click={() => (mobileOpen = false)} aria-label="Menü schließen">
+                <button class="text-3xl leading-none" on:click={() => (mobileOpen = false)} aria-label="Menue schliessen">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
@@ -154,10 +169,11 @@
 
 
     <!-- Main Content -->
-    <main class="flex-1 p-6 pt-20 lg:pt-6 lg:ml-72">
+    <main class={`flex-1 p-6 pt-20 lg:pt-6 ${collapsed ? "lg:ml-20" : "lg:ml-72"} transition-all duration-200`}>
         <div class="container">
             <slot/>
         </div>
     </main>
 
 </div>
+
