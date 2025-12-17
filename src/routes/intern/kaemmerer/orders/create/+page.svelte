@@ -26,7 +26,7 @@
         price: priceFor(articles[0], firstSize(articles[0])),
         quantity: 1
     }];
-    let selectedMembers: string[] = [];
+    let selectedMember = "";
     let error = "";
 
     const addItem = () => {
@@ -100,7 +100,7 @@
 
     <form method="post" class="space-y-6">
         <input type="hidden" name="items" value={JSON.stringify(normalizedItems.map(({ total, ...rest }) => rest))} />
-        <input type="hidden" name="memberNames" value={JSON.stringify(selectedMembers.map((id) => members.find((m: any) => m.id === id)?.name ?? ""))} />
+        <input type="hidden" name="memberNames" value={JSON.stringify(selectedMember ? [members.find((m: any) => m.id === selectedMember)?.name ?? ""] : [])} />
 
         <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
             <div class="flex items-center justify-between">
@@ -161,24 +161,21 @@
         <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
             <div class="flex items-center justify-between">
                 <h2 class="text-lg font-semibold text-gray-900">Mitglieder</h2>
-                <span class="text-sm text-gray-500">{selectedMembers.length} ausgewaehlt</span>
+                <span class="text-sm text-gray-500">{selectedMember ? 1 : 0} ausgewaehlt</span>
             </div>
             {#if members.length === 0}
                 <p class="text-sm text-gray-500">Keine verknuepften Mitglieder gefunden.</p>
             {:else}
-                <div class="space-y-2">
-                    <select
-                            name="memberIds"
-                            multiple
-                            bind:value={selectedMembers}
-                            class="w-full border border-gray-300 rounded-xl px-3 py-3 text-sm bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 min-h-[160px]"
-                    >
-                        {#each members as member}
-                            <option value={member.id}>{member.name}{member.stand ? ` · ${member.stand}` : ""}</option>
-                        {/each}
-                    </select>
-                    <p class="text-xs text-gray-500">Mehrfachauswahl mit Strg/Cmd oder Shift.</p>
-                </div>
+                <select
+                        name="memberIds"
+                        bind:value={selectedMember}
+                        class="w-full border border-gray-300 rounded-xl px-3 py-3 text-sm bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400"
+                >
+                    <option value="">Mitglied waehlen</option>
+                    {#each members as member}
+                        <option value={member.id}>{member.name}{member.stand ? ` - ${member.stand}` : ""}</option>
+                    {/each}
+                </select>
             {/if}
         </div>
 
