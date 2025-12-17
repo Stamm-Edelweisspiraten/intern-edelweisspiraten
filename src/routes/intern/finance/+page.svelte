@@ -50,10 +50,10 @@
                     <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jahr</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Stamm</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Gau</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Landesmark</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bund</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Einnahmen</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Ausgaben</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Saldo</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Offen</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Transaktionen</th>
                         <th class="px-6 py-3"></th>
                     </tr>
@@ -78,10 +78,10 @@
                                         {/if}
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 text-sm text-gray-700">{euro(fy.dues.stamm)}</td>
-                                <td class="px-6 py-4 text-sm text-gray-700">{euro(fy.dues.gau)}</td>
-                                <td class="px-6 py-4 text-sm text-gray-700">{euro(fy.dues.landesmark)}</td>
-                                <td class="px-6 py-4 text-sm text-gray-700">{euro(fy.dues.bund)}</td>
+                                <td class="px-6 py-4 text-sm text-gray-700">{euro(fy.income ?? 0)}</td>
+                                <td class="px-6 py-4 text-sm text-gray-700">{euro(fy.outcome ?? 0)}</td>
+                                <td class="px-6 py-4 text-sm font-semibold text-gray-900">{euro(fy.saldo ?? 0)}</td>
+                                <td class="px-6 py-4 text-sm text-amber-700">{euro(fy.outstanding ?? 0)}</td>
                                 <td class="px-6 py-4 text-sm text-gray-700">{fy.transactionCount}</td>
                                 <td class="px-6 py-4">
                                     <div class="flex items-center justify-end gap-3">
@@ -125,26 +125,29 @@
                                         </span>
                                     {/if}
                                 </div>
-                                <span class="px-3 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-gray-50 text-gray-700">
-                                    {fy.transactionCount} Transaktionen
-                                </span>
+                                <div class="flex flex-wrap justify-end gap-2 text-xs text-gray-700">
+                                    <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50">+ {euro(fy.income ?? 0)}</span>
+                                    <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50">- {euro(fy.outcome ?? 0)}</span>
+                                    <span class="px-3 py-1 rounded-full border border-amber-200 bg-amber-50 text-amber-700">Offen {euro(fy.outstanding ?? 0)}</span>
+                                    <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50">{fy.transactionCount} Trans.</span>
+                                </div>
                             </div>
                             <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
                                 <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
-                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Stamm</p>
-                                    <p class="font-semibold">{euro(fy.dues.stamm)}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Einnahmen</p>
+                                    <p class="font-semibold">{euro(fy.income ?? 0)}</p>
                                 </div>
                                 <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
-                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Gau</p>
-                                    <p class="font-semibold">{euro(fy.dues.gau)}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Ausgaben</p>
+                                    <p class="font-semibold">{euro(fy.outcome ?? 0)}</p>
                                 </div>
                                 <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
-                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Landesmark</p>
-                                    <p class="font-semibold">{euro(fy.dues.landesmark)}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Saldo</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.saldo ?? 0)}</p>
                                 </div>
-                                <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
-                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Bund</p>
-                                    <p class="font-semibold">{euro(fy.dues.bund)}</p>
+                                <div class="px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
+                                    <p class="text-[11px] uppercase tracking-wide">Offen</p>
+                                    <p class="font-semibold">{euro(fy.outstanding ?? 0)}</p>
                                 </div>
                             </div>
                             <div class="flex flex-wrap gap-2 justify-end">
@@ -182,10 +185,10 @@
                     <thead class="bg-gray-50">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Jahr</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Stamm</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Gau</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Landesmark</th>
-                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Bund</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Einnahmen</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Ausgaben</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Saldo</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Offen</th>
                         <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Transaktionen</th>
                         <th class="px-6 py-3"></th>
                     </tr>
@@ -210,10 +213,10 @@
                                         {/if}
                                     </div>
                                 </td>
-                                <td class="px-6 py-4 text-sm">{euro(fy.dues.stamm)}</td>
-                                <td class="px-6 py-4 text-sm">{euro(fy.dues.gau)}</td>
-                                <td class="px-6 py-4 text-sm">{euro(fy.dues.landesmark)}</td>
-                                <td class="px-6 py-4 text-sm">{euro(fy.dues.bund)}</td>
+                                <td class="px-6 py-4 text-sm">{euro(fy.income ?? 0)}</td>
+                                <td class="px-6 py-4 text-sm">{euro(fy.outcome ?? 0)}</td>
+                                <td class="px-6 py-4 text-sm font-semibold text-gray-900">{euro(fy.saldo ?? 0)}</td>
+                                <td class="px-6 py-4 text-sm text-amber-700">{euro(fy.outstanding ?? 0)}</td>
                                 <td class="px-6 py-4 text-sm">{fy.transactionCount}</td>
                                 <td class="px-6 py-4 text-right">
                                     <a
@@ -251,20 +254,20 @@
                             </div>
                             <div class="grid grid-cols-2 gap-2 text-sm">
                                 <div class="px-3 py-2 rounded-xl bg-white border border-gray-200">
-                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Stamm</p>
-                                    <p class="font-semibold text-gray-900">{euro(fy.dues.stamm)}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Einnahmen</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.income ?? 0)}</p>
                                 </div>
                                 <div class="px-3 py-2 rounded-xl bg-white border border-gray-200">
-                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Gau</p>
-                                    <p class="font-semibold text-gray-900">{euro(fy.dues.gau)}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Ausgaben</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.outcome ?? 0)}</p>
                                 </div>
                                 <div class="px-3 py-2 rounded-xl bg-white border border-gray-200">
-                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Landesmark</p>
-                                    <p class="font-semibold text-gray-900">{euro(fy.dues.landesmark)}</p>
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Saldo</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.saldo ?? 0)}</p>
                                 </div>
-                                <div class="px-3 py-2 rounded-xl bg-white border border-gray-200">
-                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Bund</p>
-                                    <p class="font-semibold text-gray-900">{euro(fy.dues.bund)}</p>
+                                <div class="px-3 py-2 rounded-xl bg-amber-50 border border-amber-200">
+                                    <p class="text-[11px] uppercase tracking-wide text-amber-700">Offen</p>
+                                    <p class="font-semibold text-amber-800">{euro(fy.outstanding ?? 0)}</p>
                                 </div>
                             </div>
                             <div class="flex justify-end">
