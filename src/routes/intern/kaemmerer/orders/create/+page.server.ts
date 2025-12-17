@@ -1,13 +1,18 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { requirePermission } from "$lib/server/permissionGuard";
-import { createOrder, getAccessibleMembersForUser, listArticles } from "$lib/server/kaemmererService";
+import { createOrder, listArticles } from "$lib/server/kaemmererService";
+import { getAllMembers } from "$lib/server/memberService";
 import { fail, redirect } from "@sveltejs/kit";
 
 export const load: PageServerLoad = async (event) => {
     requirePermission(event, "kaemmerer.order.create");
 
     const articles = await listArticles(true);
-    const members = await getAccessibleMembersForUser(event.locals.user);
+    const members = (await getAllMembers()).map((m) => ({
+        id: m.id ?? m._id?.toString?.() ?? "",
+        name: `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt",
+        stand: m.stand
+    }));
 
     return { articles, members };
 };
