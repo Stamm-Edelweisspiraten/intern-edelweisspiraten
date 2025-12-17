@@ -50,7 +50,7 @@
         </div>
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-3">
         <div class="flex items-center justify-between flex-wrap gap-3">
             <h2 class="text-lg font-semibold text-gray-900">Verknuepfte Mitglieder</h2>
             <span class="text-sm text-gray-500">{members.length} Eintraege</span>
@@ -58,33 +58,7 @@
         {#if members.length === 0}
             <p class="text-sm text-gray-500">Keine Mitglieder verknuepft.</p>
         {:else}
-            <div class="divide-y divide-gray-100">
-                {#each members as member}
-                    <div class="py-4 flex flex-wrap items-start justify-between gap-3">
-                        <div class="space-y-1">
-                            <p class="text-base font-semibold text-gray-900">{member.firstname} {member.lastname}</p>
-                            <div class="flex flex-wrap gap-2 text-xs text-gray-700">
-                                {#if member.stand}
-                                    <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50">Stand {member.stand}</span>
-                                {/if}
-                                {#if member.status}
-                                    <span class="px-3 py-1 rounded-full border border-sky-200 bg-sky-50 text-sky-800 capitalize">{member.status}</span>
-                                {/if}
-                                {#if age(member.birthday) !== null}
-                                    <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50">{age(member.birthday)} Jahre</span>
-                                {/if}
-                            </div>
-                        </div>
-                        {#if member.groups?.length}
-                            <div class="flex flex-wrap gap-2 text-xs">
-                                {#each member.groups as g}
-                                    <span class="px-3 py-1 rounded-full border border-gray-200 bg-white text-gray-700">{g}</span>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
-                {/each}
-            </div>
+            <p class="text-sm text-gray-600">Aus Datenschutzgruenden werden die Namen hier nicht angezeigt.</p>
         {/if}
     </div>
 
