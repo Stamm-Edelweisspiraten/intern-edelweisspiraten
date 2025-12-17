@@ -5,5 +5,9 @@
     import ToastContainer from "$lib/components/ToastContainer.svelte";
 </script>
 
+<svelte:head>
+    <title>Stamm Edelweisspiraten</title>
+</svelte:head>
+
 <ToastContainer />
 <slot />

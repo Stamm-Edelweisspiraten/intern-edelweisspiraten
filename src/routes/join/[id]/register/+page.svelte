@@ -12,6 +12,10 @@
     $: passwordMismatch = password && password2 && password !== password2;
 </script>
 
+<svelte:head>
+    <title>Registrierung - Stamm Edelweisspiraten</title>
+</svelte:head>
+
 <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100 flex flex-col">
     <div class="flex-1 flex items-center justify-center px-4 py-10">
         <div class="w-full max-w-xl bg-white/90 backdrop-blur-sm border border-gray-200 shadow-xl rounded-2xl p-8 space-y-6">

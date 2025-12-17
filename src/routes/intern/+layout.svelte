@@ -1,4 +1,4 @@
-<script>
+﻿<script>
     export let data;
     import { can } from "$lib/can";
     import { onMount } from "svelte";
@@ -42,6 +42,10 @@
         }
     });
 </script>
+
+<svelte:head>
+    <title>Intern - Stamm Edelweisspiraten</title>
+</svelte:head>
 
 <div class="min-h-screen flex bg-transparent">
 
@@ -172,6 +176,7 @@
     <!-- Main Content -->
     <main class={`flex-1 p-6 pt-20 lg:pt-6 ${collapsed ? "lg:ml-20" : "lg:ml-72"} transition-all duration-200`}>
         <div class={collapsed ? "w-full px-2" : "container"}>
+            <slot/>
             <InternalFooter/>
         </div>
     </main>

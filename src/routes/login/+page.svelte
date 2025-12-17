@@ -4,6 +4,10 @@
     }
 </script>
 
+<svelte:head>
+    <title>Login - Stamm Edelweisspiraten</title>
+</svelte:head>
+
 <div class="min-h-screen w-full flex flex-col bg-gradient-to-br from-sky-50 via-white to-blue-100">
     <div class="flex-1 flex items-center justify-center p-6">
         <div class="w-full max-w-xl bg-white/90 backdrop-blur rounded-3xl shadow-2xl p-10 border border-gray-200">

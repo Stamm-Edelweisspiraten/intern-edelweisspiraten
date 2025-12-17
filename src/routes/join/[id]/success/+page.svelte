@@ -4,6 +4,10 @@
     import PublicFooter from "$lib/components/PublicFooter.svelte";
 </script>
 
+<svelte:head>
+    <title>Registrierung erfolgreich - Stamm Edelweisspiraten</title>
+</svelte:head>
+
 <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100 flex flex-col">
     <div class="flex-1 flex items-center justify-center px-4 py-10">
         <div class="bg-white/90 backdrop-blur-sm p-10 rounded-2xl shadow-xl border border-gray-200 max-w-lg w-full text-center space-y-5">
