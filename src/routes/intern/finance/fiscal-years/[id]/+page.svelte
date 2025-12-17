@@ -261,7 +261,7 @@
                 </div>
             </div>
         </div>
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto hidden xl:block">
             <table class="w-full min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                 <tr>
@@ -306,6 +306,38 @@
                 {/if}
                 </tbody>
             </table>
+        </div>
+        <div class="xl:hidden divide-y divide-gray-200">
+            {#if filteredTransactions.length === 0}
+                <div class="px-4 py-4 text-center text-sm text-gray-500">Keine passenden Transaktionen gefunden.</div>
+            {:else}
+                {#each filteredTransactions as tx}
+                    <div class="p-4 space-y-2">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-semibold text-gray-900">{tx.direction === "in" ? "Eingang" : "Ausgang"} · {tx.date?.slice(0, 10) ?? "-"}</p>
+                                <p class="text-xs text-gray-600">{tx.member ?? "-"}</p>
+                            </div>
+                            <span class={`px-3 py-1 text-xs font-semibold rounded-full border ${tx.direction === "in" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+                                {tx.direction === "in" ? "Eingang" : "Ausgang"}
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                            <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                                <p class="text-[11px] uppercase tracking-wide text-gray-500">Typ</p>
+                                <p class="font-semibold text-gray-900">{tx.kind}</p>
+                            </div>
+                            <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                                <p class="text-[11px] uppercase tracking-wide text-gray-500">Betrag</p>
+                                <p class="font-semibold text-gray-900">{euro(tx.amount ?? 0)}</p>
+                            </div>
+                        </div>
+                        {#if tx.note}
+                            <p class="text-xs text-gray-600">Notiz: {tx.note}</p>
+                        {/if}
+                    </div>
+                {/each}
+            {/if}
         </div>
     </div>
 </div>

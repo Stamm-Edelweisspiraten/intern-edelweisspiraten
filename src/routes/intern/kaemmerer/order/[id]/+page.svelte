@@ -65,7 +65,7 @@
             <span class="text-sm text-gray-500">{order.items?.length ?? 0} Artikel</span>
         </div>
 
-        <div class="hidden md:block overflow-x-auto">
+        <div class="hidden xl:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -102,7 +102,7 @@
             </table>
         </div>
 
-        <div class="md:hidden divide-y divide-gray-100">
+        <div class="xl:hidden divide-y divide-gray-100">
             {#if !order.items?.length}
                 <p class="px-4 pb-4 text-sm text-gray-500">Keine Positionen vorhanden.</p>
             {:else}

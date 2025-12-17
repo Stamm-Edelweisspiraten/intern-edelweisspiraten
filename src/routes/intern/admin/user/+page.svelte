@@ -62,7 +62,7 @@
             <span class="text-sm text-gray-500">{filteredUsers.length} Einträge</span>
         </div>
 
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto hidden xl:block">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -118,6 +118,51 @@
                 {/if}
                 </tbody>
             </table>
+        </div>
+        <div class="xl:hidden divide-y divide-gray-200">
+            {#if filteredUsers.length === 0}
+                <div class="px-4 py-4 text-sm text-gray-500 text-center">Keine Benutzer gefunden.</div>
+            {:else}
+                {#each filteredUsers as user}
+                    <div class="p-4 space-y-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-lg font-semibold text-gray-900">{user.name}</p>
+                                <p class="text-sm text-gray-700">{user.email}</p>
+                                <p class="text-xs text-gray-500 mt-1">{getMemberName(user.memberId) || "-"}</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap justify-end gap-2 text-xs">
+                            <a
+                                    href={`/intern/admin/user/${user.id}`}
+                                    class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+                                    aria-label="Benutzer ansehen"
+                            >
+                                <span class="bi bi-eye"></span> Ansehen
+                            </a>
+                            <a
+                                    href={`/intern/admin/user/${user.id}?scope=edit`}
+                                    class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
+                                    aria-label="Benutzer bearbeiten"
+                            >
+                                <span class="bi bi-pencil"></span> Bearbeiten
+                            </a>
+                            <form method="post" action="?/delete" class="inline" on:submit={(e) => {
+                                if (!confirm("Willst du diesen Benutzer wirklich loeschen?")) e.preventDefault();
+                            }}>
+                                <input type="hidden" name="id" value={user.id} />
+                                <button
+                                        type="submit"
+                                        class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 shadow-sm"
+                                        aria-label="Benutzer loeschen"
+                                >
+                                    <span class="bi bi-trash"></span> Loeschen
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {/each}
+            {/if}
         </div>
     </div>
 </div>

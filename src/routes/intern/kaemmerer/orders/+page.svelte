@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     export let data;
 
     const euro = (v: number) => `${(Number(v) || 0).toFixed(2)} EUR`;
@@ -41,11 +41,11 @@
                     <button type="submit" class="px-3 py-2 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50">Anwenden</button>
                 </form>
             </div>
-            <span class="text-sm text-gray-500">{orders.length} Einträge</span>
+            <span class="text-sm text-gray-500">{orders.length} EintrÃ¤ge</span>
         </div>
 
         <!-- Desktop table -->
-        <div class="hidden md:block overflow-x-auto">
+        <div class="hidden xl:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -103,7 +103,7 @@
         </div>
 
         <!-- Mobile cards -->
-        <div class="md:hidden space-y-3">
+        <div class="xl:hidden space-y-3">
             {#if orders.length === 0}
                 <div class="text-sm text-gray-500 text-center py-4 border border-dashed border-gray-200 rounded-xl">Keine Bestellungen gefunden.</div>
             {:else}
@@ -142,7 +142,7 @@
                                 </select>
                             </div>
                             <div class="flex flex-wrap gap-2">
-                                <a href={`/intern/kaemmerer/orders/${order.id}`} class="flex-1 text-center px-3 py-2 text-xs rounded-lg border border-gray-200 text-gray-800 hover:bg-gray-50">Öffnen</a>
+                                <a href={`/intern/kaemmerer/orders/${order.id}`} class="flex-1 text-center px-3 py-2 text-xs rounded-lg border border-gray-200 text-gray-800 hover:bg-gray-50">Ã–ffnen</a>
                                 <button type="submit" class="flex-1 text-center px-3 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Update</button>
                             </div>
                         </form>

@@ -52,7 +52,7 @@
             <h2 class="text-lg font-semibold text-gray-900">Artikel im Lager</h2>
             <span class="text-sm text-gray-500">{articles.length} Eintraege</span>
         </div>
-        <div class="hidden md:block overflow-x-auto">
+        <div class="hidden xl:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -132,7 +132,7 @@
             </table>
         </div>
 
-        <div class="md:hidden px-4 pb-5 space-y-4">
+        <div class="xl:hidden px-4 pb-5 space-y-4">
             {#if articles.length === 0}
                 <p class="text-sm text-gray-500 px-2">Keine Artikel vorhanden.</p>
             {:else}

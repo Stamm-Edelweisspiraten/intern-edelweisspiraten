@@ -116,7 +116,7 @@
                         </div>
                     </div>
 
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto hidden xl:block">
                         <table class="min-w-full divide-y divide-gray-200 text-sm">
                             <thead class="bg-gray-50">
                             <tr>
@@ -146,7 +146,7 @@
                                                 <div class="text-xs text-gray-500">bezahlt: {euro(item.paid)}</div>
                                             {/if}
                                         </td>
-                                        <td class="px-4 py-3 text-gray-600">{item.note || "—"}</td>
+                                        <td class="px-4 py-3 text-gray-600">{item.note || "-"}</td>
                                         <td class="px-4 py-3 text-right">
                                             <button
                                                     type="button"
@@ -162,6 +162,48 @@
                             {/if}
                             </tbody>
                         </table>
+                    </div>
+                    <div class="xl:hidden divide-y divide-gray-200">
+                        {#if block.items.length === 0}
+                            <p class="text-sm text-gray-500 py-3">Keine offenen Positionen.</p>
+                        {:else}
+                            {#each block.items as item}
+                                <div class="py-3 space-y-2">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p class="text-base font-semibold text-gray-900">{item.title}</p>
+                                            <p class="text-xs text-gray-500">#{item.invoiceId?.slice(0, 6) ?? item.id.slice(0, 6)}</p>
+                                        </div>
+                                        <span class="px-3 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-gray-50 text-gray-700">
+                                            {item.type}
+                                        </span>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                                        <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                                            <p class="text-[11px] uppercase tracking-wide text-gray-500">Offen</p>
+                                            <p class="font-semibold text-gray-900">{euro(item.amount)}</p>
+                                            {#if item.paid > 0}
+                                                <p class="text-xs text-gray-500">bezahlt: {euro(item.paid)}</p>
+                                            {/if}
+                                        </div>
+                                        <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                                            <p class="text-[11px] uppercase tracking-wide text-gray-500">Hinweis</p>
+                                            <p class="font-semibold text-gray-900">{item.note || "-"}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-end">
+                                        <button
+                                                type="button"
+                                                class="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition"
+                                                on:click={() => openModal(item, block)}
+                                        >
+                                            <span class="bi bi-check2-circle"></span>
+                                            Hat bezahlt
+                                        </button>
+                                    </div>
+                                </div>
+                            {/each}
+                        {/if}
                     </div>
                 </div>
             {/each}

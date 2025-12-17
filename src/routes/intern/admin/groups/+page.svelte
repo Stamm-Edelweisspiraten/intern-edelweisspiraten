@@ -56,7 +56,7 @@
             <span class="text-sm text-gray-500">{filteredGroups.length} Einträge</span>
         </div>
 
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto hidden xl:block">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -92,6 +92,31 @@
                 {/if}
                 </tbody>
             </table>
+        </div>
+        <div class="xl:hidden divide-y divide-gray-200">
+            {#if filteredGroups.length === 0}
+                <div class="px-4 py-4 text-sm text-gray-500 text-center">Keine Gruppen gefunden.</div>
+            {:else}
+                {#each filteredGroups as group}
+                    <div class="p-4 space-y-2">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-lg font-semibold text-gray-900">{group.name}</p>
+                                <p class="text-sm text-gray-700 capitalize">{group.type}</p>
+                                <p class="text-xs text-gray-500">{group.meeting_time}</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-end">
+                            <a
+                                    href={`/intern/admin/groups/${group.id}`}
+                                    class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
+                            >
+                                <span class="bi bi-box-arrow-in-right"></span> Oeffnen
+                            </a>
+                        </div>
+                    </div>
+                {/each}
+            {/if}
         </div>
     </div>
 </div>

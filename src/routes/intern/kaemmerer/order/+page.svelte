@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     export let data;
 
     const euro = (v: number) => `${(Number(v) || 0).toFixed(2)} EUR`;
@@ -31,11 +31,11 @@
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
         <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold text-gray-900">Bestellungen</h2>
-            <span class="text-sm text-gray-500">{orders.length} Einträge</span>
+            <span class="text-sm text-gray-500">{orders.length} EintrÃ¤ge</span>
         </div>
 
         <!-- Desktop table -->
-        <div class="hidden md:block overflow-x-auto">
+        <div class="hidden xl:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -80,7 +80,7 @@
         </div>
 
         <!-- Mobile cards -->
-        <div class="md:hidden space-y-3">
+        <div class="xl:hidden space-y-3">
             {#if orders.length === 0}
                 <div class="text-sm text-gray-500 text-center py-4 border border-dashed border-gray-200 rounded-xl">Keine Bestellungen gefunden.</div>
             {:else}
@@ -104,7 +104,7 @@
                         </div>
                         <div class="mt-2 text-sm font-semibold text-gray-900">Gesamt: {euro(order.total)}</div>
                         <div class="mt-3 flex flex-wrap gap-2">
-                            <a href={`/intern/kaemmerer/order/${order.id}`} class="flex-1 text-center px-3 py-2 text-xs rounded-lg border border-gray-200 text-gray-800 hover:bg-gray-50">Öffnen</a>
+                            <a href={`/intern/kaemmerer/order/${order.id}`} class="flex-1 text-center px-3 py-2 text-xs rounded-lg border border-gray-200 text-gray-800 hover:bg-gray-50">Ã–ffnen</a>
                         </div>
                     </div>
                 {/each}

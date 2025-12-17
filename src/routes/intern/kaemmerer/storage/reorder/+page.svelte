@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
     export let data;
     const reorder = data.reorder ?? [];
 </script>
@@ -8,12 +8,12 @@
         <div>
             <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Kaemmerer</p>
             <h1 class="text-3xl font-bold text-gray-900">Bestellliste</h1>
-            <p class="text-sm text-gray-600 mt-1">Fehlmengen bis Mindestbestand, pro Artikel und Größe.</p>
+            <p class="text-sm text-gray-600 mt-1">Fehlmengen bis Mindestbestand, pro Artikel und GrÃ¶ÃŸe.</p>
         </div>
         <div class="flex items-center gap-3 flex-wrap">
             <a href="/intern/kaemmerer/storage" class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition">
                 <span class="bi bi-arrow-left"></span>
-                Zurück ins Lager
+                ZurÃ¼ck ins Lager
             </a>
         </div>
     </div>
@@ -26,12 +26,12 @@
             </div>
             <span class="text-sm text-gray-500">{reorder.length} Positionen</span>
         </div>
-        <div class="hidden md:block overflow-x-auto">
+        <div class="hidden xl:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Artikel</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Größe</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">GrÃ¶ÃŸe</th>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Bestand</th>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Mindestbestand</th>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fehlmenge</th>
@@ -41,7 +41,7 @@
                 <tbody class="bg-white divide-y divide-gray-200">
                 {#if reorder.length === 0}
                     <tr>
-                        <td colspan="6" class="px-6 py-6 text-center text-sm text-gray-500">Keine Fehlmengen – alle Artikel sind mindestens auf Zielbestand.</td>
+                        <td colspan="6" class="px-6 py-6 text-center text-sm text-gray-500">Keine Fehlmengen â€“ alle Artikel sind mindestens auf Zielbestand.</td>
                     </tr>
                 {:else}
                     {#each reorder as row}
@@ -68,16 +68,16 @@
             </table>
         </div>
 
-        <div class="md:hidden px-4 pb-6 space-y-4">
+        <div class="xl:hidden px-4 pb-6 space-y-4">
             {#if reorder.length === 0}
-                <p class="text-sm text-gray-500 px-2">Keine Fehlmengen – alle Artikel sind mindestens auf Zielbestand.</p>
+                <p class="text-sm text-gray-500 px-2">Keine Fehlmengen â€“ alle Artikel sind mindestens auf Zielbestand.</p>
             {:else}
                 {#each reorder as row}
                     <div class="border border-gray-200 rounded-2xl p-4 shadow-sm space-y-2">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-base font-semibold text-gray-900">{row.name}</p>
-                                <p class="text-xs text-gray-500 mt-1">Größe: {row.size ?? "-"}</p>
+                                <p class="text-xs text-gray-500 mt-1">GrÃ¶ÃŸe: {row.size ?? "-"}</p>
                             </div>
                             <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-amber-200 bg-amber-50 text-amber-700">
                                 -{row.missing}
@@ -96,7 +96,7 @@
                         {#if row.orderUrl}
                             <a href={row.orderUrl} target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-800">
                                 <span class="bi bi-box-arrow-up-right"></span>
-                                Bestell-URL öffnen
+                                Bestell-URL Ã¶ffnen
                             </a>
                         {/if}
                     </div>

@@ -27,7 +27,7 @@
                 <h2 class="text-lg font-semibold text-gray-900">Aktiv</h2>
                 <span class="text-sm text-gray-500">{active.length} Eintraege</span>
             </div>
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto hidden xl:block">
                 <table class="w-full min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                     <tr>
@@ -79,6 +79,61 @@
                     </tbody>
                 </table>
             </div>
+            <div class="xl:hidden divide-y divide-gray-200 px-4 pb-4">
+                {#if active.length === 0}
+                    <p class="text-sm text-gray-500 py-4 text-center">Noch keine aktiven Geschaeftsjahre.</p>
+                {:else}
+                    {#each active as fy}
+                        <div class="border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3 mt-3 bg-white">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <p class="text-lg font-semibold text-gray-900">{fy.year}</p>
+                                </div>
+                                <span class="px-3 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-gray-50 text-gray-700">
+                                    {fy.transactionCount} Transaktionen
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                                <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Stamm</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.dues.stamm)}</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Gau</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.dues.gau)}</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Landesmark</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.dues.landesmark)}</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Bund</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.dues.bund)}</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap justify-end gap-2">
+                                <a
+                                        href={`/intern/finance/fiscal-years/${fy.id}`}
+                                        class="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition"
+                                >
+                                    <span class="bi bi-eye"></span>
+                                    Anzeigen
+                                </a>
+                                <form method="post" action="?/archive" class="inline">
+                                    <input type="hidden" name="id" value={fy.id} />
+                                    <button
+                                            type="submit"
+                                            class="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg transition"
+                                    >
+                                        <span class="bi bi-archive"></span>
+                                        Archivieren
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    {/each}
+                {/if}
+            </div>
         </div>
 
         <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
@@ -86,7 +141,7 @@
                 <h2 class="text-lg font-semibold text-gray-900">Archiv</h2>
                 <span class="text-sm text-gray-500">{archived.length} Eintraege</span>
             </div>
-            <div class="overflow-x-auto">
+            <div class="overflow-x-auto hidden xl:block">
                 <table class="w-full min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                     <tr>
@@ -128,6 +183,51 @@
                     {/if}
                     </tbody>
                 </table>
+            </div>
+            <div class="xl:hidden divide-y divide-gray-200 px-4 pb-4">
+                {#if archived.length === 0}
+                    <p class="text-sm text-gray-500 py-4 text-center">Noch keine archivierten Geschaeftsjahre.</p>
+                {:else}
+                    {#each archived as fy}
+                        <div class="border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3 mt-3 bg-gray-50 text-gray-700">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <p class="text-lg font-semibold text-gray-900">{fy.year}</p>
+                                </div>
+                                <span class="px-3 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-white">
+                                    {fy.transactionCount} Transaktionen
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-sm">
+                                <div class="px-3 py-2 rounded-xl bg-white border border-gray-200">
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Stamm</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.dues.stamm)}</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-white border border-gray-200">
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Gau</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.dues.gau)}</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-white border border-gray-200">
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Landesmark</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.dues.landesmark)}</p>
+                                </div>
+                                <div class="px-3 py-2 rounded-xl bg-white border border-gray-200">
+                                    <p class="text-[11px] uppercase tracking-wide text-gray-500">Bund</p>
+                                    <p class="font-semibold text-gray-900">{euro(fy.dues.bund)}</p>
+                                </div>
+                            </div>
+                            <div class="flex justify-end">
+                                <a
+                                        href={`/intern/finance/fiscal-years/${fy.id}`}
+                                        class="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition"
+                                >
+                                    <span class="bi bi-eye"></span>
+                                    Anzeigen
+                                </a>
+                            </div>
+                        </div>
+                    {/each}
+                {/if}
             </div>
         </div>
     </div>
