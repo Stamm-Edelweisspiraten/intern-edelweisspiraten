@@ -28,12 +28,14 @@
         </a>
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-        <div class="px-6 py-4 flex items-center justify-between">
+    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
+        <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold text-gray-900">Bestellungen</h2>
-            <span class="text-sm text-gray-500">{orders.length} Eintraege</span>
+            <span class="text-sm text-gray-500">{orders.length} Einträge</span>
         </div>
-        <div class="overflow-x-auto">
+
+        <!-- Desktop table -->
+        <div class="hidden md:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -75,6 +77,38 @@
                 {/if}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Mobile cards -->
+        <div class="md:hidden space-y-3">
+            {#if orders.length === 0}
+                <div class="text-sm text-gray-500 text-center py-4 border border-dashed border-gray-200 rounded-xl">Keine Bestellungen gefunden.</div>
+            {:else}
+                {#each orders as order}
+                    <div class="border border-gray-200 rounded-xl p-4 shadow-sm bg-white">
+                        <div class="flex items-center justify-between">
+                            <div class="text-sm font-semibold text-gray-900">#{order.number}</div>
+                            <span class={`px-2.5 py-1 text-[11px] font-semibold rounded-full border ${statusTone(order.status)}`}>{order.status}</span>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-700">
+                            <div class="font-semibold text-gray-900">Mitglieder</div>
+                            <div class="flex flex-wrap gap-1 mt-1">
+                                {#each order.members as member}
+                                    <span class="px-2 py-1 rounded-full border border-gray-200 bg-gray-50">{member.name}</span>
+                                {/each}
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-700">
+                            <div class="font-semibold text-gray-900">Datum</div>
+                            <div>{order.createdAt?.slice(0, 10) ?? "-"}</div>
+                        </div>
+                        <div class="mt-2 text-sm font-semibold text-gray-900">Gesamt: {euro(order.total)}</div>
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <a href={`/intern/kaemmerer/order/${order.id}`} class="flex-1 text-center px-3 py-2 text-xs rounded-lg border border-gray-200 text-gray-800 hover:bg-gray-50">Öffnen</a>
+                        </div>
+                    </div>
+                {/each}
+            {/if}
         </div>
     </div>
 </div>
