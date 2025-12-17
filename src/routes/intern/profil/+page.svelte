@@ -75,13 +75,6 @@
                                 {/if}
                             </div>
                         </div>
-                        {#if member.groups?.length}
-                            <div class="flex flex-wrap gap-2 text-xs">
-                                {#each member.groups as g}
-                                    <span class="px-3 py-1 rounded-full border border-gray-200 bg-white text-gray-700">{g}</span>
-                                {/each}
-                            </div>
-                        {/if}
                     </div>
                 {/each}
             </div>
