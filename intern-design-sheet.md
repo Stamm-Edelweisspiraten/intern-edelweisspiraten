@@ -47,6 +47,13 @@ Ableitung aus den Finance-Screens (`/intern/finance`, `/intern/finance/outstandi
 - CTA-Positionierung: In Seitenkopf immer rechts neben dem Titelbereich; auf Mobile umbrechen, Reihenfolge beibehalten. Innerhalb von Karten stehen Aktionen oben rechts oder unten rechts, nie mittig.
 - Kopf-Leiste: Zurueck-Button (neutral) + Primaer-CTA mit Icon+Label; Abstaende `gap-2/3`, Buttons `px-4 py-3 rounded-xl`.
 
+## Responsive Leitplanken
+- Breakpoint-Policy: Tabellen erst ab `xl`; darunter Karten-/Stack-Ansicht beibehalten (`hidden xl:block` fuer Tabellen, `xl:hidden` fuer Cards), damit iPad quer + kleine Laptops nicht ueberlaufen.
+- Kopfzeilen: immer `flex-wrap gap-4`; Buttons/Suchen auf Mobile vollbreit (`w-full sm:w-auto`), Suchfelder max `w-60` nur auf grossen Screens.
+- Grids: Stats `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`; Formulare einspaltig, erst ab `md`/`lg` zweispaltig.
+- Karteninhalte: Werte in kleinen Kacheln (`grid grid-cols-2 gap-2`) statt Spalten; Aktionen rechtsbuendig, aber untereinander stapelbar.
+- Sidebar: desktop einklappbar (Content nutzt volle Breite), mobile Drawer; keine horizontale Scroll auf Content.
+
 ## Beispiel-Skeleton (Svelte)
 ```svelte
 <script lang="ts">
