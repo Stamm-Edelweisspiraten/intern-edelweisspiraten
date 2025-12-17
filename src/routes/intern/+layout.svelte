@@ -175,8 +175,10 @@
 
     <!-- Main Content -->
     <main class={`flex-1 p-6 pt-20 lg:pt-6 ${collapsed ? "lg:ml-20" : "lg:ml-72"} transition-all duration-200`}>
-        <div class={collapsed ? "w-full px-2" : "container"}>
-            <slot/>
+        <div class={`${collapsed ? "w-full px-2" : "container"} min-h-[calc(100vh-140px)] flex flex-col`}>
+            <div class="flex-1">
+                <slot/>
+            </div>
             <InternalFooter/>
         </div>
     </main>
