@@ -98,7 +98,7 @@
 
 
     <!-- Mobile Sidebar -->
-    <div class={`fixed inset-0 z-40 transition ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"}`}>
+    <div class={`fixed inset-0 z-40 transition ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"}`} aria-hidden={!mobileOpen}>
         <div
                 class={`absolute inset-0 bg-black bg-opacity-40 transition-opacity duration-200 ${mobileOpen ? "opacity-100" : "opacity-0"}`}
                 on:click={() => (mobileOpen = false)}
@@ -106,20 +106,25 @@
 
         <aside
                 class={`fixed top-0 left-0 h-full w-full bg-white border-b border-gray-200 shadow-2xl p-5 z-50 transform transition-transform duration-200 ${mobileOpen ? "translate-y-0" : "-translate-y-full"}`}
+                role="dialog"
+                aria-modal="true"
         >
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold text-blue-600">Menü</h2>
+                <div>
+                    <p class="text-[11px] uppercase tracking-[0.2em] text-gray-400 font-semibold">Navigation</p>
+                    <h2 class="text-xl font-bold text-blue-600">Menü</h2>
+                </div>
                 <button class="text-3xl leading-none" on:click={() => (mobileOpen = false)} aria-label="Menü schließen">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pb-4">
                 {#each visibleNav as item}
                     <a
                             href={item.href}
                             on:click={() => (mobileOpen = false)}
-                            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-600 font-medium transition border border-gray-100"
+                            class="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-800 hover:bg-blue-50 hover:text-blue-600 font-semibold transition border border-gray-200 active:translate-y-[1px]"
                     >
                         <i class={`bi bi-${item.icon} text-lg text-gray-400`} aria-hidden="true"></i>
                         <span>{item.name}</span>
