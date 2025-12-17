@@ -52,7 +52,7 @@
             <h2 class="text-lg font-semibold text-gray-900">Artikel im Lager</h2>
             <span class="text-sm text-gray-500">{articles.length} Eintraege</span>
         </div>
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -130,6 +130,74 @@
                 {/if}
                 </tbody>
             </table>
+        </div>
+
+        <div class="md:hidden px-4 pb-5 space-y-4">
+            {#if articles.length === 0}
+                <p class="text-sm text-gray-500 px-2">Keine Artikel vorhanden.</p>
+            {:else}
+                {#each articles as article}
+                    <div class={`border rounded-2xl p-4 shadow-sm space-y-3 ${lowStock(article) ? "border-amber-200 bg-amber-50/60" : "border-gray-200 bg-white"}`}>
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-base font-semibold text-gray-900">{article.name}</p>
+                                {#if article.sizes?.length}
+                                    <p class="text-xs text-gray-500 mt-1">Gesamt: {sizeTotal(article.sizes)}</p>
+                                {:else}
+                                    <p class="text-xs text-gray-500 mt-1">Bestand: {article.stock ?? 0}</p>
+                                {/if}
+                            </div>
+                            {#if lowStock(article)}
+                                <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-amber-200 bg-amber-50 text-amber-700 inline-flex items-center gap-1">
+                                    <span class="bi bi-exclamation-diamond"></span> Niedrig
+                                </span>
+                            {:else}
+                                <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 inline-flex items-center gap-1">
+                                    <span class="bi bi-check-circle"></span> OK
+                                </span>
+                            {/if}
+                        </div>
+
+                        {#if article.sizes?.length}
+                            <div class="flex flex-wrap gap-2">
+                                {#each article.sizes as size}
+                                    <span class={`px-2 py-1 text-[11px] rounded-full border ${Number(size.stock) === 0 ? "border-amber-200 bg-amber-50/60 text-amber-800" : "border-sky-200 bg-sky-50 text-sky-800"} inline-flex items-center gap-2`}>
+                                        {size.name}: {size.stock ?? 0}
+                                    </span>
+                                {/each}
+                            </div>
+                        {/if}
+
+                        <div class="flex flex-wrap gap-2 text-xs text-gray-700">
+                            <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50 inline-flex items-center gap-2">
+                                <span class="bi bi-exclamation-diamond text-gray-500"></span> Mindestbestand {article.minStock ?? 0}
+                            </span>
+                            <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50 inline-flex items-center gap-2">
+                                <span class="bi bi-box-seam text-gray-500"></span> Gesamt {articleStock(article)}
+                            </span>
+                        </div>
+
+                        <div class="space-y-2">
+                            <form method="post" action="?/adjust" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <input type="hidden" name="id" value={article.id} />
+                                {#if article.sizes?.length}
+                                    <select name="size" class="border border-gray-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500">
+                                        {#each article.sizes as size}
+                                            <option value={size.name}>{size.name} ({size.stock ?? 0})</option>
+                                        {/each}
+                                    </select>
+                                {/if}
+                                <input type="number" name="delta" step="1" class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="+/-" />
+                                <button type="submit" class="px-3 py-2 font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg sm:col-span-2">Anpassen</button>
+                            </form>
+                            <a href={`/intern/kaemmerer/articles/${article.id}`} class="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold border border-blue-200 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100">
+                                <span class="bi bi-box"></span>
+                                Details
+                            </a>
+                        </div>
+                    </div>
+                {/each}
+            {/if}
         </div>
     </div>
 </div>

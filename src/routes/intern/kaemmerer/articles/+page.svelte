@@ -100,7 +100,7 @@
             <h2 class="text-lg font-semibold text-gray-900">Artikel</h2>
             <span class="text-sm text-gray-500">{articles.length} Eintraege</span>
         </div>
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -190,6 +190,95 @@
                 {/if}
                 </tbody>
             </table>
+        </div>
+
+        <div class="md:hidden px-4 pb-6 space-y-4">
+            {#if articles.length === 0}
+                <p class="text-sm text-gray-500 px-2 pb-2">Keine Artikel vorhanden.</p>
+            {:else}
+                {#each articles as article}
+                    <div class="border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="space-y-1">
+                                <p class="text-lg font-semibold text-gray-900">{article.name}</p>
+                                {#if article.description}
+                                    <p class="text-sm text-gray-600">{article.description}</p>
+                                {/if}
+                                {#if article.orderUrl}
+                                    <a class="inline-flex items-center gap-1 text-sm text-blue-700 hover:text-blue-800" href={article.orderUrl} target="_blank" rel="noreferrer">
+                                        <span class="bi bi-link-45deg"></span> Gesamt-Bestelllink
+                                    </a>
+                                {/if}
+                            </div>
+                            {#if article.active !== false}
+                                <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">Aktiv</span>
+                            {:else}
+                                <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-gray-200 bg-gray-50 text-gray-600">Inaktiv</span>
+                            {/if}
+                        </div>
+
+                        <div class="flex items-center flex-wrap gap-3 text-sm text-gray-700">
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-200 bg-gray-50">
+                                <span class="bi bi-cash-coin text-gray-500"></span> {euro(article.price)}
+                            </span>
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-200 bg-gray-50">
+                                <span class="bi bi-box-seam text-gray-500"></span> Bestand: {article.stock ?? 0}
+                            </span>
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-200 bg-gray-50">
+                                <span class="bi bi-exclamation-diamond text-gray-500"></span> Min: {article.minStock ?? 0}
+                            </span>
+                        </div>
+
+                        {#if article.sizes?.length}
+                            <div class="flex flex-wrap gap-2">
+                                {#each article.sizes as size}
+                                    <span class="px-2 py-1 text-[11px] rounded-full border border-sky-200 bg-sky-50 text-sky-800 font-semibold inline-flex items-center gap-2">
+                                        {size.name} ({euro(size.price)})
+                                        {#if size.orderUrl}
+                                            <a href={size.orderUrl} target="_blank" rel="noreferrer" class="text-blue-700 hover:text-blue-800">
+                                                <span class="bi bi-box-arrow-up-right"></span>
+                                            </a>
+                                        {/if}
+                                    </span>
+                                {/each}
+                            </div>
+                        {/if}
+
+                        <div class="space-y-2">
+                            <a href={`/intern/kaemmerer/articles/${article.id}`} class="w-full inline-flex justify-center items-center gap-2 px-3 py-2 text-sm font-semibold border border-blue-200 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100">
+                                <span class="bi bi-box"></span>
+                                Details
+                            </a>
+                            <form method="post" action="?/update" class="grid grid-cols-1 gap-2 text-xs">
+                                <input type="hidden" name="id" value={article.id} />
+                                <input type="text" name="name" value={article.name} class="border border-gray-300 rounded-lg px-3 py-2" placeholder="Name" />
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="number" step="0.01" name="price" value={article.price} class="border border-gray-300 rounded-lg px-3 py-2" placeholder="Preis" />
+                                    <input type="number" name="minStock" value={article.minStock ?? 0} class="border border-gray-300 rounded-lg px-3 py-2" placeholder="Mindestbestand" />
+                                </div>
+                                <input type="text" name="sizes" value={formatSizeList(article.sizes)} placeholder="S=0|5|https://..." class="border border-gray-300 rounded-lg px-3 py-2" />
+                                <input type="text" name="orderUrl" value={article.orderUrl ?? ""} placeholder="Gesamt-Bestell-URL" class="border border-gray-300 rounded-lg px-3 py-2" />
+                                <input type="text" name="description" value={article.description} class="border border-gray-300 rounded-lg px-3 py-2" placeholder="Beschreibung" />
+                                <button type="submit" class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold">Update</button>
+                            </form>
+                            <div class="flex flex-col gap-2 text-xs">
+                                <form method="post" action="?/toggle" class="flex items-center gap-2">
+                                    <input type="hidden" name="id" value={article.id} />
+                                    <input type="hidden" name="active" value={article.active === false ? "true" : "false"} />
+                                    <button type="submit" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 font-semibold">
+                                        {article.active === false ? "Aktivieren" : "Deaktivieren"}
+                                    </button>
+                                </form>
+                                <form method="post" action="?/stock" class="flex items-center gap-2">
+                                    <input type="hidden" name="id" value={article.id} />
+                                    <input type="number" name="delta" step="1" class="w-24 border border-gray-300 rounded-lg px-3 py-2" placeholder="+/-" />
+                                    <button type="submit" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 font-semibold">Bestand anpassen</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {/each}
+            {/if}
         </div>
     </div>
 </div>

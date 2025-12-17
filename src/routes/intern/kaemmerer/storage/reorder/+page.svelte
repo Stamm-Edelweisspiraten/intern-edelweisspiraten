@@ -26,7 +26,7 @@
             </div>
             <span class="text-sm text-gray-500">{reorder.length} Positionen</span>
         </div>
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -66,6 +66,42 @@
                 {/if}
                 </tbody>
             </table>
+        </div>
+
+        <div class="md:hidden px-4 pb-6 space-y-4">
+            {#if reorder.length === 0}
+                <p class="text-sm text-gray-500 px-2">Keine Fehlmengen – alle Artikel sind mindestens auf Zielbestand.</p>
+            {:else}
+                {#each reorder as row}
+                    <div class="border border-gray-200 rounded-2xl p-4 shadow-sm space-y-2">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-base font-semibold text-gray-900">{row.name}</p>
+                                <p class="text-xs text-gray-500 mt-1">Größe: {row.size ?? "-"}</p>
+                            </div>
+                            <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-amber-200 bg-amber-50 text-amber-700">
+                                -{row.missing}
+                            </span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                            <div class="flex items-center gap-2">
+                                <span class="bi bi-box text-gray-400"></span>
+                                Bestand: {row.stock}
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="bi bi-exclamation-diamond text-gray-400"></span>
+                                Mindestbestand: {row.minStock}
+                            </div>
+                        </div>
+                        {#if row.orderUrl}
+                            <a href={row.orderUrl} target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-800">
+                                <span class="bi bi-box-arrow-up-right"></span>
+                                Bestell-URL öffnen
+                            </a>
+                        {/if}
+                    </div>
+                {/each}
+            {/if}
         </div>
     </div>
 </div>

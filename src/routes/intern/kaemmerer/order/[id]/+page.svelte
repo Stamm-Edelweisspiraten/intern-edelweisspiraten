@@ -21,7 +21,7 @@
 
 <div class="max-w-6xl mx-auto mt-16 space-y-8">
     <div class="flex items-center justify-between flex-wrap gap-3 text-sm text-gray-600">
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3 flex-wrap">
             <a href="/intern/kaemmerer/order" class="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-gray-800 bg-white hover:bg-gray-50 shadow-sm transition">
                 <i class="bi bi-arrow-left"></i>
                 Zur Übersicht
@@ -65,7 +65,7 @@
             <span class="text-sm text-gray-500">{order.items?.length ?? 0} Artikel</span>
         </div>
 
-        <div class="overflow-x-auto">
+        <div class="hidden md:block overflow-x-auto">
             <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-gray-50">
                 <tr>
@@ -100,6 +100,40 @@
                 </tr>
                 </tfoot>
             </table>
+        </div>
+
+        <div class="md:hidden divide-y divide-gray-100">
+            {#if !order.items?.length}
+                <p class="px-4 pb-4 text-sm text-gray-500">Keine Positionen vorhanden.</p>
+            {:else}
+                {#each order.items as item}
+                    <div class="p-4 space-y-2">
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-base font-semibold text-gray-900">{item.name}</p>
+                                <p class="text-xs text-gray-500 flex items-center gap-1">
+                                    <span class="bi bi-rulers"></span> Größe: {item.size ?? "-"}
+                                </p>
+                            </div>
+                            <span class="text-sm font-semibold text-gray-900">{euro(item.total)}</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
+                            <div class="flex items-center gap-2">
+                                <span class="bi bi-hash text-gray-400"></span>
+                                Menge: {item.quantity}
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="bi bi-tag text-gray-400"></span>
+                                {euro(item.price)} / Stk
+                            </div>
+                        </div>
+                    </div>
+                {/each}
+                <div class="px-4 py-3 bg-gray-50 flex items-center justify-between text-sm font-semibold text-gray-900 rounded-b-2xl">
+                    <span>Summe</span>
+                    <span>{euro(order.total)}</span>
+                </div>
+            {/if}
         </div>
     </div>
 </div>
