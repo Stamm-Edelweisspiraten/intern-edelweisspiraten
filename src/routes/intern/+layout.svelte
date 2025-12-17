@@ -174,8 +174,8 @@
 
 
     <!-- Main Content -->
-    <main class={`flex-1 p-6 pt-20 lg:pt-6 ${collapsed ? "lg:ml-20" : "lg:ml-72"} transition-all duration-200`}>
-        <div class={`${collapsed ? "w-full px-2" : "container"} min-h-[calc(100vh-140px)] flex flex-col`}>
+    <main class={`flex-1 min-h-screen flex flex-col p-6 pt-20 lg:pt-6 ${collapsed ? "lg:ml-20" : "lg:ml-72"} transition-all duration-200`}>
+        <div class={`${collapsed ? "w-full px-2" : "container"} flex-1 flex flex-col`}>
             <div class="flex-1">
                 <slot/>
             </div>
