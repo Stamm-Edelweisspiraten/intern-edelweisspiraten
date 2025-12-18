@@ -9,7 +9,7 @@
     const hasPerm = (p: string) => permissions.includes("*") || permissions.includes(p);
 
     const canCreate = hasPerm("members.create");
-    const canEdit = hasPerm("members.edit") || hasPerm("members.group.edit");
+    const canEdit = hasPerm("members.edit") || hasPerm("groupleader.members.edit");
     const groupMap = new Map((data.groupNames ?? data.groups ?? []).map((g) => [g.id, g.name]));
     let selected = new Set<string>();
     let allSelected = false;

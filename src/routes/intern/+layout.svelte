@@ -25,8 +25,8 @@
         { name: "Adminbereich", href: "/intern/admin", perm: "admin.view", icon: "gear-fill" }
     ];
 
-    const canViewMembers = can(permissions, "members.view") || can(permissions, "members.group.view");
-    const canViewGroups = can(permissions, "groups.view") || can(permissions, "groups.group.view");
+    const canViewMembers = can(permissions, "members.view") || can(permissions, "groupleader.members.view");
+    const canViewGroups = can(permissions, "groups.view") || can(permissions, "groupleader.groups.view");
 
     const visibleNav = [
         ...baseNav.filter((item) => !item.perm || can(permissions, item.perm)),

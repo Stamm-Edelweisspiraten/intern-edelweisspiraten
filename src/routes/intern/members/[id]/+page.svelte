@@ -4,8 +4,8 @@
     const permissions: string[] = data.permissions ?? [];
     const hasPerm = (p: string) => permissions.includes("*") || permissions.includes(p);
 
-    const canEdit = hasPerm("members.edit") || hasPerm("members.group.edit");
-    const canDelete = hasPerm("members.delete") || hasPerm("members.group.delete");
+    const canEdit = hasPerm("members.edit") || hasPerm("groupleader.members.edit");
+    const canDelete = hasPerm("members.delete") || hasPerm("groupleader.members.delete");
     const groupMap = new Map((data.groupNames ?? data.groups ?? []).map((g) => [g.id, g.name]));
     const mode = data.scope === "edit" && canEdit ? "edit" : "view";
     const disabled = mode === "view" ? true : undefined;

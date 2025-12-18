@@ -6,7 +6,7 @@ import { error } from "@sveltejs/kit";
 export const load: PageServerLoad = async (event) => {
     const perms = event.locals.permissions ?? [];
     const canAll = hasPermission(perms, "groups.view");
-    const canGroup = hasPermission(perms, "groups.group.view");
+    const canGroup = hasPermission(perms, "groupleader.groups.view");
     if (!canAll && !canGroup) throw error(403, "Keine Berechtigung");
 
     const groupsAll = await getAllGroups();

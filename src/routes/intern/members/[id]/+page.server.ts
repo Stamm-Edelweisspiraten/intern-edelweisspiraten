@@ -10,7 +10,7 @@ import { saveMemberFile, deleteMemberFile } from "$lib/server/fileStore";
 export const load: PageServerLoad = async ({ params, url, locals }) => {
     const perms = locals.permissions ?? [];
     const canAll = hasPermission(perms, "members.view");
-    const canGroup = hasPermission(perms, "members.group.view");
+    const canGroup = hasPermission(perms, "groupleader.members.view");
     if (!canAll && !canGroup) throw error(403, "Keine Berechtigung");
 
     const id = params.id;
@@ -97,7 +97,7 @@ export const actions: Actions = {
     update: async ({ request, locals }) => {
         const perms = locals.permissions ?? [];
         const canAllEdit = hasPermission(perms, "members.edit");
-        const canGroupEdit = hasPermission(perms, "members.group.edit");
+        const canGroupEdit = hasPermission(perms, "groupleader.members.edit");
 
         const form = await request.formData();
 
@@ -261,7 +261,7 @@ export const actions: Actions = {
     delete: async ({ request, locals }) => {
         const perms = locals.permissions ?? [];
         const canAllDelete = hasPermission(perms, "members.delete");
-        const canGroupDelete = hasPermission(perms, "members.group.delete");
+        const canGroupDelete = hasPermission(perms, "groupleader.members.delete");
 
         const form = await request.formData();
         const id = form.get("id")?.toString();
