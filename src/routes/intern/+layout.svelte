@@ -26,11 +26,13 @@
     ];
 
     const canViewMembers = can(permissions, "members.view") || can(permissions, "members.group.view");
+    const canViewGroups = can(permissions, "groups.view") || can(permissions, "groups.group.view");
 
     const visibleNav = [
         ...baseNav.filter((item) => !item.perm || can(permissions, item.perm)),
         ...extraNav.filter((item) => {
             if (item.name === "Mitgliedverwaltung") return canViewMembers;
+            if (item.name === "Gruppen") return canViewGroups;
             return can(permissions, item.perm);
         })
     ];

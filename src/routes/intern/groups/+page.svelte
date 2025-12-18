@@ -3,6 +3,8 @@
     export const csr = false;
 
     let search = "";
+    const allowed = new Set(data.allowedGroups ?? []);
+    const canOpen = (id: string) => data.canAll || allowed.has(id);
 
     $: filtered = data.groups.filter((g) =>
         g.name.toLowerCase().includes(search.toLowerCase())
@@ -53,17 +55,32 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {#each filtered as g}
-            <a
-                    href={`/intern/groups/${g.id}`}
-                    class="block p-5 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
-            >
-                <div class="flex items-center justify-between gap-3">
-                    <div class="text-sm uppercase text-gray-500 font-semibold tracking-wide">{g.type}</div>
-                    <span class="text-xs text-gray-500">{g.meeting_time || "Kein Termin"}</span>
+            {#if canOpen(g.id)}
+                <a
+                        href={`/intern/groups/${g.id}`}
+                        class="block p-5 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
+                >
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="text-sm uppercase text-gray-500 font-semibold tracking-wide">{g.type}</div>
+                        <span class="text-xs text-gray-500">{g.meeting_time || "Kein Termin"}</span>
+                    </div>
+                    <div class="text-xl font-bold text-gray-900 mt-1">{g.name}</div>
+                    <div class="text-gray-600 text-sm mt-2 line-clamp-3">{g.description || "Keine Beschreibung"}</div>
+                </a>
+            {:else}
+                <div
+                        class="block p-5 bg-white border border-gray-200 rounded-xl shadow-sm opacity-60 cursor-not-allowed"
+                        title="Keine Berechtigung, Details zu öffnen"
+                >
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="text-sm uppercase text-gray-500 font-semibold tracking-wide">{g.type}</div>
+                        <span class="text-xs text-gray-500">{g.meeting_time || "Kein Termin"}</span>
+                    </div>
+                    <div class="text-xl font-bold text-gray-900 mt-1">{g.name}</div>
+                    <div class="text-gray-600 text-sm mt-2 line-clamp-3">{g.description || "Keine Beschreibung"}</div>
+                    <p class="mt-3 text-xs text-gray-500">Keine Berechtigung für Details.</p>
                 </div>
-                <div class="text-xl font-bold text-gray-900 mt-1">{g.name}</div>
-                <div class="text-gray-600 text-sm mt-2 line-clamp-3">{g.description || "Keine Beschreibung"}</div>
-            </a>
+            {/if}
         {/each}
 
         {#if filtered.length === 0}

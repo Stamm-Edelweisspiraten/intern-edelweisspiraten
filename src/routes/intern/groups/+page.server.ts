@@ -10,13 +10,7 @@ export const load: PageServerLoad = async (event) => {
     if (!canAll && !canGroup) throw error(403, "Keine Berechtigung");
 
     const groupsAll = await getAllGroups();
+    const allowedGroups = canAll ? groupsAll.map((g) => g.id) : await getLeaderGroupIdsForUser(event.locals.user);
 
-    if (canAll) {
-        return { groups: groupsAll };
-    }
-
-    const allowed = await getLeaderGroupIdsForUser(event.locals.user);
-    const groups = groupsAll.filter((g) => allowed.includes(g.id));
-
-    return { groups };
+    return { groups: groupsAll, allowedGroups, canAll };
 };
