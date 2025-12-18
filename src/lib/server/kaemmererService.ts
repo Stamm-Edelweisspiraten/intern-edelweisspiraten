@@ -1,6 +1,7 @@
 import { db } from "$lib/server/mongo";
 import { ObjectId } from "mongodb";
 import { addInvoice, getActiveFiscalYear } from "$lib/server/financeService";
+import { getUserByEmail } from "$lib/server/userService";
 
 export type KaemmererOrderStatus = "ordered" | "processing" | "delivered" | "paid";
 export type KaemmererPaymentStatus = "open" | "paid" | "partial";
@@ -26,6 +27,7 @@ export interface KaemmererOrderItem {
     size?: string;
     quantity: number;
     total: number;
+    received?: boolean;
 }
 
 export interface KaemmererOrderMember {
@@ -82,7 +84,8 @@ const mapOrderDoc = (doc: any): KaemmererOrder => ({
         price: Number(i.price) || 0,
         size: i.size,
         quantity: Number(i.quantity) || 0,
-        total: Number(i.total) || 0
+        total: Number(i.total) || 0,
+        received: Boolean(i.received)
     })),
     members: doc.members ?? [],
     memberIds: doc.memberIds ?? [],
@@ -244,10 +247,28 @@ export async function listOrdersForMembers(memberIds: string[]) {
     return docs.map(mapOrderDoc);
 }
 
+export async function getOrderById(orderId: string): Promise<KaemmererOrder | null> {
+    if (!orderId) return null;
+    const doc = await db.collection(ORDER_COLLECTION).findOne({ _id: new ObjectId(orderId) });
+    return doc ? mapOrderDoc(doc) : null;
+}
+
 export async function getOrderForUser(orderId: string, user: any): Promise<KaemmererOrder | null> {
     if (!orderId || !user) return null;
-    const members = await getAccessibleMembersForUser(user);
-    const memberIds = members.map((m) => m.id);
+
+    let memberIds: string[] = [];
+
+    const email = user?.userinfo?.email ?? "";
+    if (email) {
+        const dbUser = await getUserByEmail(email);
+        memberIds = (dbUser?.memberIds ?? []).map((id: any) => id?.toString?.() ?? id).filter(Boolean);
+    }
+
+    if (memberIds.length === 0) {
+        const members = await getAccessibleMembersForUser(user);
+        memberIds = members.map((m) => m.id);
+    }
+
     if (memberIds.length === 0) return null;
 
     const doc = await db.collection(ORDER_COLLECTION).findOne({
@@ -256,6 +277,19 @@ export async function getOrderForUser(orderId: string, user: any): Promise<Kaemm
     });
 
     return doc ? mapOrderDoc(doc) : null;
+}
+
+export async function updateOrderItemReceived(orderId: string, itemIndex: number, received: boolean) {
+    if (!orderId || itemIndex < 0) return false;
+    const set: Record<string, any> = {
+        [`items.${itemIndex}.received`]: received,
+        updatedAt: new Date()
+    };
+    const res = await db.collection(ORDER_COLLECTION).updateOne(
+        { _id: new ObjectId(orderId) },
+        { $set: set }
+    );
+    return res.modifiedCount > 0;
 }
 
 export async function updateOrderStatus(id: string, status: KaemmererOrderStatus, paymentStatus?: KaemmererPaymentStatus) {
@@ -318,7 +352,8 @@ export async function createOrder(payload: {
             price: Number(i.price) || 0,
             quantity: Number(i.quantity) || 0,
             size: i.size,
-            total: (Number(i.price) || 0) * (Number(i.quantity) || 0)
+            total: (Number(i.price) || 0) * (Number(i.quantity) || 0),
+            received: false
         }));
 
     const memberIds = (payload.memberIds ?? []).filter((id) => !!id);

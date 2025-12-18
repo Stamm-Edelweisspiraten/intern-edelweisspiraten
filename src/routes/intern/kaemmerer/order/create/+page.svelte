@@ -26,7 +26,7 @@
         price: priceFor(articles[0], firstSize(articles[0])),
         quantity: 1
     }];
-    let selectedMembers: string[] = [];
+    let selectedMemberId: string = members[0]?.id ?? "";
     let error = "";
 
     const addItem = () => {
@@ -74,12 +74,8 @@
 
     $: total = normalizedItems.reduce((sum, i) => sum + i.total, 0);
 
-    const toggleMember = (id: string) => {
-        if (selectedMembers.includes(id)) {
-            selectedMembers = selectedMembers.filter((m) => m !== id);
-        } else {
-            selectedMembers = [...selectedMembers, id];
-        }
+    const selectMember = (id: string) => {
+        selectedMemberId = id;
     };
 </script>
 
@@ -100,10 +96,10 @@
 
     <form method="post" class="space-y-6">
         <input type="hidden" name="items" value={JSON.stringify(normalizedItems.map(({ total, ...rest }) => rest))} />
-        <input type="hidden" name="memberNames" value={JSON.stringify(selectedMembers.map((id) => members.find((m: any) => m.id === id)?.name ?? ""))} />
-        {#each selectedMembers as memberId}
-            <input type="hidden" name="memberIds" value={memberId} />
-        {/each}
+        <input type="hidden" name="memberNames" value={JSON.stringify(selectedMemberId ? [members.find((m: any) => m.id === selectedMemberId)?.name ?? ""] : [])} />
+        {#if selectedMemberId}
+            <input type="hidden" name="memberIds" value={selectedMemberId} />
+        {/if}
 
         <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
             <div class="flex items-center justify-between">
@@ -164,19 +160,18 @@
         <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
             <div class="flex items-center justify-between">
                 <h2 class="text-lg font-semibold text-gray-900">Mitglieder</h2>
-                <span class="text-sm text-gray-500">{selectedMembers.length} ausgewaehlt</span>
+                <span class="text-sm text-gray-500">{selectedMemberId ? "1 ausgewaehlt" : "Keins ausgewaehlt"}</span>
             </div>
             {#if members.length === 0}
                 <p class="text-sm text-gray-500">Keine verknuepften Mitglieder gefunden.</p>
             {:else}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {#each members as member}
-                        <label class={`flex items-center justify-between px-4 py-3 border rounded-xl cursor-pointer hover:bg-gray-50 ${selectedMembers.includes(member.id) ? "border-blue-300 bg-blue-50" : "border-gray-200"}`}>
+                        <label class={`flex items-center justify-between px-4 py-3 border rounded-xl cursor-pointer hover:bg-gray-50 ${selectedMemberId === member.id ? "border-blue-300 bg-blue-50" : "border-gray-200"}`}>
                             <div>
                                 <p class="font-semibold text-gray-900">{member.name}</p>
-                                <p class="text-xs text-gray-500">ID {member.id.slice(0,6)}</p>
                             </div>
-                            <input type="checkbox" class="h-5 w-5" checked={selectedMembers.includes(member.id)} on:change={() => toggleMember(member.id)} />
+                            <input type="radio" name="memberSelect" class="h-5 w-5" value={member.id} checked={selectedMemberId === member.id} on:change={() => selectMember(member.id)} />
                         </label>
                     {/each}
                 </div>

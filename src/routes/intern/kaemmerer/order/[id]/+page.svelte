@@ -17,6 +17,21 @@
         if (status === "partial") return "bg-amber-50 text-amber-700 border-amber-200";
         return "bg-gray-50 text-gray-700 border-gray-200";
     };
+
+    const statusLabel = (status: string) => {
+        if (status === "ordered") return "Bestellt";
+        if (status === "processing") return "In Bearbeitung";
+        if (status === "delivered") return "Zugestellt";
+        if (status === "paid") return "Bezahlt";
+        return status;
+    };
+
+    const paymentLabel = (status: string) => {
+        if (status === "open") return "Offen";
+        if (status === "partial") return "Teilweise";
+        if (status === "paid") return "Bezahlt";
+        return status;
+    };
 </script>
 
 <div class="max-w-6xl mx-auto mt-16 space-y-8">
@@ -24,7 +39,7 @@
         <div class="flex items-center gap-3 flex-wrap">
             <a href="/intern/kaemmerer/order" class="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-gray-800 bg-white hover:bg-gray-50 shadow-sm transition">
                 <i class="bi bi-arrow-left"></i>
-                Zur Übersicht
+                Zurueck zur Uebersicht
             </a>
             <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-sky-200 text-sky-800 bg-sky-100">
                 Bestellung {order.number}
@@ -42,8 +57,8 @@
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
-                <span class={`px-3 py-1 text-[11px] font-semibold rounded-full border ${statusTone(order.status)}`}>Status: {order.status}</span>
-                <span class={`px-3 py-1 text-[11px] font-semibold rounded-full border ${paymentTone(order.paymentStatus)}`}>Zahlung: {order.paymentStatus}</span>
+                <span class={`px-3 py-1 text-[11px] font-semibold rounded-full border ${statusTone(order.status)}`}>Status: {statusLabel(order.status)}</span>
+                <span class={`px-3 py-1 text-[11px] font-semibold rounded-full border ${paymentTone(order.paymentStatus)}`}>Zahlung: {paymentLabel(order.paymentStatus)}</span>
             </div>
         </div>
 
@@ -54,7 +69,7 @@
                     <span class="px-3 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-gray-50">{member.name}</span>
                 {/each}
             {:else}
-                <span class="text-sm text-gray-500">Keine Mitglieder verknüpft.</span>
+                <span class="text-sm text-gray-500">Keine Mitglieder verknuepft.</span>
             {/if}
         </div>
     </div>
@@ -70,7 +85,7 @@
                 <thead class="bg-gray-50">
                 <tr>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Artikel</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Größe</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Groesse</th>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Menge</th>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Einzelpreis</th>
                     <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Gesamt</th>
@@ -112,7 +127,7 @@
                             <div>
                                 <p class="text-base font-semibold text-gray-900">{item.name}</p>
                                 <p class="text-xs text-gray-500 flex items-center gap-1">
-                                    <span class="bi bi-rulers"></span> Größe: {item.size ?? "-"}
+                                    <span class="bi bi-rulers"></span> Groesse: {item.size ?? "-"}
                                 </p>
                             </div>
                             <span class="text-sm font-semibold text-gray-900">{euro(item.total)}</span>
@@ -136,4 +151,12 @@
             {/if}
         </div>
     </div>
+
+    <div class="flex justify-end">
+        <a href="/intern/kaemmerer/order" class="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-gray-800 bg-white hover:bg-gray-50 shadow-sm transition">
+            <i class="bi bi-arrow-left"></i>
+            Zurueck zur Uebersicht
+        </a>
+    </div>
 </div>
+

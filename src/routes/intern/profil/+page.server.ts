@@ -14,16 +14,13 @@ export const load: PageServerLoad = async ({ locals }) => {
         userinfo,
         dbUser: dbUser
             ? {
-                id: dbUser._id?.toString?.() ?? null,
                 name: dbUser.name,
                 email: dbUser.email,
                 type: dbUser.type,
-                memberIds,
                 createdAt: dbUser.createdAt
             }
             : null,
         members: members.map((m) => ({
-            id: m._id?.toString?.() ?? m.id,
             firstname: m.firstname,
             lastname: m.lastname,
             status: m.status,

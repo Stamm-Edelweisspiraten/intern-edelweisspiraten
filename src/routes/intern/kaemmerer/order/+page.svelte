@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
     export let data;
 
     const euro = (v: number) => `${(Number(v) || 0).toFixed(2)} EUR`;
@@ -9,6 +9,14 @@
         if (status === "delivered") return "bg-blue-50 text-blue-700 border-blue-200";
         if (status === "processing") return "bg-amber-50 text-amber-700 border-amber-200";
         return "bg-gray-50 text-gray-700 border-gray-200";
+    };
+
+    const statusLabel = (status: string) => {
+        if (status === "ordered") return "Bestellt";
+        if (status === "processing") return "In Bearbeitung";
+        if (status === "delivered") return "Zugestellt";
+        if (status === "paid") return "Bezahlt";
+        return status;
     };
 </script>
 
@@ -31,7 +39,7 @@
     <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
         <div class="flex items-center justify-between">
             <h2 class="text-lg font-semibold text-gray-900">Bestellungen</h2>
-            <span class="text-sm text-gray-500">{orders.length} EintrÃ¤ge</span>
+            <span class="text-sm text-gray-500">{orders.length} Eintraege</span>
         </div>
 
         <!-- Desktop table -->
@@ -70,7 +78,7 @@
                             <td class="px-6 py-4 text-gray-700">{order.createdAt?.slice(0, 10) ?? "-"}</td>
                             <td class="px-6 py-4 font-semibold text-gray-900">{euro(order.total)}</td>
                             <td class="px-6 py-4">
-                                <span class={`px-3 py-1 text-xs font-semibold rounded-full border ${statusTone(order.status)}`}>{order.status}</span>
+                                <span class={`px-3 py-1 text-xs font-semibold rounded-full border ${statusTone(order.status)}`}>{statusLabel(order.status)}</span>
                             </td>
                         </tr>
                     {/each}
@@ -88,7 +96,7 @@
                     <div class="border border-gray-200 rounded-xl p-4 shadow-sm bg-white">
                         <div class="flex items-center justify-between">
                             <div class="text-sm font-semibold text-gray-900">#{order.number}</div>
-                            <span class={`px-2.5 py-1 text-[11px] font-semibold rounded-full border ${statusTone(order.status)}`}>{order.status}</span>
+                            <span class={`px-2.5 py-1 text-[11px] font-semibold rounded-full border ${statusTone(order.status)}`}>{statusLabel(order.status)}</span>
                         </div>
                         <div class="mt-2 text-xs text-gray-700">
                             <div class="font-semibold text-gray-900">Mitglieder</div>
@@ -104,7 +112,7 @@
                         </div>
                         <div class="mt-2 text-sm font-semibold text-gray-900">Gesamt: {euro(order.total)}</div>
                         <div class="mt-3 flex flex-wrap gap-2">
-                            <a href={`/intern/kaemmerer/order/${order.id}`} class="flex-1 text-center px-3 py-2 text-xs rounded-lg border border-gray-200 text-gray-800 hover:bg-gray-50">Ã–ffnen</a>
+                            <a href={`/intern/kaemmerer/order/${order.id}`} class="flex-1 text-center px-3 py-2 text-xs rounded-lg border border-gray-200 text-gray-800 hover:bg-gray-50">Oeffnen</a>
                         </div>
                     </div>
                 {/each}
@@ -112,3 +120,5 @@
         </div>
     </div>
 </div>
+
+

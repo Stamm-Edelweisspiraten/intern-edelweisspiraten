@@ -7,6 +7,7 @@
 
     const articleStock = (article: any) => article?.sizes?.length ? sizeTotal(article.sizes) : Number(article?.stock) || 0;
     const lowStock = (article: any) => (article?.minStock ?? 0) > 0 && articleStock(article) < (article?.minStock ?? 0);
+    const negativeStock = (article: any) => articleStock(article) < 0;
 
     const totalArticles = articles.length;
     const lowCount = articles.filter((a: any) => lowStock(a)).length;
@@ -75,19 +76,25 @@
                             <td class="px-6 py-4 text-gray-700">
                                 {#if article.sizes?.length}
                                     <div class="flex flex-wrap gap-2">
-                                        <div class="px-3 py-2 rounded-xl border border-gray-200 bg-gray-50">
+                                        <div class={`px-3 py-2 rounded-xl border ${negativeStock(article) ? "border-red-200 bg-red-50 text-red-800" : "border-gray-200 bg-gray-50"}`}>
                                             <p class="text-[11px] uppercase tracking-wide text-gray-500">Gesamt</p>
                                             <p class="text-sm font-semibold text-gray-900">{sizeTotal(article.sizes)}</p>
                                         </div>
                                         {#each article.sizes as size}
-                                            <div class={`px-3 py-2 rounded-xl border ${Number(size.stock) === 0 ? "border-amber-200 bg-amber-50/60 text-amber-800" : "border-sky-200 bg-sky-50 text-sky-800"}`}>
+                                            <div class={`px-3 py-2 rounded-xl border ${
+                                                Number(size.stock) < 0
+                                                    ? "border-red-200 bg-red-50 text-red-800"
+                                                    : Number(size.stock) === 0
+                                                        ? "border-amber-200 bg-amber-50/60 text-amber-800"
+                                                        : "border-sky-200 bg-sky-50 text-sky-800"
+                                            }`}>
                                                 <div class="text-xs font-semibold uppercase tracking-wide">{size.name}</div>
                                                 <div class="text-sm font-semibold">{size.stock ?? 0}</div>
                                             </div>
                                         {/each}
                                     </div>
                                 {:else}
-                                    {article.stock ?? 0}
+                                    <span class={negativeStock(article) ? "text-red-700 font-semibold" : ""}>{article.stock ?? 0}</span>
                                 {/if}
                             </td>
                             <td class="px-6 py-4 text-gray-700">
@@ -97,7 +104,11 @@
                                 </div>
                             </td>
                             <td class="px-6 py-4">
-                                {#if lowStock(article)}
+                                {#if negativeStock(article)}
+                                    <span class="px-3 py-1 text-xs font-semibold rounded-full border border-red-200 bg-red-50 text-red-700 inline-flex items-center gap-1">
+                                        <span class="bi bi-exclamation-octagon"></span> Bestand negativ
+                                    </span>
+                                {:else if lowStock(article)}
                                     <span class="px-3 py-1 text-xs font-semibold rounded-full border border-amber-200 bg-amber-50 text-amber-700 inline-flex items-center gap-1">
                                         <span class="bi bi-exclamation-diamond"></span> Niedriger Bestand
                                     </span>
@@ -161,7 +172,13 @@
                         {#if article.sizes?.length}
                             <div class="flex flex-wrap gap-2">
                                 {#each article.sizes as size}
-                                    <span class={`px-2 py-1 text-[11px] rounded-full border ${Number(size.stock) === 0 ? "border-amber-200 bg-amber-50/60 text-amber-800" : "border-sky-200 bg-sky-50 text-sky-800"} inline-flex items-center gap-2`}>
+                                    <span class={`px-2 py-1 text-[11px] rounded-full border ${
+                                        Number(size.stock) < 0
+                                            ? "border-red-200 bg-red-50 text-red-800"
+                                            : Number(size.stock) === 0
+                                                ? "border-amber-200 bg-amber-50/60 text-amber-800"
+                                                : "border-sky-200 bg-sky-50 text-sky-800"
+                                    } inline-flex items-center gap-2`}>
                                         {size.name}: {size.stock ?? 0}
                                     </span>
                                 {/each}
@@ -172,7 +189,7 @@
                             <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50 inline-flex items-center gap-2">
                                 <span class="bi bi-exclamation-diamond text-gray-500"></span> Mindestbestand {article.minStock ?? 0}
                             </span>
-                            <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50 inline-flex items-center gap-2">
+                            <span class={`px-3 py-1 rounded-full border inline-flex items-center gap-2 ${negativeStock(article) ? "border-red-200 bg-red-50 text-red-800" : "border-gray-200 bg-gray-50"}`}>
                                 <span class="bi bi-box-seam text-gray-500"></span> Gesamt {articleStock(article)}
                             </span>
                         </div>
