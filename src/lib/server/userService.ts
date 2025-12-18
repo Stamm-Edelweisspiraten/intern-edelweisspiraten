@@ -271,7 +271,11 @@ export async function updateUser(id: string, data: any) {
     if (data.email) akPatchData.email = data.email;
     if (data.groups) akPatchData.groups = data.groups;
 
-    await patchAuthentikUser(user.authentikId, akPatchData);
+    if (user.authentikId) {
+        await patchAuthentikUser(user.authentikId, akPatchData);
+    } else {
+        console.warn("Authentik-ID fehlt für User", id);
+    }
 
     return true;
 }
