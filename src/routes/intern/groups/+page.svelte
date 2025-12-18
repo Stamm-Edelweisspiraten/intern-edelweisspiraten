@@ -59,9 +59,7 @@
             >
                 <div class="flex items-center justify-between gap-3">
                     <div class="text-sm uppercase text-gray-500 font-semibold tracking-wide">{g.type}</div>
-                    <span class="px-2.5 py-1 text-[11px] rounded-full border border-amber-200 bg-amber-50 text-amber-800">
-                        {g.meeting_time || "Kein Termin"}
-                    </span>
+                    <span class="text-xs text-gray-500">{g.meeting_time || "Kein Termin"}</span>
                 </div>
                 <div class="text-xl font-bold text-gray-900 mt-1">{g.name}</div>
                 <div class="text-gray-600 text-sm mt-2 line-clamp-3">{g.description || "Keine Beschreibung"}</div>
