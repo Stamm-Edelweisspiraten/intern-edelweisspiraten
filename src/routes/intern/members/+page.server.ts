@@ -15,12 +15,17 @@ export const load: PageServerLoad = async (event) => {
     let allowedGroups: string[] = [];
     if (!canAll) {
         allowedGroups = await getLeaderGroupIdsForUser(event.locals.user);
-        if (allowedGroups.length === 0) throw error(403, "Keine zugeordneten Gruppen");
     }
 
-    const members = canAll ? await getAllMembers() : await getMembersByGroupIds(allowedGroups);
+    const members = canAll
+        ? await getAllMembers()
+        : allowedGroups.length > 0
+            ? await getMembersByGroupIds(allowedGroups)
+            : [];
     const groups = await getAllGroups();
-    const visibleGroups = canAll ? groups : groups.filter((g) => allowedGroups.includes(g.id));
+    const visibleGroups = canAll
+        ? groups
+        : groups.filter((g) => allowedGroups.includes(g.id));
 
     const normalized = members
         .map((m: any) => ({
