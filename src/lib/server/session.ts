@@ -23,6 +23,8 @@ function decodePayload(token: string) {
     return JSON.parse(Buffer.from(token, "base64url").toString("utf-8"));
 }
 
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 Tage
+
 export interface SessionPayload {
     email: string;
     name?: string;
@@ -31,6 +33,13 @@ export interface SessionPayload {
     exp: number;
     type?: "session" | "invite";
     memberId?: string;
+    impersonator?: {
+        email: string;
+        name?: string;
+        groups?: string[];
+        sub?: string;
+        memberId?: string;
+    };
 }
 
 export function createSignedSession(payload: Omit<SessionPayload, "exp">, maxAgeSeconds: number) {

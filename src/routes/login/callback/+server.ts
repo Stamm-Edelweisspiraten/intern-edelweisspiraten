@@ -4,9 +4,7 @@ import { env as privateEnv } from "$env/dynamic/private";
 import { ObjectId } from "mongodb";
 import { env } from "$lib/env";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { createSignedSession } from "$lib/server/session";
-
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7; // 7 Tage
+import { createSignedSession, SESSION_MAX_AGE_SECONDS } from "$lib/server/session";
 
 function normalizeBase(url: string) {
     return url.replace(/\/+$/, "");

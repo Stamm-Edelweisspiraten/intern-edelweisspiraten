@@ -5,6 +5,11 @@
     import { addToast } from "$lib/toastStore";
 
     let search = "";
+    const permissions: string[] = data.permissions ?? [];
+    const hasPerm = (p: string) => permissions.includes("*") || permissions.includes(p);
+
+    const canCreate = hasPerm("members.create");
+    const canEdit = hasPerm("members.edit") || hasPerm("members.group.edit");
     let selected = new Set<string>();
     let allSelected = false;
     const groupMap = new Map(data.groups?.map((g) => [g.id, g.name]) ?? []);
@@ -157,13 +162,15 @@
                 <span class="bi bi-arrow-left"></span>
                 Zurück
             </a>
-            <a
-                    href="/intern/members/create"
-                    class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
-            >
-                <span class="bi bi-person-plus"></span>
-                Neues Mitglied
-            </a>
+            {#if canCreate}
+                <a
+                        href="/intern/members/create"
+                        class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
+                >
+                    <span class="bi bi-person-plus"></span>
+                    Neues Mitglied
+                </a>
+            {/if}
             <a
                     class={`inline-flex items-center gap-2 px-4 py-3 rounded-xl font-semibold shadow-sm transition ${selected.size > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100" : "bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed"}`}
                     aria-disabled={selected.size === 0}
@@ -422,12 +429,14 @@
                                         >
                                             <span class="bi bi-filetype-pdf"></span> Einladung
                                         </a>
-                                        <a
-                                                href={`/intern/members/${member.id}?scope=edit`}
-                                                class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
-                                        >
-                                            <span class="bi bi-pencil"></span> Bearbeiten
-                                        </a>
+                                        {#if canEdit}
+                                            <a
+                                                    href={`/intern/members/${member.id}?scope=edit`}
+                                                    class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
+                                            >
+                                                <span class="bi bi-pencil"></span> Bearbeiten
+                                            </a>
+                                        {/if}
                                     </div>
                                 </td>
                             </tr>
@@ -490,12 +499,14 @@
                                 >
                                     <span class="bi bi-filetype-pdf"></span> Einladung
                                 </a>
-                                <a
-                                        href={`/intern/members/${member.id}?scope=edit`}
-                                        class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
-                                >
-                                    <span class="bi bi-pencil"></span> Bearbeiten
-                                </a>
+                                {#if canEdit}
+                                    <a
+                                            href={`/intern/members/${member.id}?scope=edit`}
+                                            class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
+                                    >
+                                        <span class="bi bi-pencil"></span> Bearbeiten
+                                    </a>
+                                {/if}
                             </div>
                         </div>
                     {/if}

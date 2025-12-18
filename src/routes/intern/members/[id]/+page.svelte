@@ -1,7 +1,12 @@
 <script lang="ts">
     export let data;
 
-    const mode = data.scope === "edit" ? "edit" : "view";
+    const permissions: string[] = data.permissions ?? [];
+    const hasPerm = (p: string) => permissions.includes("*") || permissions.includes(p);
+
+    const canEdit = hasPerm("members.edit") || hasPerm("members.group.edit");
+    const canDelete = hasPerm("members.delete") || hasPerm("members.group.delete");
+    const mode = data.scope === "edit" && canEdit ? "edit" : "view";
     const disabled = mode === "view" ? true : undefined;
 
     let firstname = data.member.firstname;
@@ -140,7 +145,7 @@
                 <span class="bi bi-arrow-left"></span>
                 Zurück
             </a>
-            {#if mode === "view"}
+            {#if mode === "view" && canEdit}
                 <a
                         href={`/intern/members/${data.member.id}?scope=edit`}
                         class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"

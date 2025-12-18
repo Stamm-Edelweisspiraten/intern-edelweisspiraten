@@ -4,18 +4,25 @@ import { redirect, fail, error } from "@sveltejs/kit";
 import { db } from "$lib/server/mongo";
 import { ObjectId } from "mongodb";
 import { getAllGroups } from "$lib/server/groupService";
-import { hasPermission } from "$lib/server/permissionService";
+import { hasPermission, getLeaderGroupIdsForUser } from "$lib/server/permissionService";
 import { saveMemberFile, deleteMemberFile } from "$lib/server/fileStore";
 
 export const load: PageServerLoad = async ({ params, url, locals }) => {
-    if (!hasPermission(locals.permissions ?? [], "members.view")) {
-        throw error(403, "Keine Berechtigung");
-    }
+    const perms = locals.permissions ?? [];
+    const canAll = hasPermission(perms, "members.view");
+    const canGroup = hasPermission(perms, "members.group.view");
+    if (!canAll && !canGroup) throw error(403, "Keine Berechtigung");
 
     const id = params.id;
 
     const member = await getMember(id);
     if (!member) throw redirect(303, "/intern/members");
+
+    if (!canAll) {
+        const allowedGroups = await getLeaderGroupIdsForUser(locals.user);
+        const isAllowed = (member.groups ?? []).some((g: any) => allowedGroups.includes(g?.toString()));
+        if (!isAllowed) throw error(403, "Keine Berechtigung");
+    }
 
     member.userIds = member.userIds ?? [];
     member.groups = member.groups ?? [];
@@ -69,7 +76,8 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
         email: u.email ?? ""
     }));
 
-    const groups = await getAllGroups();
+    const groupsAll = await getAllGroups();
+    const groups = canAll ? groupsAll : groupsAll.filter((g) => (member.groups ?? []).includes(g.id));
 
     const scope = url.searchParams.get("scope") ?? "view";
 
@@ -77,7 +85,8 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
         member: normalized,
         allUsers,
         groups,
-        scope
+        scope,
+        permissions: perms
     };
 };
 
@@ -85,9 +94,9 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 export const actions: Actions = {
 
     update: async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "members.edit")) {
-            throw error(403, "Keine Berechtigung");
-        }
+        const perms = locals.permissions ?? [];
+        const canAllEdit = hasPermission(perms, "members.edit");
+        const canGroupEdit = hasPermission(perms, "members.group.edit");
 
         const form = await request.formData();
 
@@ -97,6 +106,13 @@ export const actions: Actions = {
         const existing = await getMember(id);
         if (!existing) {
             return fail(404, { error: "Mitglied nicht gefunden" });
+        }
+
+        if (!canAllEdit) {
+            if (!canGroupEdit) throw error(403, "Keine Berechtigung");
+            const allowedGroups = await getLeaderGroupIdsForUser(locals.user);
+            const currentAllowed = (existing.groups ?? []).some((g: any) => allowedGroups.includes(g?.toString()));
+            if (!currentAllowed) throw error(403, "Keine Berechtigung");
         }
 
         const firstname = form.get("firstname")?.toString() ?? "";
@@ -121,6 +137,11 @@ export const actions: Actions = {
 
         // --- Gruppen-Array ---
         const groups = JSON.parse(<string>form.get("groups") ?? "[]");
+        if (!canAllEdit) {
+            const allowedGroups = await getLeaderGroupIdsForUser(locals.user);
+            const allAllowed = groups.every((g: any) => allowedGroups.includes(g?.toString()));
+            if (!allAllowed) throw error(403, "Gruppenauswahl nicht erlaubt");
+        }
 
         const consentSocial = form.get("consent_social") === "on";
         const consentWebsite = form.get("consent_website") === "on";
@@ -237,14 +258,23 @@ export const actions: Actions = {
 
 
     delete: async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "members.delete")) {
-            throw error(403, "Keine Berechtigung");
-        }
+        const perms = locals.permissions ?? [];
+        const canAllDelete = hasPermission(perms, "members.delete");
+        const canGroupDelete = hasPermission(perms, "members.group.delete");
 
         const form = await request.formData();
         const id = form.get("id")?.toString();
 
         if (!id) return fail(400, { error: "ID fehlt" });
+
+        if (!canAllDelete) {
+            if (!canGroupDelete) throw error(403, "Keine Berechtigung");
+            const target = await getMember(id);
+            if (!target) return fail(404, { error: "Mitglied nicht gefunden" });
+            const allowedGroups = await getLeaderGroupIdsForUser(locals.user);
+            const allowed = (target.groups ?? []).some((g: any) => allowedGroups.includes(g?.toString()));
+            if (!allowed) throw error(403, "Keine Berechtigung");
+        }
 
         const actor = locals.user?.userinfo?.name ?? locals.user?.userinfo?.email ?? "system";
         await deleteMember(id, actor);

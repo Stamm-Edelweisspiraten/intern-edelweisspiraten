@@ -379,6 +379,14 @@ export async function getMembersByGroup(groupId: string) {
         .toArray();
 }
 
+export async function getMembersByGroupIds(groupIds: string[]) {
+    if (!groupIds || groupIds.length === 0) return [];
+
+    return await db.collection("members")
+        .find({ groups: { $in: groupIds } })
+        .toArray();
+}
+
 /**
  * Holt Member anhand der ersten passenden E-Mail
  */

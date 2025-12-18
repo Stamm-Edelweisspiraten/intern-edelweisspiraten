@@ -104,3 +104,22 @@ export async function setPermissionsForGroup(groupPk: string, permissions: strin
 export async function getAllDefinedPermissions() {
     return ALL_PERMISSIONS;
 }
+
+export async function getLeaderGroupIdsForUser(user: any): Promise<string[]> {
+    const memberIds = user?.memberIds ?? [];
+    if (!memberIds || memberIds.length === 0) return [];
+
+    const positions = await db.collection("positions")
+        .find({
+            type: "gruppenleiter",
+            memberIds: { $in: memberIds }
+        })
+        .toArray();
+
+    const ids = positions
+        .map((p: any) => p.groupId)
+        .filter(Boolean)
+        .map((id: any) => id.toString());
+
+    return Array.from(new Set(ids));
+}

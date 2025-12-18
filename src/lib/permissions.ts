@@ -6,6 +6,9 @@ export const ALL_PERMISSIONS = [
     "members.create",
     "members.edit",
     "members.delete",
+    "members.group.view",
+    "members.group.edit",
+    "members.group.delete",
     "members.*",
 
     // -----------------------
@@ -29,6 +32,7 @@ export const ALL_PERMISSIONS = [
     "user.create",
     "user.edit",
     "user.delete",
+    "user.impersonate",
 
     // -----------------------
     // System / Settings
