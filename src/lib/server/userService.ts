@@ -262,6 +262,10 @@ export async function updateUser(id: string, data: any) {
     if (!user) throw new Error("User not found locally");
 
     // Mongo Update
+    if (data.groups) {
+        // Resolve group names/UUIDs to Authentik IDs and persist them as such
+        data.groups = await resolveAuthentikGroupIds(data.groups);
+    }
     await db.collection("users").updateOne({ _id: mongoId }, { $set: data });
 
     // Authentik Update
