@@ -9,6 +9,8 @@ export const ALL_PERMISSIONS = [
     "groupleader.members.view",
     "groupleader.members.edit",
     "groupleader.members.delete",
+    "groupleader.members.log",
+    "groupleader.members.invitepdf",
     "members.*",
 
     // -----------------------
@@ -24,6 +26,7 @@ export const ALL_PERMISSIONS = [
     "groups.edit",
     "groups.delete",
     "groupleader.groups.view",
+    "groupleader.groups.memberspdf",
     "groups.*",
 
     // -----------------------
