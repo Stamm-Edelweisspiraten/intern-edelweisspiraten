@@ -9,8 +9,6 @@
     // Mehrere Member pro User
     let memberIds = Array.isArray(data.user.memberIds) ? [...data.user.memberIds] : [];
 
-    let displayMember = "";
-
     // Member-Autocomplete
     let memberSearch = "";
     let memberShowList = false;
@@ -25,16 +23,6 @@
             )
             : [];
 
-    // Autocomplete-Anzeige für bestehenden Wert
-    $: memberSearch === "" && memberIds.length === 1
-        ? (() => {
-            const m = data.members.find((mem) => mem.id === memberIds[0]);
-            if (m) {
-                displayMember = `${m.id} (${m.firstname} ${m.lastname})`;
-            }
-        })()
-        : null;
-
     function addMemberToUser(id: string) {
         id = String(id);
         if (!memberIds.includes(id)) {
@@ -42,7 +30,6 @@
         }
     }
 
-    // Entfernen
     function removeMemberFromUser(id: string) {
         id = String(id);
         memberIds = memberIds.filter((m) => m !== id);
@@ -59,7 +46,7 @@
         <div class="space-y-4 text-lg text-gray-700">
             <p><strong class="text-gray-900">Name:</strong> {data.user.name}</p>
             <p><strong class="text-gray-900">E-Mail:</strong> {data.user.email}</p>
-            <p><strong class="text-gray-900">Member-ID:</strong> {data.user.memberId ?? "—"}</p>
+            <p><strong class="text-gray-900">Member-ID:</strong> {data.user.memberId ?? "-"}</p>
 
             <div>
                 <strong class="text-gray-900">Gruppen (Authentik):</strong>
@@ -83,10 +70,10 @@
                 {new Date(data.user.createdAt).toLocaleString("de-DE")}
             </p>
 
-            <p><strong class="text-gray-900">User-ID:</strong> {data.user.id ?? "—"}</p>
+            <p><strong class="text-gray-900">User-ID:</strong> {data.user.id ?? "-"}</p>
         </div>
 
-        <div class="flex gap-4 mt-10">
+        <div class="flex gap-4 mt-10 flex-wrap">
             <a
                     href={`/intern/admin/user/${data.user.id}?scope=edit`}
                     data-sveltekit-reload
@@ -95,11 +82,23 @@
                 Benutzer bearbeiten
             </a>
 
+            {#if data.canImpersonate}
+                <form method="post" action="/intern/admin/impersonate">
+                    <input type="hidden" name="userId" value={data.user.id} />
+                    <button
+                            type="submit"
+                            class="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition border border-amber-300 shadow-sm"
+                    >
+                        Als diesen Benutzer ansehen
+                    </button>
+                </form>
+            {/if}
+
             <a
                     href="/intern/admin/user"
                     class="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg font-medium transition"
             >
-                Zurück
+                Zurueck
             </a>
         </div>
 
@@ -165,16 +164,15 @@
     {/if}
 </div>
 
-<!-- Gruppenverwaltung separat (wenn Edit) -->
 {#if mode === "edit"}
     <div class="max-w-3xl mx-auto mt-10 p-8 bg-white rounded-2xl shadow-xl border border-gray-200">
         <h2 class="text-2xl font-semibold mb-4 text-gray-900">Gruppen in Authentik</h2>
-        <p class="text-sm text-gray-600 mb-4">Wähle, in welchen Gruppen der Benutzer in Authentik sein soll.</p>
+        <p class="text-sm text-gray-600 mb-4">Waehle, in welchen Gruppen der Benutzer in Authentik sein soll.</p>
 
         <form method="post" action="?/update-groups" class="space-y-4">
             <input type="hidden" name="userId" value={data.user.id} />
 
-            <label class="block text-sm font-medium text-gray-700">Gruppen auswählen</label>
+            <label class="block text-sm font-medium text-gray-700">Gruppen auswaehlen</label>
             <select
                     name="groups"
                     multiple
@@ -185,7 +183,7 @@
                     <option value={group.pk?.toString?.()}>{group.name}</option>
                 {/each}
             </select>
-            <p class="text-xs text-gray-500">STRG/CMD gedrückt halten für Mehrfachauswahl.</p>
+            <p class="text-xs text-gray-500">STRG/CMD gedrueckt halten fuer Mehrfachauswahl.</p>
 
             <button
                     type="submit"
@@ -197,13 +195,10 @@
     </div>
 {/if}
 
-<!-- ============================= -->
-<!--   MEMBER-ZUORDNUNG (Autocomplete)   -->
-<!-- ============================= -->
 <div class="max-w-3xl mx-auto mt-12 p-8 bg-white rounded-2xl shadow-xl border border-gray-200">
 
     <h2 class="text-2xl font-semibold mb-4 text-gray-900">
-        Mitgliederzuordnung (User ↔ Mitglied)
+        Mitgliederzuordnung (User &lt;-&gt; Mitglied)
     </h2>
 
     {#if mode === "edit"}
@@ -215,7 +210,7 @@
 
             <div class="relative">
                 <label class="block text-sm font-medium text-gray-600 mb-1">
-                    Member hinzufügen
+                    Member hinzufuegen
                 </label>
 
                 <input

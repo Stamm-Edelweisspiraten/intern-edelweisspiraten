@@ -12,6 +12,9 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
         throw error(403, "Keine Berechtigung");
     }
 
+    const canImpersonate = hasPermission(locals.permissions ?? [], "admin.*") ||
+        hasPermission(locals.permissions ?? [], "user.impersonate");
+
     const user = await getUser(params.id);
     if (!user) throw new Error("User not found");
 
@@ -31,6 +34,7 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
 
     return {
         scope: url.searchParams.get("scope"),
+        canImpersonate,
         user: {
             id: user._id.toString(),
             name: user.name,

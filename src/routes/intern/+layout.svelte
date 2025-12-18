@@ -1,10 +1,15 @@
-﻿<script>
+<script lang="ts">
     export let data;
     import { can } from "$lib/can";
     import { onMount } from "svelte";
     import InternalFooter from "$lib/components/InternalFooter.svelte";
 
     const permissions = data.permissions ?? [];
+    const impersonationActive = !!data.impersonator;
+
+    let bannerEl: HTMLDivElement | null = null;
+    let bannerHeight = 0;
+    $: impersonationOffset = impersonationActive ? bannerHeight : 0;
 
     const baseNav = [
         { name: "Dashboard", href: "/intern/dashboard", icon: "speedometer2", perm: "dashboard.view" },
@@ -20,37 +25,72 @@
         { name: "Adminbereich", href: "/intern/admin", perm: "admin.view", icon: "gear-fill" }
     ];
 
+    const canViewMembers = can(permissions, "members.view") || can(permissions, "members.group.view");
+
     const visibleNav = [
         ...baseNav.filter((item) => !item.perm || can(permissions, item.perm)),
-        ...extraNav.filter((item) => can(permissions, item.perm))
+        ...extraNav.filter((item) => {
+            if (item.name === "Mitgliedverwaltung") return canViewMembers;
+            return can(permissions, item.perm);
+        })
     ];
 
     let mobileOpen = false;
     let collapsed = false;
 
-    // Clear old caches/service workers to avoid stale bundles causing flicker
+    const measureBanner = () => {
+        bannerHeight = bannerEl?.offsetHeight ?? 0;
+    };
+
     onMount(() => {
-        if (import.meta.env.DEV) {
-            if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
-                navigator.serviceWorker.getRegistrations().then((regs) => {
-                    regs.forEach((reg) => reg.unregister());
-                });
-            }
-            if (typeof caches !== "undefined" && caches?.keys) {
-                caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
-            }
-        }
+        measureBanner();
+        const onResize = () => measureBanner();
+        window.addEventListener("resize", onResize);
+        return () => window.removeEventListener("resize", onResize);
     });
+
+    $: if (impersonationActive) {
+        measureBanner();
+    } else {
+        bannerHeight = 0;
+    }
 </script>
 
 <svelte:head>
     <title>Intern - Stamm Edelweisspiraten</title>
 </svelte:head>
 
-<div class="min-h-screen flex bg-transparent">
+<div class="min-h-screen flex bg-transparent" style={`padding-top:${impersonationOffset}px;`}>
+    {#if data.impersonator}
+        <div class="fixed top-0 left-0 right-0 z-50 bg-amber-100 border-b border-amber-200 text-amber-900" bind:this={bannerEl}>
+            <div class="max-w-6xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="bi bi-person-badge-fill text-amber-700"></span>
+                    <div>
+                        <p class="text-sm font-semibold">Impersonation aktiv</p>
+                        <p class="text-xs text-amber-800">
+                            Du siehst den internen Bereich als {data.user?.userinfo?.name ?? data.user?.userinfo?.email}. Original: {data.impersonator?.name ?? data.impersonator?.email}
+                        </p>
+                    </div>
+                </div>
+                <form method="post" action="/intern/impersonate/stop" class="flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                            type="submit"
+                            class="inline-flex items-center gap-2 px-4 py-2 w-full sm:w-auto justify-center text-center bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold shadow-sm"
+                    >
+                        <span class="bi bi-arrow-counterclockwise"></span>
+                        Zurueck zu meinem Benutzer
+                    </button>
+                </form>
+            </div>
+        </div>
+    {/if}
 
     <!-- Sidebar desktop -->
-    <aside class={`hidden lg:flex ${collapsed ? "w-20" : "w-72"} h-screen fixed left-0 top-0 bg-white border-r border-gray-200 shadow-sm flex-col transition-all duration-200`}>
+    <aside
+            class={`hidden lg:flex ${collapsed ? "w-20" : "w-72"} fixed left-0 bg-white border-r border-gray-200 shadow-sm flex-col transition-all duration-200`}
+            style={`top:${impersonationOffset}px; height: calc(100vh - ${impersonationOffset}px);`}
+    >
 
         <!-- Header -->
         <div class={`px-4 py-6 border-b border-gray-200 flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
@@ -104,7 +144,8 @@
 
 
     <!-- Mobile Header -->
-    <header class="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 shadow-sm px-4 py-4 flex justify-between items-center z-30">
+    <header class="lg:hidden fixed left-0 right-0 bg-white border-b border-gray-200 shadow-sm px-4 py-4 flex justify-between items-center z-40"
+            style={`top:${impersonationOffset}px;`}>
         <h1 class="text-xl font-bold text-blue-600">Intern</h1>
 
         <button
@@ -118,7 +159,9 @@
 
 
     <!-- Mobile Sidebar -->
-    <div class={`fixed inset-0 z-40 transition ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"}`} aria-hidden={!mobileOpen}>
+    <div class={`fixed inset-0 z-40 transition ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"}`}
+         style={`top:${impersonationOffset}px; height: calc(100vh - ${impersonationOffset}px);`}
+         aria-hidden={!mobileOpen}>
         <div
                 class={`absolute inset-0 bg-black bg-opacity-40 transition-opacity duration-200 ${mobileOpen ? "opacity-100" : "opacity-0"}`}
                 on:click={() => (mobileOpen = false)}
@@ -174,7 +217,7 @@
 
 
     <!-- Main Content -->
-    <main class={`flex-1 min-h-screen flex flex-col p-6 pt-20 lg:pt-6 ${collapsed ? "lg:ml-20" : "lg:ml-72"} transition-all duration-200`}>
+    <main class={`flex-1 min-h-screen flex flex-col p-6 pt-6 lg:pt-6 ${collapsed ? "lg:ml-20" : "lg:ml-72"} transition-all duration-200`}>
         <div class={`${collapsed ? "w-full px-2" : "container"} flex-1 flex flex-col`}>
             <div class="flex-1">
                 <slot/>
