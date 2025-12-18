@@ -7,7 +7,7 @@ import { createGroupMembersPdf } from "$lib/server/pdf/groupMembersPdf";
 export async function GET({ params, locals }) {
     const perms = locals.permissions ?? [];
     const canAll = hasPermission(perms, "groups.view");
-    const canGroup = hasPermission(perms, "groupleader.groups.view");
+    const canGroup = hasPermission(perms, "groupleader.groups.view") || hasPermission(perms, "groupleader.groups.memberspdf");
     if (!canAll && !canGroup) {
         throw error(403, "Keine Berechtigung");
     }

@@ -6,7 +6,7 @@ import { hasPermission, getLeaderGroupIdsForUser } from "$lib/server/permissionS
 export async function GET({ params, locals }) {
     const perms = locals.permissions ?? [];
     const canAll = hasPermission(perms, "members.view");
-    const canGroup = hasPermission(perms, "groupleader.members.view");
+    const canGroup = hasPermission(perms, "groupleader.members.view") || hasPermission(perms, "groupleader.members.invitepdf");
     if (!canAll && !canGroup) throw error(403, "Keine Berechtigung");
 
     const memberId = params.id;
