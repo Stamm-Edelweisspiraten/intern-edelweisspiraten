@@ -85,6 +85,7 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
         member: normalized,
         allUsers,
         groups,
+        groupNames: groupsAll,
         scope,
         permissions: perms
     };

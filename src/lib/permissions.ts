@@ -23,6 +23,7 @@ export const ALL_PERMISSIONS = [
     "groups.create",
     "groups.edit",
     "groups.delete",
+    "groups.group.view",
     "groups.*",
 
     // -----------------------

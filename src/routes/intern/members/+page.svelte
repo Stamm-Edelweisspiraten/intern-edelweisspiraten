@@ -10,9 +10,9 @@
 
     const canCreate = hasPerm("members.create");
     const canEdit = hasPerm("members.edit") || hasPerm("members.group.edit");
+    const groupMap = new Map((data.groupNames ?? data.groups ?? []).map((g) => [g.id, g.name]));
     let selected = new Set<string>();
     let allSelected = false;
-    const groupMap = new Map(data.groups?.map((g) => [g.id, g.name]) ?? []);
 
     let filterOpen = false;
     let filterGroups: Set<string> = new Set();

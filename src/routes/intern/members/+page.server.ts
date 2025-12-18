@@ -22,10 +22,10 @@ export const load: PageServerLoad = async (event) => {
         : allowedGroups.length > 0
             ? await getMembersByGroupIds(allowedGroups)
             : [];
-    const groups = await getAllGroups();
+    const allGroups = await getAllGroups();
     const visibleGroups = canAll
-        ? groups
-        : groups.filter((g) => allowedGroups.includes(g.id));
+        ? allGroups
+        : allGroups.filter((g) => allowedGroups.includes(g.id));
 
     const normalized = members
         .map((m: any) => ({
@@ -42,7 +42,7 @@ export const load: PageServerLoad = async (event) => {
         }))
         .sort((a, b) => (a.lastname || "").localeCompare(b.lastname || "", "de"));
 
-    return { members: normalized, groups: visibleGroups, permissions: perms };
+    return { members: normalized, groups: visibleGroups, groupNames: allGroups, permissions: perms };
 };
 
 export const actions: Actions = {
