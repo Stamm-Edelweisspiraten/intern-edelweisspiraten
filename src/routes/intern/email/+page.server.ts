@@ -2,7 +2,7 @@ import type { Actions, PageServerLoad } from "./$types";
 import { error, fail } from "@sveltejs/kit";
 import { getGroup } from "$lib/server/groupService";
 import { getMemberByEmail, getMembersByGroup, getMembersByIds } from "$lib/server/memberService";
-import { hasPermission } from "$lib/server/permissionService";
+import { hasPermission, getLeaderGroupIdsForUser } from "$lib/server/permissionService";
 import { getPositionsByMemberIds } from "$lib/server/positionService";
 
 export const load: PageServerLoad = async ({ url, locals }) => {
@@ -15,17 +15,25 @@ export const load: PageServerLoad = async ({ url, locals }) => {
     let mode: "group" | "members" = "group";
 
     if (groupId) {
-        if (!hasPermission(perms, "groups.view")) {
+        const canAllGroups = hasPermission(perms, "groups.view");
+        const canGroupGroups = hasPermission(perms, "groupleader.groups.view");
+        if (!canAllGroups && !canGroupGroups) {
             throw error(403, "Keine Berechtigung");
         }
         group = await getGroup(groupId);
         if (!group) {
             throw error(404, "Gruppe nicht gefunden");
         }
+        if (!canAllGroups) {
+            const allowed = await getLeaderGroupIdsForUser(locals.user);
+            if (!allowed.includes(group.id)) throw error(403, "Keine Berechtigung");
+        }
         members = await getMembersByGroup(groupId);
         mode = "group";
     } else if (memberIdsParam) {
-        if (!hasPermission(perms, "members.view")) {
+        const canAllMembers = hasPermission(perms, "members.view");
+        const canGroupMembers = hasPermission(perms, "groupleader.members.view");
+        if (!canAllMembers && !canGroupMembers) {
             throw error(403, "Keine Berechtigung");
         }
         const ids = memberIdsParam.split(",").map((id) => id.trim()).filter(Boolean);
@@ -33,6 +41,13 @@ export const load: PageServerLoad = async ({ url, locals }) => {
             throw error(400, "Keine Mitglieder ausgewählt");
         }
         members = await getMembersByIds(ids);
+        if (!canAllMembers) {
+            const allowed = await getLeaderGroupIdsForUser(locals.user);
+            members = members.filter((m: any) => (m.groups ?? []).some((g: any) => allowed.includes(g?.toString?.() ?? g)));
+            if (members.length === 0) {
+                throw error(403, "Keine Berechtigung für diese Mitglieder");
+            }
+        }
         mode = "members";
     } else {
         throw error(400, "Keine Gruppe oder Mitglieder ausgewählt");
@@ -100,20 +115,35 @@ export const actions: Actions = {
         let members: any[] = [];
 
         if (groupId) {
-            if (!hasPermission(locals.permissions ?? [], "groups.edit")) {
+            const canAllGroups = hasPermission(locals.permissions ?? [], "groups.view");
+            const canGroupGroups = hasPermission(locals.permissions ?? [], "groupleader.groups.view");
+            if (!canAllGroups && !canGroupGroups) {
                 throw error(403, "Keine Berechtigung");
             }
             group = await getGroup(groupId);
             if (!group) {
                 throw error(404, "Gruppe nicht gefunden");
             }
+            if (!canAllGroups) {
+                const allowed = await getLeaderGroupIdsForUser(locals.user);
+                if (!allowed.includes(group.id)) throw error(403, "Keine Berechtigung");
+            }
             members = await getMembersByGroup(groupId);
         } else {
-            if (!hasPermission(locals.permissions ?? [], "members.edit")) {
+            const canAllMembers = hasPermission(locals.permissions ?? [], "members.view");
+            const canGroupMembers = hasPermission(locals.permissions ?? [], "groupleader.members.view");
+            if (!canAllMembers && !canGroupMembers) {
                 throw error(403, "Keine Berechtigung");
             }
             const ids = memberIdsParam.split(",").map((id) => id.trim()).filter(Boolean);
             members = await getMembersByIds(ids);
+            if (!canAllMembers) {
+                const allowed = await getLeaderGroupIdsForUser(locals.user);
+                members = members.filter((m: any) => (m.groups ?? []).some((g: any) => allowed.includes(g?.toString?.() ?? g)));
+                if (members.length === 0) {
+                    throw error(403, "Keine Berechtigung für diese Mitglieder");
+                }
+            }
         }
 
         const emails = new Set<string>();
