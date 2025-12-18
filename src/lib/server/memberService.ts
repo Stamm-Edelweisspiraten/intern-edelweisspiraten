@@ -383,7 +383,9 @@ export async function getMembersByGroupIds(groupIds: string[]) {
     if (!groupIds || groupIds.length === 0) return [];
 
     const normalized = groupIds.map((id) => id?.toString?.() ?? String(id)).filter(Boolean);
-    const objectIds = normalized.map((id) => new ObjectId(id));
+    const objectIds = normalized
+        .filter((id) => ObjectId.isValid(id))
+        .map((id) => new ObjectId(id));
 
     return await db.collection("members")
         .find({
