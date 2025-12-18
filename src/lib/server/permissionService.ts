@@ -122,16 +122,5 @@ export async function getLeaderGroupIdsForUser(user: any): Promise<string[]> {
         .filter(Boolean)
         .map((id: any) => id.toString());
 
-    // Fallback: Gruppen aus den eigenen Mitgliedseinträgen (falls Positionen nicht gepflegt)
-    const memberDocs = await db.collection("members")
-        .find({ _id: { $in: memberIds.map((id: string) => new ObjectId(id)) } })
-        .project({ groups: 1 })
-        .toArray();
-    memberDocs.forEach((m: any) => {
-        (m.groups ?? []).forEach((gid: any) => {
-            if (gid) ids.push(gid.toString());
-        });
-    });
-
     return Array.from(new Set(ids));
 }
