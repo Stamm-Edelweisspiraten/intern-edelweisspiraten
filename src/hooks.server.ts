@@ -11,10 +11,16 @@ export const handle: Handle = async ({ event, resolve }) => {
     if (session) {
         let memberIds: string[] = [];
         if (session.email) {
-            const userDoc = await db.collection("users").findOne({ email: session.email.toLowerCase() });
+            const normalizedEmail = session.email.toLowerCase?.() ?? session.email;
+            const userDoc = await db.collection("users").findOne({
+                email: { $in: [session.email, normalizedEmail] }
+            });
             if (userDoc?.memberIds) {
                 memberIds = (userDoc.memberIds as any[]).map((id: any) => id?.toString?.() ?? id).filter(Boolean);
             }
+        }
+        if (session.memberId) {
+            memberIds = Array.from(new Set([session.memberId, ...memberIds].map((id) => id?.toString?.() ?? id).filter(Boolean)));
         }
 
         event.locals.user = {
