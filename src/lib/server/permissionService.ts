@@ -1,5 +1,6 @@
 import { db } from "$lib/server/mongo";
 import { ALL_PERMISSIONS } from "$lib/permissions";
+import { ObjectId } from "mongodb";
 
 // --- Permissions ---
 export async function getAllPermissions() {
