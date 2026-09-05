@@ -1,102 +1,245 @@
+import { error, fail } from "@sveltejs/kit";
+import { ObjectId } from "mongodb";
 import type { Actions, PageServerLoad } from "./$types";
-import { error, fail, redirect } from "@sveltejs/kit";
-import { addTransaction, getFiscalYear } from "$lib/server/financeService";
-import { getAllMembers, getMember } from "$lib/server/memberService";
 import { requirePermission } from "$lib/server/permissionGuard";
+import { getFiscalYear, closeFiscalYear, updateDues } from "$lib/server/finance/yearService";
+import { computeOutstanding } from "$lib/server/finance/invoiceService";
+import {
+    countTransactions,
+    createTransaction,
+    deleteTransaction,
+    listTransactions,
+    updateTransaction
+} from "$lib/server/finance/transactionService";
+import { previewDuesSeeding, seedYearlyDues } from "$lib/server/finance/duesSeeding";
+import { getOrdersForFiscalYear } from "$lib/server/orders/orderBilling";
+import { financeLogs, fiscalTransactions } from "$lib/server/db/collections";
+import { getAllMembers } from "$lib/server/memberService";
+import { parseEuro } from "$lib/money";
+import { fullName, formatDateTime } from "$lib/format";
+import { isTransactionKind, TRANSACTION_KINDS } from "$lib/server/finance/types";
+
+const PAGE_SIZE = 50;
 
 export const load: PageServerLoad = async (event) => {
     requirePermission(event, "finance.view");
-    const { params } = event;
-    const fiscalYear = await getFiscalYear(params.id);
-    if (!fiscalYear) {
-        throw error(404, "Fiscal year not found");
-    }
 
-    const members = await getAllMembers();
+    const year = await getFiscalYear(event.params.id);
+    if (!year) throw error(404, "Geschäftsjahr nicht gefunden");
 
-    const pendingInvoices = (fiscalYear.invoices ?? [])
-        .filter((inv) => (inv.status ?? "pending") === "pending")
-        .map((inv) => {
-            const paidSum = (fiscalYear.transactions ?? [])
-                .filter((tx) => tx.invoiceId === inv.id && (tx.status ?? "paid") === "paid")
-                .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+    const yearId = new ObjectId(year.id);
+    const page = Math.max(1, Number(event.url.searchParams.get("page") ?? 1) || 1);
 
-            return {
-                id: inv.id ?? "",
-                memberId: inv.memberId ?? "",
-                title: inv.member ?? "Unbekannt",
-                amount: Math.max((Number(inv.amount) || 0) - paidSum, 0),
-                payable: Number(inv.amount) || 0,
-                paid: paidSum,
-                type: inv.kind ?? "Sonstiges",
-                note: inv.note ?? "",
-                invoiceId: inv.id
-            };
-        })
-        .filter((item) => item.amount > 0);
+    const [transactions, transactionCount, outstanding, orders, logs, members, seedPreview] =
+        await Promise.all([
+            listTransactions(yearId, { limit: PAGE_SIZE, skip: (page - 1) * PAGE_SIZE }),
+            countTransactions(yearId),
+            computeOutstanding({ fiscalYearId: yearId }),
+            getOrdersForFiscalYear(yearId),
+            financeLogs().find({ fiscalYearId: yearId }).sort({ createdAt: -1 }).limit(10).toArray(),
+            getAllMembers(),
+            previewDuesSeeding(event.params.id)
+        ]);
 
-    const outstandingTotal = pendingInvoices.reduce((sum, item) => sum + item.amount, 0);
+    const income = await sumByDirection(yearId, "in");
+    const expense = await sumByDirection(yearId, "out");
 
     return {
-        fiscalYear,
-        outstanding: {
-            total: outstandingTotal,
-            items: pendingInvoices
-        },
-        actions: [] as { title: string; note?: string }[],
-        memberOrders: [] as { member: string; item: string; amount: number }[],
-        memberSuggestions: members.map((m: any) => ({
-            id: m._id?.toString?.() ?? m.id ?? "",
-            name: `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt"
+        year,
+        page,
+        pageSize: PAGE_SIZE,
+        transactions,
+        transactionCount,
+        income,
+        expense,
+        balance: income - expense,
+        outstandingTotal: outstanding.reduce((sum, i) => sum + i.outstanding, 0),
+        outstandingCount: outstanding.length,
+        kinds: [...TRANSACTION_KINDS],
+        canManage: event.locals.permissions.includes("*") ||
+            event.locals.permissions.includes("finance.manage") ||
+            event.locals.permissions.includes("finance.*"),
+        seedPreview: seedPreview
+            ? { newCount: seedPreview.newCount, newTotal: seedPreview.newTotal }
+            : null,
+        // Diese beiden Bereiche gaben vorher fest kodierte leere Listen zurück
+        // und blieben daher dauerhaft leer.
+        memberOrders: orders.map((order) => ({
+            id: order._id!.toString(),
+            number: order.number,
+            total: order.total,
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+            members: order.members.map((m) => m.name).join(", "),
+            createdAt: order.createdAt.toISOString()
+        })),
+        activity: logs.map((log) => ({
+            id: log._id!.toString(),
+            entity: log.entity,
+            action: log.action,
+            user: log.user,
+            at: formatDateTime(log.createdAt)
+        })),
+        members: members.map((m: Record<string, unknown>) => ({
+            id: String(m._id),
+            name: fullName(m as { firstname?: string; lastname?: string })
         }))
     };
 };
 
+async function sumByDirection(fiscalYearId: ObjectId, direction: "in" | "out"): Promise<number> {
+    const rows = await fiscalTransactions()
+        .aggregate<{ total: number }>([
+            { $match: { fiscalYearId, direction } },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+        ])
+        .toArray();
+    return rows[0]?.total ?? 0;
+}
+
 export const actions: Actions = {
     addTransaction: async (event) => {
         requirePermission(event, "finance.manage");
-        const { request, params } = event;
-        const form = await request.formData();
 
-        const fiscalYear = await getFiscalYear(params.id);
-        if (!fiscalYear) return fail(404, { error: "Fiscal year not found" });
-        if (fiscalYear.status === "archived") {
-            return fail(400, { error: "Archivierte Geschaeftsjahre koennen nicht bearbeitet werden." });
+        const form = await event.request.formData();
+        const amount = parseEuro(String(form.get("amount") ?? ""));
+        const kind = String(form.get("kind") ?? "");
+        const dateValue = String(form.get("date") ?? "");
+        const direction = String(form.get("direction") ?? "in") === "out" ? "out" : "in";
+        const memberId = String(form.get("memberId") ?? "") || null;
+
+        if (amount === null || amount <= 0) {
+            return fail(400, { error: "Bitte einen gültigen Betrag größer als 0 angeben." });
+        }
+        if (!isTransactionKind(kind)) {
+            return fail(400, { error: "Bitte eine gültige Buchungsart auswählen." });
         }
 
-        const amount = Number(form.get("amount") ?? 0);
-        const date = form.get("date")?.toString() ?? "";
-        const direction = form.get("direction")?.toString() === "out" ? "out" : "in";
-        const kind = form.get("kind")?.toString() ?? "custom";
-        const memberInput = form.get("member")?.toString() ?? "";
-        const memberId = form.get("memberId")?.toString() ?? "";
-        const note = form.get("note")?.toString() ?? "";
-
-        if (!params.id) return fail(400, { error: "Missing fiscal year id" });
-        if (Number.isNaN(amount) || amount <= 0) return fail(400, { error: "Invalid amount" });
-        if (!date) return fail(400, { error: "Date is required" });
-
-        let memberName = memberInput || "Unbekannt";
-        if (memberId) {
-            const m = await getMember(memberId);
-            if (m) {
-                memberName = `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || memberName;
-            }
+        const date = dateValue ? new Date(dateValue) : new Date();
+        if (Number.isNaN(date.getTime())) {
+            return fail(400, { error: "Bitte ein gültiges Datum angeben." });
         }
 
-        const tx = await addTransaction(params.id, {
-            memberId: memberId || undefined,
-            member: memberName,
+        const member = memberId
+            ? (await getAllMembers()).find((m: Record<string, unknown>) => String(m._id) === memberId)
+            : null;
+
+        const result = await createTransaction({
+            fiscalYearId: event.params.id,
+            memberId,
+            member: member ? fullName(member as { firstname?: string; lastname?: string }) : "",
             date,
             direction,
             kind,
             amount,
-            note: note || undefined,
-            status: "paid"
+            note: String(form.get("note") ?? ""),
+            user: event.locals.user?.email ?? "system"
         });
 
-        if (!tx) return fail(500, { error: "Could not save transaction" });
+        if (!result.ok) return fail(400, { error: result.error });
+        return { success: "Die Buchung wurde erfasst." };
+    },
 
-        throw redirect(303, `/intern/finance/fiscal-years/${params.id}`);
+    updateTransaction: async (event) => {
+        requirePermission(event, "finance.manage");
+
+        const form = await event.request.formData();
+        const id = String(form.get("transactionId") ?? "");
+        const amount = parseEuro(String(form.get("amount") ?? ""));
+        const kind = String(form.get("kind") ?? "");
+        const dateValue = String(form.get("date") ?? "");
+
+        if (amount === null || amount <= 0) {
+            return fail(400, { error: "Bitte einen gültigen Betrag größer als 0 angeben." });
+        }
+        if (!isTransactionKind(kind)) {
+            return fail(400, { error: "Bitte eine gültige Buchungsart auswählen." });
+        }
+
+        const result = await updateTransaction(
+            id,
+            {
+                amount,
+                kind,
+                date: dateValue ? new Date(dateValue) : undefined,
+                direction: String(form.get("direction") ?? "in") === "out" ? "out" : "in",
+                note: String(form.get("note") ?? "")
+            },
+            event.locals.user?.email ?? "system"
+        );
+
+        if (!result.ok) return fail(400, { error: result.error });
+        return { success: "Die Buchung wurde geändert." };
+    },
+
+    deleteTransaction: async (event) => {
+        requirePermission(event, "finance.manage");
+
+        const form = await event.request.formData();
+        const result = await deleteTransaction(
+            String(form.get("transactionId") ?? ""),
+            event.locals.user?.email ?? "system"
+        );
+
+        if (!result.ok) return fail(400, { error: result.error });
+        return { success: "Die Buchung wurde gelöscht." };
+    },
+
+    /**
+     * Beiträge anlegen -- ausdrücklich statt als Nebenwirkung eines Seitenaufrufs.
+     */
+    seedDues: async (event) => {
+        requirePermission(event, "finance.manage");
+
+        const result = await seedYearlyDues(event.params.id, event.locals.user?.email ?? "system");
+        if (!result.ok) return fail(400, { error: result.error });
+
+        return {
+            success:
+                result.created === 0
+                    ? "Es waren bereits alle Jahresbeiträge angelegt."
+                    : `${result.created} Jahresbeiträge wurden angelegt.`
+        };
+    },
+
+    updateDues: async (event) => {
+        requirePermission(event, "finance.manage");
+
+        const form = await event.request.formData();
+        const dues = { stamm: 0, gau: 0, landesmark: 0, bund: 0 };
+
+        for (const field of ["stamm", "gau", "landesmark", "bund"] as const) {
+            const value = parseEuro(String(form.get(`dues_${field}`) ?? "0"));
+            if (value === null || value < 0) {
+                return fail(400, { error: `Der Beitrag "${field}" ist kein gültiger Betrag.` });
+            }
+            dues[field] = value;
+        }
+
+        const result = await updateDues(event.params.id, dues, event.locals.user?.email ?? "system");
+        if (!result.ok) return fail(400, { error: result.error });
+
+        return { success: "Die Beitragssätze wurden gespeichert." };
+    },
+
+    close: async (event) => {
+        requirePermission(event, "finance.manage");
+
+        const form = await event.request.formData();
+        const carryOver = form.get("carryOver") === "1";
+
+        const result = await closeFiscalYear(event.params.id, {
+            user: event.locals.user?.email ?? "system",
+            carryOverOpenInvoices: carryOver
+        });
+
+        if (!result.ok) return fail(400, { error: result.error });
+
+        return {
+            success:
+                result.carriedOver && result.carriedOver > 0
+                    ? `Das Geschäftsjahr wurde abgeschlossen. ${result.carriedOver} offene Posten wurden übertragen.`
+                    : "Das Geschäftsjahr wurde abgeschlossen."
+        };
     }
 };

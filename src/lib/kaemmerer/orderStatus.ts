@@ -6,7 +6,10 @@
  * der Formularwert per `as any` ungeprueft in die Datenbank geschrieben).
  */
 
-export const ORDER_STATUSES = ["ordered", "processing", "delivered", "paid"] as const;
+// "paid" ist bewusst KEIN Bestellstatus mehr: Lieferung und Bezahlung sind
+// zwei unabhaengige Merkmale. Vorher ueberschrieb eine vollstaendige Zahlung
+// den Status "delivered" und loeschte damit die Lieferinformation.
+export const ORDER_STATUSES = ["ordered", "processing", "delivered", "cancelled"] as const;
 export const PAYMENT_STATUSES = ["open", "partial", "paid"] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -16,7 +19,7 @@ const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
     ordered: "Bestellt",
     processing: "In Bearbeitung",
     delivered: "Geliefert",
-    paid: "Abgeschlossen"
+    cancelled: "Storniert"
 };
 
 const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
@@ -32,7 +35,7 @@ const ORDER_STATUS_TONES: Record<OrderStatus, Tone> = {
     ordered: "info",
     processing: "warning",
     delivered: "success",
-    paid: "success"
+    cancelled: "danger"
 };
 
 const PAYMENT_STATUS_TONES: Record<PaymentStatus, Tone> = {

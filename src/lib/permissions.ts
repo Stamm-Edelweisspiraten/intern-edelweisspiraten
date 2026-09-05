@@ -37,12 +37,16 @@ export const ALL_PERMISSIONS = [
     "user.edit",
     "user.delete",
     "user.impersonate",
+    "user.mfa.reset",
+    "user.*",
 
     // -----------------------
     // System / Settings
     // -----------------------
     "system.settings.view",
     "system.settings.update",
+    "roles.manage",
+    "system.*",
 
     // -----------------------
     // Admin
@@ -56,7 +60,9 @@ export const ALL_PERMISSIONS = [
     "kaemmerer.access",
     "kaemmerer.order.create",
     "kaemmerer.order.view",
+    "kaemmerer.order.cancel",
     "kaemmerer.orders.view",
+    "kaemmerer.orders.manage",
     "kaemmerer.articles.manage",
     "kaemmerer.storage.manage",
     "kaemmerer.*",
@@ -66,6 +72,9 @@ export const ALL_PERMISSIONS = [
     // -----------------------
     "finance.view",
     "finance.manage",
+    "finance.export",
+    "finance.close",
+    "finance.*",
 
     // -----------------------
     // Test / Misc

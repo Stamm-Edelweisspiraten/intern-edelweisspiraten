@@ -1,6 +1,6 @@
 import { db } from "$lib/server/mongo";
 import { ObjectId } from "mongodb";
-import { removeMemberTransactions } from "$lib/server/financeService";
+import { removeMemberTransactions } from "$lib/server/finance/transactionService";
 
 // -----------------------------------------------------
 //  Types

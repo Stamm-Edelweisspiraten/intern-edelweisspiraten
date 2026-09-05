@@ -1,27 +1,44 @@
+import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { requirePermission } from "$lib/server/permissionGuard";
-import { listOrders, updateOrderStatus } from "$lib/server/kaemmererService";
-import { fail, redirect } from "@sveltejs/kit";
+import { listOrders, updateOrderStatus } from "$lib/server/kaemmerer/orderService";
+import { isOrderStatus } from "$lib/kaemmerer/orderStatus";
+
+/** Bestellverwaltung: alle Bestellungen. */
 
 export const load: PageServerLoad = async (event) => {
     requirePermission(event, "kaemmerer.orders.view");
 
-    const status = event.url.searchParams.get("status") ?? undefined;
-    const orders = await listOrders({ status: status ?? undefined });
+    const status = event.url.searchParams.get("status") ?? "";
+    const orders = await listOrders({ status: status || undefined });
 
-    return { orders, status: status ?? "" };
+    return {
+        orders,
+        status: isOrderStatus(status) ? status : "",
+        canManage: event.locals.permissions.includes("*") ||
+            event.locals.permissions.includes("kaemmerer.*") ||
+            event.locals.permissions.includes("kaemmerer.orders.manage")
+    };
 };
 
 export const actions: Actions = {
-    status: async ({ request }) => {
-        const form = await request.formData();
-        const id = form.get("orderId")?.toString() ?? "";
-        const status = form.get("status")?.toString() as any;
-        const paymentStatus = form.get("paymentStatus")?.toString() as any;
+    /**
+     * Vorher war diese Aktion voellig ungeschuetzt und schrieb den
+     * Formularwert per `as any` ungeprueft in die Datenbank.
+     */
+    status: async (event) => {
+        requirePermission(event, "kaemmerer.orders.manage");
 
-        if (!id || !status) return fail(400, { error: "Ungueltige Daten" });
+        const form = await event.request.formData();
+        const id = String(form.get("orderId") ?? "");
+        const status = String(form.get("status") ?? "");
+        const paymentStatus = String(form.get("paymentStatus") ?? "");
 
-        await updateOrderStatus(id, status, paymentStatus);
-        throw redirect(303, "/intern/kaemmerer/orders");
+        if (!id) return fail(400, { error: "Es wurde keine Bestellung angegeben." });
+
+        const result = await updateOrderStatus(id, status, paymentStatus || undefined);
+        if (!result.ok) return fail(400, { error: result.error });
+
+        return { success: "Der Status wurde aktualisiert." };
     }
 };

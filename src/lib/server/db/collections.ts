@@ -130,7 +130,7 @@ export interface LoginAttemptDoc {
 // Finanzen
 // ---------------------------------------------------------------------------
 
-export type FiscalYearStatus = "active" | "archived";
+export type FiscalYearStatus = "active" | "closed" | "archived";
 export type InvoiceStatus = "open" | "partial" | "paid" | "cancelled";
 export type TransactionDirection = "in" | "out";
 
