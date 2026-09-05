@@ -2,55 +2,27 @@ import crypto from "node:crypto";
 import * as OTPAuth from "otpauth";
 import QRCode from "qrcode";
 import { env } from "$env/dynamic/private";
+import { decryptSecret, encryptSecret } from "$lib/server/crypto";
 
 /**
  * Zwei-Faktor-Authentifizierung per TOTP (Authenticator-App).
  *
  * Das Secret wird verschluesselt abgelegt, damit ein reiner Lesezugriff auf
- * die Datenbank nicht ausreicht, um gueltige Codes zu erzeugen.
+ * die Datenbank nicht ausreicht, um gueltige Codes zu erzeugen. Die
+ * Verschluesselung selbst steht in $lib/server/crypto -- sie wird
+ * inzwischen auch fuer die Zugangsdaten des Objektspeichers gebraucht.
  */
 
-const ISSUER = "Edelweisspiraten Intern";
+/**
+ * Voreinstellung des Ausstellers. Der Aussteller erscheint in der
+ * Authenticator-App und stand vorher fest im Quelltext -- damit trug er
+ * bei jedem Stamm denselben Namen.
+ */
+const DEFAULT_ISSUER = "Internes Portal";
 const PERIOD = 30;
 const DIGITS = 6;
 /** Toleranz von einem Zeitfenster in beide Richtungen. */
 const WINDOW = 1;
-
-// ---------------------------------------------------------------------------
-// Verschluesselung des Secrets
-// ---------------------------------------------------------------------------
-
-function encryptionKey(): Buffer {
-    const raw = env.MFA_ENC_KEY;
-    if (!raw) {
-        throw new Error(
-            "MFA_ENC_KEY ist nicht konfiguriert. Erzeuge einen Schluessel mit: openssl rand -base64 32"
-        );
-    }
-    const key = Buffer.from(raw, "base64");
-    if (key.length !== 32) {
-        throw new Error("MFA_ENC_KEY muss 32 Bytes (base64-kodiert) lang sein.");
-    }
-    return key;
-}
-
-export function encryptSecret(secret: string): string {
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv("aes-256-gcm", encryptionKey(), iv);
-    const encrypted = Buffer.concat([cipher.update(secret, "utf8"), cipher.final()]);
-    const tag = cipher.getAuthTag();
-    return `${iv.toString("base64url")}.${encrypted.toString("base64url")}.${tag.toString("base64url")}`;
-}
-
-export function decryptSecret(payload: string): string {
-    const parts = payload.split(".");
-    if (parts.length !== 3) throw new Error("Ungültiges MFA-Secret");
-
-    const [iv, data, tag] = parts.map((p) => Buffer.from(p, "base64url"));
-    const decipher = crypto.createDecipheriv("aes-256-gcm", encryptionKey(), iv);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
-}
 
 // ---------------------------------------------------------------------------
 // Einrichtung und Pruefung
@@ -67,9 +39,17 @@ export interface TotpEnrolment {
     qrDataUrl: string;
 }
 
-export async function createEnrolment(accountLabel: string): Promise<TotpEnrolment> {
+/**
+ * @param issuer Name, den die Authenticator-App anzeigt. Kommt aus den
+ *   Organisationseinstellungen; er ist reine Anzeige und geht in die
+ *   Pruefung eines Codes nicht ein.
+ */
+export async function createEnrolment(
+    accountLabel: string,
+    issuer = DEFAULT_ISSUER
+): Promise<TotpEnrolment> {
     const secret = new OTPAuth.Secret({ size: 20 });
-    const totp = buildTotp(secret.base32, accountLabel);
+    const totp = buildTotp(secret.base32, accountLabel, issuer);
     const uri = totp.toString();
 
     return {
@@ -80,9 +60,13 @@ export async function createEnrolment(accountLabel: string): Promise<TotpEnrolme
     };
 }
 
-function buildTotp(secretBase32: string, accountLabel: string): OTPAuth.TOTP {
+function buildTotp(
+    secretBase32: string,
+    accountLabel: string,
+    issuer = DEFAULT_ISSUER
+): OTPAuth.TOTP {
     return new OTPAuth.TOTP({
-        issuer: ISSUER,
+        issuer,
         label: accountLabel,
         algorithm: "SHA1",
         digits: DIGITS,
@@ -168,3 +152,9 @@ export function consumeRecoveryCode(
     const remaining = hashedCodes.filter((_, i) => i !== index);
     return { valid: true, remaining };
 }
+
+/**
+ * Weiterhin von hier exportiert, damit bestehende Aufrufer (die
+ * Einrichtungsroute und die Anmeldung) unveraendert bleiben.
+ */
+export { encryptSecret, decryptSecret };

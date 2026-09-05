@@ -1,6 +1,7 @@
 import { fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { requirePermission } from "$lib/server/permissionGuard";
+import { matchesPermission } from "$lib/permissions/match";
 import { listOrders, updateOrderStatus } from "$lib/server/kaemmerer/orderService";
 import { isOrderStatus } from "$lib/kaemmerer/orderStatus";
 
@@ -15,9 +16,11 @@ export const load: PageServerLoad = async (event) => {
     return {
         orders,
         status: isOrderStatus(status) ? status : "",
-        canManage: event.locals.permissions.includes("*") ||
-            event.locals.permissions.includes("kaemmerer.*") ||
-            event.locals.permissions.includes("kaemmerer.orders.manage")
+        // Ueber den gemeinsamen Matcher statt ueber Array.includes: eine
+        // breitere Rolle wie "kaemmerer.orders.*" wurde sonst nicht erkannt,
+        // sodass die Schaltflaechen verborgen blieben, obwohl die Aktion
+        // durchging.
+        canManage: matchesPermission(event.locals.permissions, "kaemmerer.orders.manage")
     };
 };
 

@@ -1,5 +1,13 @@
 <script lang="ts">
+    import { page } from "$app/state";
     import { Badge, Button, Card } from "$lib/components/ui";
+
+    /**
+     * Die Startseite leitet serverseitig auf /login um; sichtbar wird sie nur,
+     * wenn die Umleitung ausbleibt. Die Angaben kommen deshalb aus den
+     * Layout-Daten und nicht aus einem eigenen load.
+     */
+    const organization = $derived(page.data.organization);
 
     const FEATURES = [
         { icon: "shield-lock", text: "Rechteverwaltung, Gruppen, Mitglieder und Dateien" },
@@ -7,22 +15,26 @@
         { icon: "wallet2", text: "Beiträge, offene Posten und Bestellungen im Blick" }
     ];
 
-    const FACTS = [
-        { label: "Rollen", value: "Admins und Leitende" },
-        { label: "Module", value: "Mitglieder, Gruppen, Kasse" },
-        { label: "Kontakt", value: "it@edelweisspiraten-bremen.de" },
-        { label: "Zugang", value: "Verschlüsselt und protokolliert" }
-    ];
+    const FACTS = $derived(
+        [
+            { label: "Rollen", value: "Admins und Leitende" },
+            { label: "Module", value: "Mitglieder, Gruppen, Kasse" },
+            organization?.contactEmail
+                ? { label: "Kontakt", value: organization.contactEmail }
+                : null,
+            { label: "Zugang", value: "Verschlüsselt und protokolliert" }
+        ].filter((fact) => fact !== null)
+    );
 </script>
 
-<svelte:head><title>Stamm Edelweißpiraten – Intern</title></svelte:head>
+<svelte:head><title>{organization?.name ?? "Internes Portal"} &ndash; Intern</title></svelte:head>
 
 <div class="min-h-screen bg-surface-muted flex items-center justify-center px-4 py-16">
     <div class="w-full max-w-5xl grid lg:grid-cols-2 gap-6 items-stretch">
         <Card>
             <div class="space-y-5">
                 <p class="text-xs font-semibold text-fg-subtle uppercase tracking-[0.25em]">
-                    Stamm Edelweißpiraten
+                    {organization?.name ?? "Internes Portal"}
                 </p>
                 <h1 class="text-4xl font-bold text-fg leading-tight">Internes Portal</h1>
                 <p class="text-sm text-fg-muted">
@@ -43,9 +55,13 @@
                     <Button href="/login" variant="primary" icon="box-arrow-in-right">
                         Jetzt einloggen
                     </Button>
-                    <Button href="https://edelweisspiraten-bremen.de" variant="secondary" iconRight="box-arrow-up-right">
-                        Zur Website
-                    </Button>
+                    {#if organization?.website}
+                        <Button
+                            href={organization.website}
+                            variant="secondary"
+                            iconRight="box-arrow-up-right">Zur Website</Button
+                        >
+                    {/if}
                 </div>
             </div>
         </Card>

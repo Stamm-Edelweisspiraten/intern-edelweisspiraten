@@ -38,7 +38,7 @@
         {#if back}
             <a
                 href={back.href}
-                class="inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold rounded-xl bg-surface text-fg border border-border hover:bg-surface-muted shadow-sm transition"
+                class="inline-flex items-center gap-2 px-4 py-3 text-sm font-semibold rounded-control bg-surface text-fg border border-border hover:bg-surface-muted shadow-sm transition"
             >
                 <span class="bi bi-arrow-left" aria-hidden="true"></span>
                 {back.label ?? "Zurück"}

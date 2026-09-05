@@ -16,6 +16,14 @@ export default defineConfig({
 	},
 	test: {
 		include: ['src/**/*.{test,spec}.ts'],
-		environment: 'node'
+		environment: 'node',
+		/*
+		 * Die Integrationstests teilen sich EINE Datenbank. Laufen ihre
+		 * Dateien parallel, raeumt der eine auf, waehrend der andere noch
+		 * liest -- die Fehlschlaege sehen dann wie echte Fehler aus, sind aber
+		 * nur ein Wettlauf. Die Suite dauert wenige Sekunden; seriell zu
+		 * laufen kostet nichts.
+		 */
+		fileParallelism: false
 	}
 });

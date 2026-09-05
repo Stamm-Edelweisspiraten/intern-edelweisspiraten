@@ -1,230 +1,254 @@
-import { ObjectId } from "mongodb";
+import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { db } from "$lib/server/db";
+import { isUuid } from "$lib/server/db/ids";
 import {
-    fiscalTransactions,
-    fiscalInvoices,
-    fiscalYears,
-    financeLogs,
-    type FiscalTransactionDoc
-} from "$lib/server/db/collections";
+    accounts,
+    bankAccounts,
+    bookingCategories,
+    journalEntries,
+    journalLines
+} from "$lib/server/db/schema";
 import type { Cents } from "$lib/money";
-import type { TransactionDirection, TransactionView } from "./types";
+import { postEntry, reverseEntry } from "./journalService";
+import { getBankAccount, getDefaultBankAccount } from "./bankAccountService";
+import { getCategory } from "./categoryService";
+import type { JournalSource, TransactionDirection, TransactionView } from "./types";
 
-/** Buchungen: anlegen, ändern, löschen, auflisten. */
-
-export function toTransactionView(doc: FiscalTransactionDoc): TransactionView {
-    return {
-        id: doc._id!.toString(),
-        fiscalYearId: doc.fiscalYearId.toString(),
-        invoiceId: doc.invoiceId ? doc.invoiceId.toString() : null,
-        memberId: doc.memberId ?? null,
-        member: doc.member ?? "",
-        date: doc.date.toISOString(),
-        direction: doc.direction,
-        kind: doc.kind,
-        amount: doc.amount,
-        note: doc.note ?? "",
-        receiptFileId: doc.receiptFileId ?? null,
-        createdBy: doc.createdBy ?? "",
-        createdAt: doc.createdAt.toISOString()
-    };
-}
-
-export async function listTransactions(
-    fiscalYearId: ObjectId,
-    options: { limit?: number; skip?: number } = {}
-): Promise<TransactionView[]> {
-    const cursor = fiscalTransactions().find({ fiscalYearId }).sort({ date: -1, createdAt: -1 });
-
-    if (options.skip) cursor.skip(options.skip);
-    if (options.limit) cursor.limit(options.limit);
-
-    return (await cursor.toArray()).map(toTransactionView);
-}
-
-export async function countTransactions(fiscalYearId: ObjectId): Promise<number> {
-    return fiscalTransactions().countDocuments({ fiscalYearId });
-}
+/**
+ * Die einfache Erfassungsmaske.
+ *
+ * Der Kassenwart gibt Einnahme oder Ausgabe, Buchungsart, Konto und Betrag
+ * ein; daraus entsteht ein ausgeglichener Buchungssatz mit zwei Zeilen:
+ *
+ *   Einnahme: Soll  Bankkonto      / Haben Ertragskonto
+ *   Ausgabe:  Soll  Aufwandskonto  / Haben Bankkonto
+ *
+ * Soll und Haben tauchen in dieser Maske bewusst nicht auf. Wer sie braucht,
+ * nutzt die Expertenmaske ueber postEntry().
+ *
+ * Geloescht wird nicht mehr: eine falsche Buchung wird storniert. Das ist
+ * die einzige Aenderung an der bisherigen Bedienung -- und der Grund, warum
+ * updateTransaction hier fehlt.
+ */
 
 export interface CreateTransactionInput {
     fiscalYearId: string;
-    invoiceId?: string | null;
+    categoryId: string;
+    bankAccountId?: string | null;
     memberId?: string | null;
     member?: string;
     date: Date;
-    direction: TransactionDirection;
-    kind: string;
     amount: Cents;
     note?: string;
-    receiptFileId?: string | null;
+    /**
+     * Herkunft des Belegs. Ohne Angabe "manual"; wiederkehrende Buchungen und
+     * der Kontoauszug-Import setzen sie, damit sie sich im Journal filtern
+     * lassen.
+     */
+    source?: JournalSource;
     user: string;
+}
+
+export interface CreateTransactionResult {
+    ok: boolean;
+    error?: string;
+    entryId?: string;
+    entryNo?: string;
 }
 
 export async function createTransaction(
     input: CreateTransactionInput
-): Promise<{ ok: boolean; error?: string; transaction?: TransactionView }> {
-    if (!ObjectId.isValid(input.fiscalYearId)) {
-        return { ok: false, error: "Ungültiges Geschäftsjahr." };
-    }
+): Promise<CreateTransactionResult> {
     if (!Number.isInteger(input.amount) || input.amount <= 0) {
         return { ok: false, error: "Bitte einen Betrag größer als 0 angeben." };
     }
 
-    const fiscalYearId = new ObjectId(input.fiscalYearId);
-    const year = await fiscalYears().findOne({ _id: fiscalYearId });
-    if (!year) return { ok: false, error: "Geschäftsjahr nicht gefunden." };
-    if (year.status !== "active") {
-        return { ok: false, error: "In abgeschlossenen Geschäftsjahren kann nicht gebucht werden." };
-    }
+    const category = await getCategory(input.categoryId);
+    if (!category) return { ok: false, error: "Bitte eine Buchungsart auswählen." };
 
-    // Das Buchungsdatum muss ins Geschäftsjahr fallen. Vorher war das Datum
-    // eine freie Zeichenkette, die nie geprüft wurde.
-    if (input.date.getFullYear() !== year.year) {
+    const bank = input.bankAccountId
+        ? await getBankAccount(input.bankAccountId)
+        : await getDefaultBankAccount();
+    if (!bank) {
         return {
             ok: false,
-            error: `Das Datum muss im Geschäftsjahr ${year.year} liegen.`
+            error: "Es ist kein Kassen- oder Bankkonto eingerichtet. Bitte zuerst eines anlegen."
         };
     }
 
-    const doc: FiscalTransactionDoc = {
-        fiscalYearId,
-        invoiceId: input.invoiceId && ObjectId.isValid(input.invoiceId) ? new ObjectId(input.invoiceId) : null,
+    const shared = {
         memberId: input.memberId ?? null,
-        member: input.member ?? "",
-        date: input.date,
-        direction: input.direction,
-        kind: input.kind,
-        amount: input.amount,
-        note: input.note ?? "",
-        receiptFileId: input.receiptFileId ?? null,
-        createdBy: input.user,
-        createdAt: new Date()
+        memberName: input.member ?? null,
+        bankAccountId: bank.id,
+        categoryId: category.id,
+        note: input.note ?? ""
     };
 
-    const result = await fiscalTransactions().insertOne(doc);
+    const lines =
+        category.direction === "in"
+            ? [
+                  { accountId: bank.accountId, debit: input.amount, ...shared },
+                  { accountId: category.accountId, credit: input.amount, ...shared }
+              ]
+            : [
+                  { accountId: category.accountId, debit: input.amount, ...shared },
+                  { accountId: bank.accountId, credit: input.amount, ...shared }
+              ];
 
-    await financeLogs().insertOne({
-        fiscalYearId,
-        entity: "transaction",
-        entityId: result.insertedId.toString(),
-        action: "create",
-        user: input.user,
-        createdAt: new Date()
+    return postEntry({
+        fiscalYearId: input.fiscalYearId,
+        date: input.date,
+        description: input.note?.trim() || category.name,
+        source: input.source ?? "manual",
+        lines,
+        user: input.user
     });
-
-    return { ok: true, transaction: toTransactionView({ ...doc, _id: result.insertedId }) };
-}
-
-export interface UpdateTransactionInput {
-    date?: Date;
-    direction?: TransactionDirection;
-    kind?: string;
-    amount?: Cents;
-    note?: string;
-    receiptFileId?: string | null;
 }
 
 /**
- * Ändert eine Buchung. Die Funktion existierte bereits, war aber an keine
- * Route angeschlossen -- ein Tippfehler in einer Buchung war damit nicht
- * korrigierbar.
+ * Storniert eine Buchung.
+ *
+ * Ersetzt deleteTransaction und updateTransaction: eine Korrektur ist ein
+ * Storno plus eine neue Buchung, damit der urspruengliche Beleg auffindbar
+ * bleibt.
  */
-export async function updateTransaction(
-    id: string,
-    input: UpdateTransactionInput,
-    user: string
+export async function reverseTransaction(
+    entryId: string,
+    user: string,
+    reason = ""
 ): Promise<{ ok: boolean; error?: string }> {
-    if (!ObjectId.isValid(id)) return { ok: false, error: "Ungültige Kennung." };
-
-    const transactionId = new ObjectId(id);
-    const before = await fiscalTransactions().findOne({ _id: transactionId });
-    if (!before) return { ok: false, error: "Buchung nicht gefunden." };
-
-    // Zahlungen auf Rechnungen dürfen hier nicht angefasst werden, sonst
-    // liefe paidAmount aus dem Ruder.
-    if (before.invoiceId) {
-        return {
-            ok: false,
-            error: "Diese Buchung gehört zu einer Rechnung. Bitte die Zahlung stornieren und neu erfassen."
-        };
-    }
-
-    const year = await fiscalYears().findOne({ _id: before.fiscalYearId });
-    if (year?.status !== "active") {
-        return { ok: false, error: "In abgeschlossenen Geschäftsjahren kann nicht gebucht werden." };
-    }
-
-    if (input.amount !== undefined && (!Number.isInteger(input.amount) || input.amount <= 0)) {
-        return { ok: false, error: "Bitte einen Betrag größer als 0 angeben." };
-    }
-    if (input.date && year && input.date.getFullYear() !== year.year) {
-        return { ok: false, error: `Das Datum muss im Geschäftsjahr ${year.year} liegen.` };
-    }
-
-    const update: Record<string, unknown> = { updatedAt: new Date() };
-    for (const key of ["date", "direction", "kind", "amount", "note", "receiptFileId"] as const) {
-        if (input[key] !== undefined) update[key] = input[key];
-    }
-
-    await fiscalTransactions().updateOne({ _id: transactionId }, { $set: update });
-
-    await financeLogs().insertOne({
-        fiscalYearId: before.fiscalYearId,
-        entity: "transaction",
-        entityId: id,
-        action: "update",
-        changes: Object.entries(update)
-            .filter(([field]) => field !== "updatedAt")
-            .map(([field, after]) => ({
-                field,
-                before: (before as unknown as Record<string, unknown>)[field],
-                after
-            })),
-        user,
-        createdAt: new Date()
-    });
-
-    return { ok: true };
+    const result = await reverseEntry(entryId, user, reason);
+    return { ok: result.ok, error: result.error };
 }
 
-export async function deleteTransaction(
-    id: string,
-    user: string
-): Promise<{ ok: boolean; error?: string }> {
-    if (!ObjectId.isValid(id)) return { ok: false, error: "Ungültige Kennung." };
+// ---------------------------------------------------------------------------
+// Lesen
+// ---------------------------------------------------------------------------
 
-    const transactionId = new ObjectId(id);
-    const before = await fiscalTransactions().findOne({ _id: transactionId });
-    if (!before) return { ok: false, error: "Buchung nicht gefunden." };
-
-    if (before.invoiceId) {
-        return {
-            ok: false,
-            error: "Diese Buchung gehört zu einer Rechnung. Bitte stattdessen die Zahlung stornieren."
-        };
-    }
-
-    const year = await fiscalYears().findOne({ _id: before.fiscalYearId });
-    if (year?.status !== "active") {
-        return { ok: false, error: "In abgeschlossenen Geschäftsjahren kann nicht gebucht werden." };
-    }
-
-    await fiscalTransactions().deleteOne({ _id: transactionId });
-
-    await financeLogs().insertOne({
-        fiscalYearId: before.fiscalYearId,
-        entity: "transaction",
-        entityId: id,
-        action: "delete",
-        changes: [{ field: "amount", before: before.amount, after: null }],
-        user,
-        createdAt: new Date()
-    });
-
-    return { ok: true };
+export interface TransactionFilter {
+    fiscalYearId?: string;
+    bankAccountId?: string;
+    memberId?: string;
+    categoryId?: string;
+    limit?: number;
+    offset?: number;
 }
 
-/** Entfernt alle Spuren eines gelöschten Mitglieds. */
+/**
+ * Buchungen als flache Liste, wie sie die Kassenansicht zeigt.
+ *
+ * Grundlage ist die Bankzeile jedes Buchungssatzes: sie traegt Richtung
+ * (Soll = Einnahme, Haben = Ausgabe) und Betrag. Saetze ohne Bankzeile --
+ * etwa die Entstehung einer Forderung -- erscheinen hier nicht; sie stehen
+ * im Journal.
+ */
+export async function listTransactions(
+    filter: TransactionFilter = {}
+): Promise<TransactionView[]> {
+    const rows = await db
+        .select({
+            entry: journalEntries,
+            line: journalLines,
+            bankName: bankAccounts.name,
+            categoryName: bookingCategories.name
+        })
+        .from(journalLines)
+        .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+        .innerJoin(bankAccounts, eq(bankAccounts.id, journalLines.bankAccountId))
+        .leftJoin(bookingCategories, eq(bookingCategories.id, journalLines.categoryId))
+        .where(buildFilter(filter))
+        .orderBy(desc(journalEntries.date), desc(journalEntries.entryNo))
+        .limit(filter.limit ?? 100)
+        .offset(filter.offset ?? 0);
+
+    return rows.map(({ entry, line, bankName, categoryName }) => ({
+        id: entry.id,
+        entryNo: entry.entryNo,
+        fiscalYearId: entry.fiscalYearId,
+        invoiceId: null,
+        memberId: line.memberId,
+        member: line.memberName ?? "",
+        date: entry.date.toISOString(),
+        direction: (line.debit > 0 ? "in" : "out") as TransactionDirection,
+        kind: categoryName ?? entry.description,
+        categoryId: line.categoryId,
+        bankAccountId: line.bankAccountId,
+        bankAccountName: bankName,
+        amount: line.debit > 0 ? line.debit : line.credit,
+        note: line.note || entry.description,
+        source: entry.source,
+        reversed: Boolean(entry.reversedById || entry.reversesId),
+        createdBy: entry.createdBy,
+        createdAt: entry.createdAt.toISOString()
+    }));
+}
+
+export async function countTransactions(filter: TransactionFilter = {}): Promise<number> {
+    const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(journalLines)
+        .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+        .innerJoin(bankAccounts, eq(bankAccounts.id, journalLines.bankAccountId))
+        .where(buildFilter(filter));
+    return Number(row?.count ?? 0);
+}
+
+function buildFilter(filter: TransactionFilter): SQL | undefined {
+    const conditions: SQL[] = [];
+    if (isUuid(filter.fiscalYearId)) {
+        conditions.push(eq(journalEntries.fiscalYearId, filter.fiscalYearId));
+    }
+    if (isUuid(filter.bankAccountId)) {
+        conditions.push(eq(journalLines.bankAccountId, filter.bankAccountId));
+    }
+    if (isUuid(filter.memberId)) {
+        conditions.push(eq(journalLines.memberId, filter.memberId));
+    }
+    if (isUuid(filter.categoryId)) {
+        conditions.push(eq(journalLines.categoryId, filter.categoryId));
+    }
+    return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+/** Einnahmen und Ausgaben eines Jahres, fuer die Kennzahlen der Jahresseite. */
+export async function sumByDirection(
+    fiscalYearId: string
+): Promise<{ income: Cents; expense: Cents }> {
+    const [row] = await db
+        .select({
+            income: sql<string>`coalesce(sum(case when ${accounts.type} = 'income' then ${journalLines.credit} - ${journalLines.debit} else 0 end)::bigint, 0)`,
+            expense: sql<string>`coalesce(sum(case when ${accounts.type} = 'expense' then ${journalLines.debit} - ${journalLines.credit} else 0 end)::bigint, 0)`
+        })
+        .from(journalLines)
+        .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+        .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+        .where(eq(journalEntries.fiscalYearId, fiscalYearId));
+
+    return { income: Number(row?.income ?? 0), expense: Number(row?.expense ?? 0) };
+}
+
+/**
+ * Loest ein geloeschtes Mitglied aus den Buchungen.
+ *
+ * Die Buchungen selbst bleiben bestehen -- sie zu loeschen, wie es die
+ * Altfassung tat, wuerde die Jahressummen ruecknwirkend veraendern. Der
+ * denormalisierte Name bleibt stehen, damit der Beleg lesbar bleibt.
+ */
 export async function removeMemberTransactions(memberId: string): Promise<void> {
-    await fiscalTransactions().updateMany({ memberId }, { $set: { memberId: null } });
-    await fiscalInvoices().updateMany({ memberId }, { $set: { memberId: null } });
+    if (!isUuid(memberId)) return;
+    await db
+        .update(journalLines)
+        .set({ memberId: null })
+        .where(eq(journalLines.memberId, memberId));
+}
+
+/** Buchungssaetze, die zu einer Liste von Jahren gehoeren. */
+export async function listEntryIdsForYears(fiscalYearIds: string[]): Promise<string[]> {
+    const valid = fiscalYearIds.filter(isUuid);
+    if (valid.length === 0) return [];
+    const rows = await db
+        .select({ id: journalEntries.id })
+        .from(journalEntries)
+        .where(inArray(journalEntries.fiscalYearId, valid));
+    return rows.map((row) => row.id);
 }

@@ -1,9 +1,14 @@
 import { fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { requirePermission } from "$lib/server/permissionGuard";
-import { archiveFiscalYear, getYearSummaries } from "$lib/server/finance/yearService";
+import {
+    archiveFiscalYear,
+    getYearSummaries,
+    listUnarchivedYearIds
+} from "$lib/server/finance/yearService";
 import { computeOutstanding } from "$lib/server/finance/invoiceService";
-import { fiscalYears } from "$lib/server/db/collections";
+import { bankBalances, monthlyOverview } from "$lib/server/finance/reportService";
+import { matchesPermission } from "$lib/permissions/match";
 
 /**
  * Übersicht der Kasse.
@@ -16,23 +21,31 @@ import { fiscalYears } from "$lib/server/db/collections";
 export const load: PageServerLoad = async (event) => {
     requirePermission(event, "finance.view");
 
-    const summaries = await getYearSummaries();
+    const [summaries, activeIds, banks] = await Promise.all([
+        getYearSummaries(),
+        listUnarchivedYearIds(),
+        bankBalances()
+    ]);
+
+    /**
+     * Die Monatsuebersicht des laufenden Jahres -- Grundlage des
+     * Balkendiagramms auf der Uebersicht. Ohne aktives Geschaeftsjahr das
+     * Kalenderjahr, damit die Karte nicht leer bleibt.
+     */
+    const activeYear = summaries.find((entry) => entry.status === "active");
+    const monthly = await monthlyOverview(activeYear?.year ?? new Date().getFullYear());
 
     // Offene Posten über alle nicht archivierten Jahre.
-    const activeIds = await fiscalYears()
-        .find({ status: { $ne: "archived" } })
-        .project({ _id: 1 })
-        .toArray();
-
-    const outstanding = await computeOutstanding({
-        fiscalYearIds: activeIds.map((doc) => doc._id)
-    });
+    const outstanding = await computeOutstanding({ fiscalYearIds: activeIds });
 
     return {
         fiscalYears: summaries,
+        bankAccounts: banks,
         outstandingTotal: outstanding.reduce((sum, invoice) => sum + invoice.outstanding, 0),
         outstandingCount: outstanding.length,
-        overdueCount: outstanding.filter((invoice) => invoice.overdue).length
+        overdueCount: outstanding.filter((invoice) => invoice.overdue).length,
+        monthly,
+        canManage: matchesPermission(event.locals.permissions, "finance.manage")
     };
 };
 

@@ -1,9 +1,15 @@
-# Edelweisspiraten – Internes Portal
+# Internes Portal für Pfadfinderstämme
 
-Verwaltungsportal des Stamms Edelweisspiraten Bremen: Mitglieder, Gruppen,
-Ämter, Kasse, Kämmerer und interne Kommunikation.
+Verwaltungsportal für einen Pfadfinderstamm: Mitglieder, Gruppen, Ämter,
+Kasse mit doppelter Buchführung, Kämmerer und interne Kommunikation. Dazu eine
+REST-API, über die Fremdsysteme auf dieselben Daten zugreifen.
 
-SvelteKit 2 · Svelte 5 · TypeScript · MongoDB · Tailwind CSS 4 · adapter-node
+Die Anwendung ist **nicht auf einen bestimmten Stamm zugeschnitten**. Name,
+Logo und Kontaktdaten werden beim ersten Start eingerichtet; jeder Stamm
+betreibt seine eigene Installation.
+
+SvelteKit 2 · Svelte 5 · TypeScript · PostgreSQL mit Drizzle · Tailwind CSS 4 ·
+adapter-node
 
 ---
 
@@ -22,21 +28,60 @@ Einwilligungen und Unterlagen als Datei, Änderungsprotokoll,
 Einladungsschreiben als PDF mit QR-Code, Selbstregistrierung über einen
 Einladungscode.
 
-**Gruppen und Ämter**
-Übersicht und Details, Ämter mit Typ und Gruppenbindung, Gruppenleitungen mit
-eigenem Berechtigungsumfang, Mitgliederliste als PDF.
+**Gruppen, Ämter und Rechte**
+Übersicht und Details, Mitgliederliste als PDF. Rollen werden **je Gruppe**
+vergeben: dieselbe Rolle „Gruppenleitung“ kann einmal für die Meute und einmal
+für die Sippe gelten, und wer sie für die Meute hat, sieht auch nur deren
+Mitglieder. Ämter tragen selbst eine Rolle — wer das Amt innehat, bekommt
+deren Rechte, bei einem Amt mit Gruppenbezug nur dort. Jede Gruppenseite im
+Adminbereich zeigt, wer hier welche Rechte hat.
 
-**Kasse**
-Geschäftsjahre mit Beitragssätzen, Jahresbeiträge je Mitglied, Buchungen
-anlegen, ändern und löschen, Rechnungen mit Teilzahlungen und Fälligkeiten,
-offene Posten je Jahr und übergreifend, CSV-Export, Jahresabschluss mit
-Übertrag offener Posten, Änderungsprotokoll, Bankdaten für Beitragsbescheide.
+**Kasse (doppelte Buchführung)**
+Mitgelieferter Vereins-Kontenrahmen (an SKR49 angelehnt) mit ideellem Bereich,
+Vermögensverwaltung, Zweckbetrieb und wirtschaftlichem Geschäftsbetrieb.
+Buchungsjournal mit Belegnummern, einfache Erfassungsmaske und Expertenmaske
+für freie Buchungssätze, Storno statt Löschen, mehrere Kassen- und Bankkonten,
+Kontoauszug-Import mit Abgleich, Forderungen und Eingangsrechnungen mit
+Teilzahlungen, wiederkehrende Buchungen, Geschäftsjahre mit Beitragssätzen und
+Jahresabschluss, Berichte (GuV, Vermögensübersicht, Summen- und Saldenliste,
+Monatsübersicht, Kassenbericht, Kontenblatt, Fälligkeitsstaffel) als Ansicht,
+CSV und PDF, Beitragsbescheid, Änderungsprotokoll. Zu jeder Auswertung ein
+Diagramm **neben** der Tabelle — nie statt ihr: ohne JavaScript und für einen
+Screenreader bleiben die Zahlen vollständig lesbar.
+
+**Termine**
+Liste und Monatsraster, Rückmeldung je verknüpftem Mitglied (Zusage, Absage,
+Vielleicht) mit optionaler Frist, Teilnehmerliste mit Zählern und als PDF zum
+Abhaken, Absagen bleiben sichtbar. Freigabe an Gruppen, Ämter, Rollen oder
+einzelne Personen; ohne Freigabe gilt ein Termin für alle. Kalenderabonnement
+(iCal) über eine persönliche, jederzeit widerrufbare Adresse — ein
+Kalenderprogramm kann sich nicht anmelden.
+
+**Dateien**
+Ordner mit Unterordnern, freigegeben an Gruppen, Ämter, Rollen oder einzelne
+Personen; Unterordner erben die Freigaben ihres Elternordners. Schreibrecht je
+Freigabe. Wahlweise Ablage im **Objektspeicher** (S3 oder kompatibel, etwa
+MinIO) statt in der Datenbank — einrichtbar im Adminbereich, mit
+Verbindungstest und einem wiederholbaren Umzug der vorhandenen Dateien per
+Knopfdruck.
 
 **Kämmerer**
 Artikel mit Größen und Preisen, Lagerbestand mit Zu- und Abgängen sowie
-Inventurkorrektur, Nachbestellliste anhand von Mindestbeständen,
-Selbstbedienungs-Bestellungen und Bestellverwaltung, Lieferverfolgung je
-Position, Storno mit Rückbuchung, automatische Abrechnung über die Kasse.
+Inventurkorrektur und Bewegungsprotokoll, Nachbestellliste anhand von
+Mindestbeständen, Selbstbedienungs-Bestellungen und Bestellverwaltung,
+Lieferverfolgung je Position, Storno mit Rückbuchung, automatische Abrechnung
+über die Kasse.
+
+**REST-API**
+`/api/v1` für Mitglieder, Gruppen, Kasse und Kämmerer. Zugang über API-Tokens
+mit Berechtigungsumfang, Fehler als Problem Details nach RFC 9457,
+Schnittstellenbeschreibung nach OpenAPI 3.1 unter `/api/v1/openapi.json`.
+
+Dazu eine zentrale Stelle für **PDFs**: `GET /api/v1/pdf` listet die acht
+Vorlagen samt benötigtem Recht und JSON Schema ihrer Eingabe,
+`POST /api/v1/pdf/{vorlage}` erzeugt das Dokument. Dieselbe Vorlagenliste
+bedient auch die Adressen unter `/intern` — Kopfzeile, Fußzeile mit
+Seitenzahl und die Tabellen mit Seitenumbruch stehen an einer Stelle.
 
 **Weiteres**
 E-Mail-Versand an Gruppen oder ausgewählte Mitglieder mit formatiertem Text
@@ -47,45 +92,46 @@ und Anhängen, heller und dunkler Darstellungsmodus, durchgängig responsiv.
 ## Einrichtung
 
 ```bash
+docker compose up -d postgres
 npm install
 cp .env.example .env      # anschließend ausfüllen
+npm run db:migrate
 npm run dev
 ```
 
-### MongoDB
+Danach **`/setup`** aufrufen. Der Assistent richtet in einem Durchgang ein:
 
-Ein Replica Set mit einem Knoten genügt und ermöglicht Transaktionen:
+1. **Organisation** – Name, Kurzform und Ort des Stamms.
+2. **Zugang** – der erste Zugang mit Administrationsrechten.
+3. **Kasse** – Kontenrahmen, erstes Geschäftsjahr mit Beitragssätzen und
+   erstes Konto.
+4. **Demodaten** – wahlweise ein Beispielbestand zum Ausprobieren.
 
-```bash
-docker run -d --name ep-mongo -p 27017:27017 mongo:7 --replSet rs0
-docker exec ep-mongo mongosh --eval "rs.initiate()"
-```
-
-Ohne Replica Set läuft die Anwendung ebenfalls; Schreibfolgen laufen dann ohne
-Transaktion, mit ausgleichenden Gegenbuchungen im Fehlerfall.
-
-### Erster Zugang
-
-Beim ersten Start existiert kein Benutzer. **`/setup`** legt den ersten Zugang
-mit Administrationsrechten an und ist danach dauerhaft gesperrt.
-
-Falls man sich später aussperrt, gibt es einen Wiederherstellungsweg über die
-Umgebungsvariablen `BOOTSTRAP_ADMIN_EMAIL` und `BOOTSTRAP_ADMIN_PASSWORD`:
-beim Start wird der Zugang angelegt beziehungsweise repariert. Die Variablen
-sollten danach wieder entfernt werden.
+`/setup` ist nur erreichbar, solange kein anmeldefähiger Zugang existiert;
+danach antwortet die Route dauerhaft mit 404.
 
 Die Administrationsrolle verlangt Zwei-Faktor-Authentifizierung; die
-Einrichtung erfolgt direkt nach der ersten Anmeldung unter
+Einrichtung erfolgt direkt nach dem Abschluss unter
 `/intern/profil/sicherheit`.
+
+### Falls man sich aussperrt
+
+Über die Umgebungsvariablen `BOOTSTRAP_ADMIN_EMAIL` und
+`BOOTSTRAP_ADMIN_PASSWORD` wird der Zugang beim Start angelegt beziehungsweise
+repariert. Die Variablen sollten danach wieder entfernt werden.
 
 ### Umgebungsvariablen
 
-Siehe `.env.example`. Erforderlich sind `MONGODB_URI`, `MONGODB_DB`,
-`SESSION_SECRET`, `MFA_ENC_KEY`, `PUBLIC_APP_URL` und die `SMTP_*`-Angaben.
+Siehe `.env.example`. Erforderlich sind `DATABASE_URL`, `SESSION_SECRET`,
+`MFA_ENC_KEY`, `PUBLIC_APP_URL` und die `SMTP_*`-Angaben.
 
 Hinter einem Reverse Proxy müssen zusätzlich `ADDRESS_HEADER=X-Forwarded-For`
 und `XFF_DEPTH` gesetzt sein – sonst sieht die Anwendung nur die Adresse des
 Proxys und die Begrenzung der Anmeldeversuche pro Adresse wäre wirkungslos.
+
+Für Zugriffe auf die REST-API aus einem Browser wird `API_CORS_ORIGINS`
+gebraucht. Ohne diese Angabe ist der Zugriff aus fremden Seiten gesperrt;
+Server-zu-Server-Aufrufe mit Token sind davon nicht betroffen.
 
 ---
 
@@ -98,6 +144,14 @@ Proxys und die Begrenzung der Anmeldeversuche pro Adresse wäre wirkungslos.
 | `npm run preview` | Build lokal ansehen |
 | `npm run check` | Typprüfung (svelte-check) |
 | `npm test` | Unit-Tests (Vitest) |
+| `npm run db:generate` | Migration aus dem Schema erzeugen |
+| `npm run db:migrate` | Ausstehende Migrationen anwenden |
+| `npm run db:seed` | Systemrollen und Kontenrahmen anlegen |
+| `npm run db:studio` | Datenbank im Browser ansehen |
+
+Nach **jeder** Änderung an `src/lib/server/db/schema/` muss
+`npm run db:generate` laufen und die erzeugte Datei mit eingecheckt werden.
+Die CI prüft das und schlägt fehl, wenn eine Migration fehlt.
 
 ---
 
@@ -107,19 +161,36 @@ Proxys und die Begrenzung der Anmeldeversuche pro Adresse wäre wirkungslos.
 src/
   lib/
     components/ui/        Gemeinsame Oberflächenkomponenten
+    components/finance/   Bereichsnavigation, offene Posten, Zeitraumfilter
+    components/finance/charts/  Diagramme (LayerChart) mit gemeinsamen Farben
+    finance/labels.ts     Beschriftungen der Kontoarten und Bereiche
     money.ts              Geldbeträge als ganzzahlige Cents
     format.ts             Datum, Alter, Namen
     permissions/          Berechtigungsprüfung (eine Implementierung)
+    permissions/labels.ts Deutsche Beschriftungen der Berechtigungen
     server/
+      api/                REST-API: Tokens, Antworten, Schemata, Hook
       auth/               Passwörter, Sitzungen, 2FA, Sperren
-      db/                 Collections mit Typen, Indizes
-      finance/            Geschäftsjahre, Rechnungen, Buchungen, Beiträge
+      crypto.ts           Verschlüsselung der Geheimnisse in der Datenbank
+      db/                 Drizzle-Schema, Verbindung, Kennungen, Kalendertage
+      finance/            Journal, Konten, Rechnungen, Berichte, Abgleich
       kaemmerer/          Artikel, Lager, Bestellungen
       orders/             Verbindung zwischen Bestellungen und Kasse
+      pdf/                Vorlagenliste, gemeinsames Gerüst, Erzeuger
+      seed/               Demodaten
+      storage/            Objektspeicher (S3) hinter einer Schnittstelle
+      shareService.ts     Freigabeziele – gemeinsam für Ordner und Termine
+      documentService.ts  Ordner, Dokumente, Sichtbarkeit
+      eventService.ts     Termine, Freigaben, Rückmeldungen
+      calendar.ts         iCal-Erzeugung und Kalender-Tokens
   routes/
     login, password, setup, join   Öffentlich
     intern/                        Geschützt
+    intern/termine/kalender.ics    Kalenderabo (Token statt Anmeldung)
+    api/v1/                        REST-API
     dev/ui                         Komponentenübersicht (nur Entwicklung)
+drizzle/                           Migrationen (erzeugt, eingecheckt)
+scripts/                           Migration, Seed und Abnahme im Browser
 ```
 
 **Gestaltung:** [`intern-design-sheet.md`](./intern-design-sheet.md) ist
@@ -129,21 +200,113 @@ um die Besonderheiten der Kasse. Unter `/dev/ui` liegt eine lauffähige
 
 ---
 
+## Grundregeln
+
+Vier Regeln tragen den größten Teil der Fehlerfreiheit; sie stehen ausführlich
+in den Design-Blättern:
+
+1. **Geld ist ganzzahlig.** Beträge sind Cents – in der Datenbank, in den
+   Diensten, in der API. Fließkommazahlen für Geld gibt es nicht.
+2. **Gebucht wird nur über `postEntry()`.** Soll und Haben müssen
+   übereinstimmen; geprüft wird das im Dienst und noch einmal von der
+   Datenbank über einen aufgeschobenen Trigger. Korrigiert wird per Storno,
+   nie durch Löschen.
+3. **Jede Server-Aktion sichert sich selbst ab.** SvelteKit führt bei
+   Formular-Aktionen kein `load` aus; eine Prüfung im `load` schützt die
+   zugehörige Aktion also nicht.
+4. **`null` heißt stammesweit, `[]` heißt kein Recht.** Ein Recht gilt
+   entweder für den ganzen Stamm oder für einzelne Gruppen.
+   `groupsWithPermission()` liefert deshalb `null` (nicht filtern), ein Array
+   (nur diese Gruppen) oder ein leeres Array (gar nichts). Wer die beiden
+   Enden verwechselt, baut ein Leck oder eine leere Seite — die Prüfung
+   gehört in die Guards aus `permissionGuard.ts`, nicht in die Route.
+
+---
+
 ## Tests
 
-`npm test` deckt die Logik ab, in der erfahrungsgemäß die Fehler stecken:
-Geldbeträge und Aufteilung, Beitragsberechnung, offene Posten,
-Berechtigungsprüfung, Passwort-Hashing und -Richtlinie, TOTP samt
-Wiederherstellungscodes, Statusprüfungen und IBAN-Validierung.
+```bash
+npm test            # alles, was ohne Datenbank läuft
+```
 
-Manuell zu prüfen bleiben: Anmeldung samt Zwei-Faktor, Mitglied anlegen und
-Einladungs-PDF, Gruppen-E-Mail, ein vollständiger Zahlungsvorgang sowie eine
-Bestellung von der Anlage bis zum Storno.
+Die reinen Logiktests brauchen nichts weiter. Daneben gibt es
+**Integrationstests**, die gegen eine echte Datenbank laufen und sich ohne
+`DATABASE_URL` selbst überspringen — an der Zusammenfassung als „skipped“
+erkennbar:
+
+```bash
+docker compose up -d postgres
+DATABASE_URL=postgres://intern:intern@localhost:5432/intern npm test
+```
+
+Geprüft werden dort die Dinge, die sich nur im Zusammenspiel zeigen: die
+Vererbung der Ordnerfreigaben an Unterordner, die Sichtbarkeit von Terminen,
+dass Soll und Haben in der Summen- und Saldenliste übereinstimmen, und dass
+jede PDF-Vorlage ein Dokument erzeugt, das sich öffnen lässt.
+
+Der Objektspeicher braucht zusätzlich einen laufenden MinIO:
+
+```bash
+docker run -d --name minio -p 9100:9000 \
+  -e MINIO_ROOT_USER=testkey -e MINIO_ROOT_PASSWORD=testsecret123 \
+  minio/minio server /data
+
+S3_ENDPOINT=http://localhost:9100 S3_BUCKET=portal-test \
+S3_ACCESS_KEY_ID=testkey S3_SECRET_ACCESS_KEY=testsecret123 \
+DATABASE_URL=postgres://intern:intern@localhost:5432/intern \
+npx vitest run storage.integration
+```
+
+Ein Test ist bewusst zusätzlich gesperrt: `seed/demo.integration` räumt die
+Datenbank hinterher vollständig ab und läuft deshalb nur mit
+`DEMO_SEED_TEST=1` — gedacht für einen frischen Wegwerf-Container, nicht für
+die Arbeitsdatenbank.
+
+Die Integrationstests teilen sich eine Datenbank und laufen deshalb seriell
+(`fileParallelism: false`).
+
+### Abnahme im Browser
+
+`scripts/smoke.mjs` richtet über `/setup` einen Stamm samt Demodaten ein und
+klappert danach jede Seite ab: Statuscode, erwarteter Inhalt, Fehler in der
+Browserkonsole, dazu ein Bildschirmfoto je Seite. Gedacht für die Abnahme von
+Hand — die CI führt es nicht aus.
+
+Es braucht einen **Wegwerf-Container** als Datenbank, niemals die
+Arbeitsdatenbank: der Lauf legt einen Stamm an, und `/setup` ist danach
+dauerhaft gesperrt.
+
+```bash
+docker run -d --name pg-smoke -p 5433:5432 -e POSTGRES_USER=intern \
+  -e POSTGRES_PASSWORD=intern -e POSTGRES_DB=intern postgres:17-alpine
+DATABASE_URL=postgres://intern:intern@localhost:5433/intern npm run db:migrate
+
+npm run build
+DATABASE_URL=postgres://intern:intern@localhost:5433/intern \
+  SESSION_SECRET=... APP_ENC_KEY=... npm run preview -- --port 5178 &
+
+npx playwright install chromium          # einmalig
+SMOKE_DB_CONTAINER=pg-smoke node scripts/smoke.mjs http://localhost:5178 ./smoke
+```
+
+Beim ersten Lauf fällt auf: die Rolle „Administration“ verlangt Zwei-Faktor,
+weshalb der Hook jeden Aufruf unter `/intern` auf die Einrichtungsseite
+umleitet. Mit `SMOKE_DB_CONTAINER` schaltet das Skript die Anforderung in der
+Testdatenbank ab und meldet sich neu an — geprüft werden sollen die Seiten,
+nicht der Zwei-Faktor-Ablauf.
 
 ---
 
 ## Betrieb
 
-`Dockerfile` erzeugt ein Image auf Basis von `node:20`; die
-GitHub-Action `deploy.yml` baut es bei jedem Push auf `master` und lädt es
-nach `ghcr.io`. Der Server hört auf Port 3000.
+`Dockerfile` erzeugt ein Image auf Basis von `node:22`; die GitHub-Action
+`deploy.yml` baut es bei jedem Push auf `master` und lädt es nach `ghcr.io`.
+Der Startbefehl wendet ausstehende Migrationen an und startet erst danach den
+Server – schlägt die Migration fehl, kommt der Server gar nicht erst hoch.
+Er hört auf Port 3000.
+
+Für einen vollständigen Stapel aus Datenbank und Anwendung:
+
+```bash
+docker compose --profile app up -d
+```

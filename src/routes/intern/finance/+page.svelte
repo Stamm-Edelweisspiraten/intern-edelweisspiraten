@@ -1,6 +1,18 @@
 <script lang="ts">
-    import { Alert, Badge, Button, Card, ConfirmDialog, DataTable, EmptyState, PageHeader, StatTile } from "$lib/components/ui";
+    import {
+        Alert,
+        Badge,
+        Button,
+        Card,
+        ConfirmDialog,
+        DataTable,
+        EmptyState,
+        PageHeader,
+        StatTile
+    } from "$lib/components/ui";
     import type { Column } from "$lib/components/ui";
+    import FinanceNav from "$lib/components/finance/FinanceNav.svelte";
+    import { MonthlyBarChart } from "$lib/components/finance/charts";
     import { formatEuro } from "$lib/money";
     import type { ActionData, PageData } from "./$types";
 
@@ -79,14 +91,18 @@
         subtitle="Geschäftsjahre, Buchungen und offene Posten."
     >
         {#snippet actions()}
-            <Button href="/intern/finance/outstanding" variant="secondary" icon="hourglass-split">
-                Offene Posten
+            <Button href="/intern/finance/journal" variant="secondary" icon="journal-text">
+                Journal
             </Button>
-            <Button href="/intern/finance/fiscal-years/create" variant="primary" icon="plus-circle">
-                Neues Geschäftsjahr
-            </Button>
+            {#if data.canManage}
+                <Button href="/intern/finance/fiscal-years/create" variant="primary" icon="plus-circle">
+                    Neues Geschäftsjahr
+                </Button>
+            {/if}
         {/snippet}
     </PageHeader>
+
+    <FinanceNav />
 
     {#if form?.error}
         <Alert tone="danger" message={form.error} />
@@ -110,6 +126,66 @@
             href="/intern/finance/outstanding"
         />
     </div>
+
+    <!--
+        Diagramm UND Zahlen: die Jahressummen stehen als Text darunter, damit
+        die Karte ohne JavaScript und mit einem Screenreader vollständig
+        lesbar bleibt.
+    -->
+    <Card
+        title={`Verlauf ${data.monthly.year}`}
+        subtitle="Erträge und Aufwendungen je Monat."
+        meta={formatEuro(data.monthly.result)}
+    >
+        <MonthlyBarChart months={data.monthly.months} title="" />
+
+        <dl class="grid grid-cols-3 gap-4 mt-4 text-sm">
+            <div>
+                <dt class="text-fg-subtle">Erträge</dt>
+                <dd class="font-semibold tabular-figures text-success">
+                    {formatEuro(data.monthly.incomeTotal)}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-fg-subtle">Aufwendungen</dt>
+                <dd class="font-semibold tabular-figures text-danger">
+                    {formatEuro(data.monthly.expenseTotal)}
+                </dd>
+            </div>
+            <div>
+                <dt class="text-fg-subtle">Ergebnis</dt>
+                <dd class="font-semibold tabular-figures text-fg">
+                    {formatEuro(data.monthly.result)}
+                </dd>
+            </div>
+        </dl>
+
+        <p class="text-xs text-fg-subtle mt-3">
+            Die Monatswerte im Einzelnen stehen unter
+            <a class="underline" href="/intern/finance/reports">Berichte</a>.
+        </p>
+    </Card>
+
+    {#if data.bankAccounts.length > 0}
+        <Card title="Kassen- und Bankkonten" padding="none">
+            <DataTable
+                columns={[
+                    { key: "name", label: "Konto", value: (b) => b.name },
+                    {
+                        key: "balance",
+                        label: "Kontostand",
+                        align: "right",
+                        value: (b) => formatEuro(b.balance)
+                    }
+                ] satisfies Column<PageData["bankAccounts"][number]>[]}
+                rows={data.bankAccounts}
+                getKey={(b) => b.id}
+                cardTitle={(b) => b.name}
+                rowHref={(b) => `/intern/finance/bank-accounts/${b.id}`}
+                empty="Noch kein Konto eingerichtet."
+            />
+        </Card>
+    {/if}
 
     <Card title="Geschäftsjahre" meta={`${active.length} aktiv`} padding="none">
         {#if active.length === 0}
@@ -146,18 +222,13 @@
                         href={`/intern/finance/fiscal-years/${row.id}`}
                         variant="secondary"
                         size="sm"
-                        icon="eye"
+                        icon="eye">Details</Button
                     >
-                        Details
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        icon="archive"
-                        onclick={() => askArchive(row)}
-                    >
-                        Archivieren
-                    </Button>
+                    {#if data.canManage}
+                        <Button variant="ghost" size="sm" icon="archive" onclick={() => askArchive(row)}>
+                            Archivieren
+                        </Button>
+                    {/if}
                 {/snippet}
             </DataTable>
         {/if}

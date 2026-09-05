@@ -4,7 +4,7 @@
         FormField, PageHeader, SearchInput, TextInput
     } from "$lib/components/ui";
     import { calculateAge, formatDate, formatDateTime } from "$lib/format";
-    import { canAny } from "$lib/can";
+    import { can } from "$lib/can";
     import type { ActionData, PageData } from "./$types";
 
     let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -16,9 +16,13 @@
     const STATUS = ["aktiv", "passiv", "gekündigt"];
 
     const permissions = $derived(data.permissions ?? []);
-    const canEdit = $derived(canAny(permissions, ["members.edit", "groupleader.members.edit"]));
-    const canDelete = $derived(canAny(permissions, ["members.delete", "groupleader.members.delete"]));
-    const canViewLog = $derived(canAny(permissions, ["members.view", "groupleader.members.log"]));
+    // Vom Server entschieden -- die Rechte koennen auf die Gruppen dieses
+    // Mitglieds beschraenkt sein und stehen dann nicht in `permissions`.
+    const canEdit = $derived(data.canEdit);
+    const canDelete = $derived(data.canDelete);
+    const canViewLog = $derived(data.canViewLog);
+    // Der Bescheid rechnet mit den Saetzen des Geschaeftsjahrs -- das ist Kasse.
+    const canViewFinance = $derived(can(permissions, "finance.view"));
 
     const editing = $derived(data.scope === "edit" && canEdit);
     const readOnly = $derived(!editing);
@@ -146,6 +150,15 @@
             <Button href={`/intern/members/${data.member.id}/invite.pdf`} variant="secondary" icon="file-earmark-pdf">
                 Einladung
             </Button>
+            {#if canViewFinance}
+                <Button
+                    href={`/intern/members/${data.member.id}/beitragsbescheid.pdf`}
+                    variant="secondary"
+                    icon="receipt"
+                >
+                    Beitragsbescheid
+                </Button>
+            {/if}
             {#if canEdit}
                 {#if readOnly}
                     <Button href={`/intern/members/${data.member.id}?scope=edit`} variant="primary" icon="pencil">

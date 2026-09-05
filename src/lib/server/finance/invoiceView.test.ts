@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ObjectId } from "mongodb";
 import { toInvoiceView } from "./invoiceService";
-import type { FiscalInvoiceDoc } from "$lib/server/db/collections";
+import { invoices } from "$lib/server/db/schema";
 
 /**
  * Prüft die Ableitung des offenen Betrags und des Verzugs. Das ist der Kern
@@ -9,21 +8,30 @@ import type { FiscalInvoiceDoc } from "$lib/server/db/collections";
  * zwei verschiedenen Regeln arbeitete.
  */
 
-function invoice(overrides: Partial<FiscalInvoiceDoc> = {}): FiscalInvoiceDoc {
+type InvoiceRow = typeof invoices.$inferSelect;
+
+function invoice(overrides: Partial<InvoiceRow> = {}): InvoiceRow {
     return {
-        _id: new ObjectId(),
-        fiscalYearId: new ObjectId(),
-        memberId: "m1",
-        member: "Anna Müller",
+        id: "11111111-1111-4111-8111-111111111111",
+        number: "2026-0001",
+        fiscalYearId: "22222222-2222-4222-8222-222222222222",
+        memberId: "33333333-3333-4333-8333-333333333333",
+        memberName: "Anna Müller",
         kind: "Jahresbeitrag",
+        categoryId: null,
         amount: 6500,
         paidAmount: 0,
         date: new Date("2026-01-15T00:00:00Z"),
         dueDate: null,
         note: "",
-        orderId: null,
         status: "open",
+        orderId: null,
+        entryId: null,
+        remindedAt: null,
+        reminderLevel: 0,
+        createdBy: "test",
         createdAt: new Date("2026-01-15T00:00:00Z"),
+        updatedAt: null,
         ...overrides
     };
 }
@@ -47,20 +55,24 @@ describe("toInvoiceView", () => {
     });
 
     it("wird bei Überzahlung nicht negativ", () => {
+        // Die Datenbank laesst das ueber invoices_paid_check gar nicht erst
+        // zu; die Ansicht muss trotzdem robust bleiben.
         const view = toInvoiceView(invoice({ paidAmount: 7000, status: "paid" }));
         expect(view.outstanding).toBe(0);
     });
 
     it("markiert überfällige offene Rechnungen", () => {
-        const view = toInvoiceView(
-            invoice({ dueDate: new Date("2020-03-31T00:00:00Z") })
-        );
+        const view = toInvoiceView(invoice({ dueDate: new Date("2020-03-31T00:00:00Z") }));
         expect(view.overdue).toBe(true);
     });
 
     it("markiert bezahlte Rechnungen nie als überfällig", () => {
         const view = toInvoiceView(
-            invoice({ paidAmount: 6500, status: "paid", dueDate: new Date("2020-03-31T00:00:00Z") })
+            invoice({
+                paidAmount: 6500,
+                status: "paid",
+                dueDate: new Date("2020-03-31T00:00:00Z")
+            })
         );
         expect(view.overdue).toBe(false);
     });
@@ -81,8 +93,16 @@ describe("toInvoiceView", () => {
         expect(toInvoiceView(invoice({ dueDate: future })).overdue).toBe(false);
     });
 
+    it("markiert eine heute fällige Rechnung noch nicht als überfällig", () => {
+        // Der Vergleich laeuft gegen den Tagesbeginn; sonst waere eine heute
+        // faellige Rechnung ab 00:01 Uhr ueberfaellig.
+        const today = new Date();
+        today.setHours(12, 0, 0, 0);
+        expect(toInvoiceView(invoice({ dueDate: today })).overdue).toBe(false);
+    });
+
     it("setzt einen Platzhalter, wenn kein Mitglied hinterlegt ist", () => {
-        const view = toInvoiceView(invoice({ member: undefined, memberId: null }));
+        const view = toInvoiceView(invoice({ memberName: null, memberId: null }));
         expect(view.member).toBe("Unbekannt");
         expect(view.memberId).toBeNull();
     });

@@ -1,5 +1,14 @@
 <script lang="ts">
-    import { Alert, Button, Card, EmptyState, FormField, PageHeader, TextInput } from "$lib/components/ui";
+    import {
+        Alert,
+        Badge,
+        Button,
+        Card,
+        EmptyState,
+        FormField,
+        PageHeader,
+        TextInput
+    } from "$lib/components/ui";
     import type { ActionData, PageData } from "./$types";
 
     let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -135,6 +144,51 @@
                     </div>
                 {/if}
             </form>
+        </Card>
+
+        <Card
+            title="Rechte in dieser Gruppe"
+            subtitle="Rollen, die hier gelten – direkt zugewiesen oder über ein Amt mit Gruppenbezug."
+            meta={`${data.access.length} Einträge`}
+        >
+            {#if data.access.length === 0}
+                <EmptyState
+                    icon="shield-slash"
+                    title="Keine gruppenbezogenen Rechte"
+                    description="Niemand hat Rechte, die eigens für diese Gruppe vergeben wurden. Stammesweite Rechte gelten hier trotzdem und werden bewusst nicht aufgeführt."
+                />
+            {:else}
+                <ul class="divide-y divide-border">
+                    {#each data.access as entry, index (index)}
+                        <li class="py-3 flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+                            <div class="sm:w-56 shrink-0">
+                                <p class="text-sm font-semibold text-fg">{entry.holder}</p>
+                                <p class="text-xs text-fg-subtle">
+                                    {#if entry.via === "position"}
+                                        Amt: {entry.positionName}
+                                    {:else}
+                                        Direkt zugewiesen
+                                    {/if}
+                                </p>
+                            </div>
+
+                            <div class="min-w-0 space-y-1.5">
+                                <Badge tone="primary" size="xs" label={entry.roleName} />
+                                <p class="text-xs text-fg-muted">
+                                    {entry.labels.join(" · ")}
+                                </p>
+                            </div>
+                        </li>
+                    {/each}
+                </ul>
+
+                <p class="text-xs text-fg-subtle mt-4">
+                    Rollen ohne Gruppenbezug gelten für den ganzen Stamm und stehen deshalb
+                    nicht in dieser Liste. Vergeben werden sie unter
+                    <a class="underline" href="/intern/admin/user">Zugänge</a> und
+                    <a class="underline" href="/intern/admin/position">Ämter</a>.
+                </p>
+            {/if}
         </Card>
     {/if}
 </div>

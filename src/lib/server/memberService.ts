@@ -1,10 +1,29 @@
-import { db } from "$lib/server/mongo";
-import { ObjectId } from "mongodb";
-import { removeMemberTransactions } from "$lib/server/finance/transactionService";
+import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { db, withTransaction, type Executor } from "$lib/server/db";
+import { isUuid, onlyUuids } from "$lib/server/db/ids";
+import {
+    files,
+    memberEmails,
+    memberGroups,
+    memberLogs,
+    memberPhones,
+    members
+} from "$lib/server/db/schema";
 
-// -----------------------------------------------------
-//  Types
-// -----------------------------------------------------
+/**
+ * Mitgliederverwaltung.
+ *
+ * Die Mehrfachfelder (E-Mail, Telefon, Gruppen) liegen jetzt in eigenen
+ * Tabellen. Damit entfallen die Umschreibungen beim Lesen, die frueher noetig
+ * waren, weil aeltere Datensaetze noch ein einzelnes Feld `group` statt
+ * `groups[]` hatten -- und die Abfrage in getMembersByGroupIds, die sowohl
+ * gegen Zeichenketten als auch gegen ObjectIds suchen musste, weil beide
+ * Formen nebeneinander in der Datenbank standen.
+ */
+
+// ---------------------------------------------------------------------------
+// Typen
+// ---------------------------------------------------------------------------
 
 export interface MemberEmail {
     label: string;
@@ -22,63 +41,265 @@ export interface MemberAddress {
     city: string;
 }
 
+export interface MemberFileMeta {
+    id: string;
+    filename: string;
+    contentType: string;
+    size: number;
+    uploadedAt: string;
+}
+
+/** Ansichtsmodell, wie es Routen und PDFs erwarten. */
 export interface Member {
-    _id?: ObjectId;
+    id: string;
     firstname: string;
     lastname: string;
-    fahrtenname?: string;
+    fahrtenname: string;
     birthday: string;
     address: MemberAddress;
     stand: string;
     status: string;
     emails: MemberEmail[];
     numbers: MemberNumber[];
-    groups: string[];      // interne Gruppen-IDs
-    users: string[];
+    /** Gruppen-Kennungen. */
+    groups: string[];
     entryDate: string;
-    isSecondMember?: boolean;
-    contributionDues?: {
+    isSecondMember: boolean;
+    contributionDues: {
         stamm: boolean;
         gau: boolean;
         landesmark: boolean;
         bund: boolean;
     };
+    mediaConsent: {
+        socialMedia: boolean;
+        website: boolean;
+        print: boolean;
+    };
+    consentFile?: MemberFileMeta;
+    applicationFile?: MemberFileMeta;
+    inviteCode?: string;
+    inviteCodeIssuedAt?: string;
+    inviteCodeExpiresAt?: string;
     updatedAt: string;
     updatedBy: string;
-    inviteCode?: string;
-    inviteCodeExpiresAt?: string;
-    inviteCodeIssuedAt?: string;
-    mediaConsent?: {
-        socialMedia?: boolean;
-        website?: boolean;
-        print?: boolean;
-    };
-    consentFile?: {
-        id: string;
-        filename: string;
-        contentType: string;
-        size: number;
-        uploadedAt: string;
-    };
-    applicationFile?: {
-        id: string;
-        filename: string;
-        contentType: string;
-        size: number;
-        uploadedAt: string;
-    };
 }
 
 export interface MemberLogEntry {
     memberId: string;
     action: "create" | "update" | "delete";
-    changes?: { field: string; before: any; after: any }[];
+    changes: { field: string; before: unknown; after: unknown }[];
     createdAt: string;
     user: string;
 }
 
-function collectChanges(before: any, after: Record<string, any>): { field: string; before: any; after: any }[] {
-    const changes: { field: string; before: any; after: any }[] = [];
+/** Eingabe fuer Anlegen und Aendern. Alle Felder sind optional aenderbar. */
+export interface MemberInput {
+    firstname?: string;
+    lastname?: string;
+    fahrtenname?: string;
+    birthday?: string;
+    address?: Partial<MemberAddress>;
+    stand?: string;
+    status?: string;
+    emails?: MemberEmail[];
+    numbers?: MemberNumber[];
+    groups?: string[];
+    entryDate?: string;
+    isSecondMember?: boolean;
+    contributionDues?: Partial<Member["contributionDues"]>;
+    mediaConsent?: Partial<Member["mediaConsent"]>;
+    consentFileId?: string | null;
+    applicationFileId?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Abbildung Datenbank -> Ansichtsmodell
+// ---------------------------------------------------------------------------
+
+type MemberRow = typeof members.$inferSelect;
+type FileRow = typeof files.$inferSelect;
+
+function toFileMeta(row: Pick<FileRow, "id" | "filename" | "contentType" | "size" | "uploadedAt"> | null) {
+    if (!row) return undefined;
+    return {
+        id: row.id,
+        filename: row.filename,
+        contentType: row.contentType,
+        size: row.size,
+        uploadedAt: row.uploadedAt.toISOString()
+    };
+}
+
+async function hydrate(rows: MemberRow[]): Promise<Member[]> {
+    if (rows.length === 0) return [];
+
+    const ids = rows.map((row) => row.id);
+    const fileIds = onlyUuids(
+        rows.flatMap((row) => [row.consentFileId, row.applicationFileId])
+    );
+
+    const [emailRows, phoneRows, groupRows, fileRows] = await Promise.all([
+        db
+            .select()
+            .from(memberEmails)
+            .where(inArray(memberEmails.memberId, ids))
+            .orderBy(asc(memberEmails.position)),
+        db
+            .select()
+            .from(memberPhones)
+            .where(inArray(memberPhones.memberId, ids))
+            .orderBy(asc(memberPhones.position)),
+        db.select().from(memberGroups).where(inArray(memberGroups.memberId, ids)),
+        fileIds.length > 0
+            ? db
+                  .select({
+                      id: files.id,
+                      filename: files.filename,
+                      contentType: files.contentType,
+                      size: files.size,
+                      uploadedAt: files.uploadedAt
+                  })
+                  .from(files)
+                  .where(inArray(files.id, fileIds))
+            : Promise.resolve([])
+    ]);
+
+    const byMember = <T extends { memberId: string }>(list: T[]) => {
+        const map = new Map<string, T[]>();
+        for (const item of list) {
+            const entries = map.get(item.memberId) ?? [];
+            entries.push(item);
+            map.set(item.memberId, entries);
+        }
+        return map;
+    };
+
+    const emails = byMember(emailRows);
+    const phones = byMember(phoneRows);
+    const groups = byMember(groupRows);
+    const filesById = new Map(fileRows.map((row) => [row.id, row]));
+
+    return rows.map((row) => ({
+        id: row.id,
+        firstname: row.firstname,
+        lastname: row.lastname,
+        fahrtenname: row.fahrtenname,
+        birthday: row.birthday,
+        address: { street: row.street, zip: row.zip, city: row.city },
+        stand: row.stand,
+        status: row.status,
+        emails: (emails.get(row.id) ?? []).map((e) => ({ label: e.label, email: e.email })),
+        numbers: (phones.get(row.id) ?? []).map((p) => ({ label: p.label, number: p.number })),
+        groups: (groups.get(row.id) ?? []).map((g) => g.groupId),
+        entryDate: row.entryDate,
+        isSecondMember: row.isSecondMember,
+        contributionDues: {
+            stamm: row.duesStamm,
+            gau: row.duesGau,
+            landesmark: row.duesLandesmark,
+            bund: row.duesBund
+        },
+        mediaConsent: {
+            socialMedia: row.consentSocialMedia,
+            website: row.consentWebsite,
+            print: row.consentPrint
+        },
+        consentFile: toFileMeta(filesById.get(row.consentFileId ?? "") ?? null),
+        applicationFile: toFileMeta(filesById.get(row.applicationFileId ?? "") ?? null),
+        inviteCode: row.inviteCode ?? undefined,
+        inviteCodeIssuedAt: row.inviteCodeIssuedAt?.toISOString(),
+        inviteCodeExpiresAt: row.inviteCodeExpiresAt?.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+        updatedBy: row.updatedBy
+    }));
+}
+
+/** Uebersetzt die Eingabe in Spaltenwerte; nur gesetzte Felder wandern mit. */
+function toColumns(input: MemberInput): Partial<typeof members.$inferInsert> {
+    const update: Partial<typeof members.$inferInsert> = {};
+
+    if (input.firstname !== undefined) update.firstname = input.firstname.trim();
+    if (input.lastname !== undefined) update.lastname = input.lastname.trim();
+    if (input.fahrtenname !== undefined) update.fahrtenname = input.fahrtenname.trim();
+    if (input.birthday !== undefined) update.birthday = input.birthday;
+    if (input.stand !== undefined) update.stand = input.stand;
+    if (input.status !== undefined) update.status = input.status;
+    if (input.entryDate !== undefined) update.entryDate = input.entryDate;
+    if (input.isSecondMember !== undefined) update.isSecondMember = input.isSecondMember;
+
+    if (input.address) {
+        if (input.address.street !== undefined) update.street = input.address.street;
+        if (input.address.zip !== undefined) update.zip = input.address.zip;
+        if (input.address.city !== undefined) update.city = input.address.city;
+    }
+
+    if (input.contributionDues) {
+        const d = input.contributionDues;
+        if (d.stamm !== undefined) update.duesStamm = d.stamm;
+        if (d.gau !== undefined) update.duesGau = d.gau;
+        if (d.landesmark !== undefined) update.duesLandesmark = d.landesmark;
+        if (d.bund !== undefined) update.duesBund = d.bund;
+    }
+
+    if (input.mediaConsent) {
+        const c = input.mediaConsent;
+        if (c.socialMedia !== undefined) update.consentSocialMedia = c.socialMedia;
+        if (c.website !== undefined) update.consentWebsite = c.website;
+        if (c.print !== undefined) update.consentPrint = c.print;
+    }
+
+    if (input.consentFileId !== undefined) update.consentFileId = input.consentFileId;
+    if (input.applicationFileId !== undefined) update.applicationFileId = input.applicationFileId;
+
+    return update;
+}
+
+async function replaceEmails(tx: Executor, memberId: string, list: MemberEmail[]): Promise<void> {
+    await tx.delete(memberEmails).where(eq(memberEmails.memberId, memberId));
+    const rows = list
+        .filter((entry) => entry.email?.trim())
+        .map((entry, index) => ({
+            memberId,
+            label: entry.label ?? "",
+            email: entry.email.trim().toLowerCase(),
+            position: index
+        }));
+    if (rows.length > 0) await tx.insert(memberEmails).values(rows);
+}
+
+async function replacePhones(tx: Executor, memberId: string, list: MemberNumber[]): Promise<void> {
+    await tx.delete(memberPhones).where(eq(memberPhones.memberId, memberId));
+    const rows = list
+        .filter((entry) => entry.number?.trim())
+        .map((entry, index) => ({
+            memberId,
+            label: entry.label ?? "",
+            number: entry.number.trim(),
+            position: index
+        }));
+    if (rows.length > 0) await tx.insert(memberPhones).values(rows);
+}
+
+async function replaceGroups(tx: Executor, memberId: string, groupIds: string[]): Promise<void> {
+    await tx.delete(memberGroups).where(eq(memberGroups.memberId, memberId));
+    const valid = Array.from(new Set(onlyUuids(groupIds)));
+    if (valid.length === 0) return;
+    await tx
+        .insert(memberGroups)
+        .values(valid.map((groupId) => ({ memberId, groupId })))
+        .onConflictDoNothing();
+}
+
+// ---------------------------------------------------------------------------
+// Protokoll
+// ---------------------------------------------------------------------------
+
+function collectChanges(
+    before: Record<string, unknown>,
+    after: Record<string, unknown>
+): { field: string; before: unknown; after: unknown }[] {
+    const changes: { field: string; before: unknown; after: unknown }[] = [];
     for (const key of Object.keys(after)) {
         const oldVal = before?.[key];
         const newVal = after[key];
@@ -89,357 +310,334 @@ function collectChanges(before: any, after: Record<string, any>): { field: strin
     return changes;
 }
 
-async function addMemberLog(entry: Omit<MemberLogEntry, "createdAt">) {
-    const payload: MemberLogEntry = {
-        ...entry,
-        createdAt: new Date().toISOString()
-    };
-    await db.collection("memberLogs").insertOne(payload);
+async function addMemberLog(entry: {
+    memberId: string;
+    action: "create" | "update" | "delete";
+    changes?: { field: string; before: unknown; after: unknown }[];
+    user: string;
+}): Promise<void> {
+    await db.insert(memberLogs).values({
+        memberId: entry.memberId,
+        action: entry.action,
+        changes: entry.changes ?? [],
+        user: entry.user
+    });
 }
 
-export async function getMemberLogs(memberId: string) {
-    const logs = await db.collection("memberLogs")
-        .find({ memberId })
-        .sort({ createdAt: -1 })
-        .limit(100)
-        .toArray();
+export async function getMemberLogs(memberId: string): Promise<MemberLogEntry[]> {
+    if (!isUuid(memberId)) return [];
+    const rows = await db
+        .select()
+        .from(memberLogs)
+        .where(eq(memberLogs.memberId, memberId))
+        .orderBy(desc(memberLogs.createdAt))
+        .limit(100);
 
-    return logs.map((l: any) => ({
-        memberId: l.memberId,
-        action: l.action,
-        changes: l.changes ?? [],
-        createdAt: l.createdAt,
-        user: l.user ?? "unbekannt"
+    return rows.map((row) => ({
+        memberId: row.memberId,
+        action: row.action,
+        changes: row.changes ?? [],
+        createdAt: row.createdAt.toISOString(),
+        user: row.user
     }));
 }
 
+// ---------------------------------------------------------------------------
+// Schreiben
+// ---------------------------------------------------------------------------
 
-// -----------------------------------------------------
-//  CREATE MEMBER
-// -----------------------------------------------------
-export async function createMember(member: {
-    birthday: string;
-    emails: { label: string; email: string }[];
-    firstname: string;
-    address: { zip: string; city: string; street: string };
-    fahrtenname?: string;
-    updatedBy: string;
-    entryDate: string;
-    numbers: { label: string; number: string }[];
-    groups: string[];
-    stand: string;
-    users: any[];
-    lastname: string;
-    status: string;
-    isSecondMember?: boolean;
-    contributionDues?: Member["contributionDues"];
-    mediaConsent?: {
-        socialMedia?: boolean;
-        website?: boolean;
-        print?: boolean;
-    };
-    consentFile?: Member["consentFile"];
-    applicationFile?: Member["applicationFile"];
-}) {
+export async function createMember(
+    input: MemberInput & { updatedBy: string }
+): Promise<Member> {
+    const columns = toColumns(input);
 
-    const payload = {
-        ...member,
-        updatedAt: new Date().toISOString()
-    };
+    const id = await withTransaction(async (tx) => {
+        const [row] = await tx
+            .insert(members)
+            .values({
+                firstname: input.firstname?.trim() ?? "",
+                lastname: input.lastname?.trim() ?? "",
+                ...columns,
+                updatedBy: input.updatedBy,
+                updatedAt: new Date(),
+                inviteCode: await generateInviteCode(tx),
+                inviteCodeIssuedAt: new Date(),
+                inviteCodeExpiresAt: inviteExpiry()
+            })
+            .returning({ id: members.id });
 
-    const res = await db.collection("members").insertOne(payload);
-
-    const memberId = res.insertedId.toString();
-
-    // Invite Code erzeugen
-    await assignInviteCode(memberId);
-
-    await addMemberLog({
-        memberId,
-        action: "create",
-        changes: [],
-        user: payload.updatedBy ?? "system"
+        await replaceEmails(tx, row.id, input.emails ?? []);
+        await replacePhones(tx, row.id, input.numbers ?? []);
+        await replaceGroups(tx, row.id, input.groups ?? []);
+        return row.id;
     });
 
-    return { ...payload, _id: res.insertedId };
+    await addMemberLog({ memberId: id, action: "create", changes: [], user: input.updatedBy });
+
+    const member = await getMember(id);
+    if (!member) throw new Error("Mitglied konnte nicht gelesen werden.");
+    return member;
 }
 
+export async function updateMember(
+    id: string,
+    input: MemberInput,
+    updatedBy: string
+): Promise<boolean> {
+    if (!isUuid(id)) return false;
 
-// -----------------------------------------------------
-//  GET MEMBER BY ID
-// -----------------------------------------------------
-export async function getMember(id: string) {
-    const m = await db.collection("members").findOne({ _id: new ObjectId(id) });
-    if (!m) return null;
-    if (!m.groups || m.groups.length === 0) {
-        if (m.group) {
-            m.groups = [m.group];
-        } else {
-            m.groups = [];
-        }
-    }
-    return m;
-}
-
-
-// -----------------------------------------------------
-//  GET ALL MEMBERS
-// -----------------------------------------------------
-export async function getAllMembers() {
-    const list = await db.collection("members").find().toArray();
-    return list.map((m) => {
-        if (!m.groups || m.groups.length === 0) {
-            if (m.group) {
-                m.groups = [m.group];
-            } else {
-                m.groups = [];
-            }
-        }
-        return m;
-    });
-}
-
-
-// -----------------------------------------------------
-//  UPDATE MEMBER
-// -----------------------------------------------------
-export async function updateMember(id: string, data: Partial<Member>, updatedBy: string) {
-
-    const mongoId = new ObjectId(id);
-
-    const existing = await db.collection("members").findOne({ _id: mongoId });
+    const existing = await getMember(id);
     if (!existing) return false;
 
-    const payload = {
-        ...data,
-        updatedBy,
-        updatedAt: new Date().toISOString()
-    };
+    await withTransaction(async (tx) => {
+        await tx
+            .update(members)
+            .set({ ...toColumns(input), updatedBy, updatedAt: new Date() })
+            .where(eq(members.id, id));
 
-    const changes = collectChanges(existing, payload);
-
-    await db.collection("members").updateOne(
-        { _id: mongoId },
-        { $set: payload }
-    );
-
-    await addMemberLog({
-        memberId: id,
-        action: "update",
-        changes,
-        user: updatedBy
+        if (input.emails !== undefined) await replaceEmails(tx, id, input.emails);
+        if (input.numbers !== undefined) await replacePhones(tx, id, input.numbers);
+        if (input.groups !== undefined) await replaceGroups(tx, id, input.groups);
     });
 
+    const updated = await getMember(id);
+    const changes = collectChanges(
+        existing as unknown as Record<string, unknown>,
+        pickComparable(updated as Member)
+    );
+
+    await addMemberLog({ memberId: id, action: "update", changes, user: updatedBy });
     return true;
 }
 
+/** Felder, die im Protokoll verglichen werden -- ohne Zeitstempel und Codes. */
+function pickComparable(member: Member): Record<string, unknown> {
+    const {
+        updatedAt: _updatedAt,
+        updatedBy: _updatedBy,
+        inviteCode: _inviteCode,
+        inviteCodeIssuedAt: _issued,
+        inviteCodeExpiresAt: _expires,
+        ...rest
+    } = member;
+    return rest as unknown as Record<string, unknown>;
+}
 
-// -----------------------------------------------------
-//  DELETE MEMBER
-// -----------------------------------------------------
-export async function deleteMember(id: string, deletedBy?: string) {
-    const res = await db.collection("members").deleteOne({ _id: new ObjectId(id) });
+export async function deleteMember(id: string, deletedBy?: string): Promise<boolean> {
+    if (!isUuid(id)) return false;
+
+    // Zuordnungen und Unterlagen verschwinden ueber die Fremdschluessel mit.
+    const rows = await db.delete(members).where(eq(members.id, id)).returning({ id: members.id });
+
     await addMemberLog({
         memberId: id,
         action: "delete",
         changes: [],
         user: deletedBy ?? "system"
     });
-    await removeMemberTransactions(id);
-    return res;
+
+    return rows.length > 0;
 }
 
+// ---------------------------------------------------------------------------
+// Lesen
+// ---------------------------------------------------------------------------
 
-// -----------------------------------------------------
-//  SEARCH MEMBERS
-// -----------------------------------------------------
-export async function searchMembers(query: string) {
-    if (!query || query.trim().length === 0) {
-        return await getAllMembers();
-    }
-
-    const q = query.trim();
-
-    return await db.collection("members")
-        .find({
-            $or: [
-                { firstname: { $regex: q, $options: "i" } },
-                { lastname: { $regex: q, $options: "i" } },
-                { fahrtenname: { $regex: q, $options: "i" } },
-                { groups: { $regex: q, $options: "i" } },
-                { status: { $regex: q, $options: "i" } },
-                { stand: { $regex: q, $options: "i" } },
-                { users: { $in: [q] } },
-                { "emails.email": { $regex: q, $options: "i" } },
-                { "emails.label": { $regex: q, $options: "i" } }
-            ]
-        })
-        .toArray();
+export async function getMember(id: string): Promise<Member | null> {
+    if (!isUuid(id)) return null;
+    const rows = await db.select().from(members).where(eq(members.id, id)).limit(1);
+    const [member] = await hydrate(rows);
+    return member ?? null;
 }
 
+export async function getAllMembers(): Promise<Member[]> {
+    const rows = await db
+        .select()
+        .from(members)
+        .orderBy(asc(members.lastname), asc(members.firstname));
+    return hydrate(rows);
+}
 
-// -----------------------------------------------------
-//  LINK USER TO MEMBER
-// -----------------------------------------------------
-export async function addUserToMember(memberId: string, userId: string) {
+export async function getMembersByIds(ids: string[]): Promise<Member[]> {
+    const valid = onlyUuids(ids);
+    if (valid.length === 0) return [];
+    const rows = await db
+        .select()
+        .from(members)
+        .where(inArray(members.id, valid))
+        .orderBy(asc(members.lastname), asc(members.firstname));
+    return hydrate(rows);
+}
 
-    await db.collection("members").updateOne(
-        { _id: new ObjectId(memberId) },
-        { $addToSet: { users: userId } }
+export async function searchMembers(query: string): Promise<Member[]> {
+    const q = query?.trim();
+    if (!q) return getAllMembers();
+
+    const pattern = `%${q}%`;
+    const rows = await db
+        .selectDistinct({ member: members })
+        .from(members)
+        .leftJoin(memberEmails, eq(memberEmails.memberId, members.id))
+        .where(
+            or(
+                ilike(members.firstname, pattern),
+                ilike(members.lastname, pattern),
+                ilike(members.fahrtenname, pattern),
+                ilike(members.status, pattern),
+                ilike(members.stand, pattern),
+                ilike(memberEmails.email, pattern),
+                ilike(memberEmails.label, pattern)
+            )
+        );
+
+    const hydrated = await hydrate(rows.map((row) => row.member));
+    return hydrated.sort(
+        (a, b) => a.lastname.localeCompare(b.lastname) || a.firstname.localeCompare(b.firstname)
     );
+}
 
+export async function getMemberByEmail(email: string): Promise<Member | null> {
+    if (!email) return null;
+    const rows = await db
+        .select({ member: members })
+        .from(members)
+        .innerJoin(memberEmails, eq(memberEmails.memberId, members.id))
+        .where(eq(memberEmails.email, email.trim().toLowerCase()))
+        .limit(1);
+    const [member] = await hydrate(rows.map((row) => row.member));
+    return member ?? null;
+}
+
+export async function getMembersByGroup(groupId: string): Promise<Member[]> {
+    return getMembersByGroupIds([groupId]);
+}
+
+export async function getMembersByGroupIds(groupIds: string[]): Promise<Member[]> {
+    const valid = onlyUuids(groupIds);
+    if (valid.length === 0) return [];
+
+    const rows = await db
+        .selectDistinct({ member: members })
+        .from(members)
+        .innerJoin(memberGroups, eq(memberGroups.memberId, members.id))
+        .where(inArray(memberGroups.groupId, valid));
+
+    const hydrated = await hydrate(rows.map((row) => row.member));
+    return hydrated.sort(
+        (a, b) => a.lastname.localeCompare(b.lastname) || a.firstname.localeCompare(b.firstname)
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Gruppenzuordnung
+// ---------------------------------------------------------------------------
+
+export async function setMemberGroup(memberId: string, groupId: string): Promise<boolean> {
+    if (!isUuid(memberId)) return false;
+    await withTransaction((tx) => replaceGroups(tx, memberId, [groupId]));
     return true;
 }
 
-
-// -----------------------------------------------------
-//  INVITE CODE
-// -----------------------------------------------------
-export async function generateInviteCode(): Promise<string> {
-    const chars = "0123456789";
-    let code = "";
-
-    // Kollisionen vermeiden
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-        code = "";
-        for (let i = 0; i < 6; i++) {
-            code += chars[Math.floor(Math.random() * chars.length)];
-        }
-
-        const existing = await db.collection("members").findOne({ inviteCode: code });
-        if (!existing) break;
-    }
-
-    return code;
+export async function removeMemberGroup(memberId: string): Promise<boolean> {
+    if (!isUuid(memberId)) return false;
+    await db.delete(memberGroups).where(eq(memberGroups.memberId, memberId));
+    return true;
 }
+
+/** Entfernt eine Gruppe aus allen Mitgliedern (z. B. beim Loeschen der Gruppe). */
+export async function unlinkGroupFromAllMembers(groupId: string): Promise<boolean> {
+    if (!isUuid(groupId)) return false;
+    await db.delete(memberGroups).where(eq(memberGroups.groupId, groupId));
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Einladungscode
+// ---------------------------------------------------------------------------
 
 /** Gueltigkeitsdauer eines Einladungscodes in Tagen. */
 export const INVITE_CODE_TTL_DAYS = 60;
 
-export async function assignInviteCode(memberId: string) {
-    const inviteCode = await generateInviteCode();
+function inviteExpiry(): Date {
+    return new Date(Date.now() + INVITE_CODE_TTL_DAYS * 24 * 60 * 60 * 1000);
+}
 
-    await db.collection("members").updateOne(
-        { _id: new ObjectId(memberId) },
-        {
-            $set: {
-                inviteCode,
-                inviteCodeIssuedAt: new Date().toISOString(),
-                // Vorher: null -- der Code lief nie ab.
-                inviteCodeExpiresAt: new Date(
-                    Date.now() + INVITE_CODE_TTL_DAYS * 24 * 60 * 60 * 1000
-                ).toISOString()
-            }
+async function generateInviteCode(executor: Executor = db): Promise<string> {
+    const chars = "0123456789";
+
+    // Kollisionen vermeiden. Der eindeutige Index ist die eigentliche
+    // Absicherung; diese Schleife spart nur den Fehlerfall.
+    for (let attempt = 0; attempt < 20; attempt++) {
+        let code = "";
+        for (let i = 0; i < 6; i++) {
+            code += chars[Math.floor(Math.random() * chars.length)];
         }
-    );
+
+        const [existing] = await executor
+            .select({ id: members.id })
+            .from(members)
+            .where(eq(members.inviteCode, code))
+            .limit(1);
+
+        if (!existing) return code;
+    }
+
+    throw new Error("Es konnte kein freier Einladungscode gefunden werden.");
+}
+
+export async function assignInviteCode(memberId: string): Promise<string> {
+    if (!isUuid(memberId)) throw new Error("Ungültige Kennung.");
+
+    const inviteCode = await generateInviteCode();
+    await db
+        .update(members)
+        .set({
+            inviteCode,
+            inviteCodeIssuedAt: new Date(),
+            // Vorher: null -- der Code lief nie ab.
+            inviteCodeExpiresAt: inviteExpiry()
+        })
+        .where(eq(members.id, memberId));
 
     return inviteCode;
 }
 
-
-// -----------------------------------------------------
-//  GROUP → MEMBER METHODS
-// -----------------------------------------------------
-
-/**
- * Setzt die Gruppe eines Members
- */
-export async function setMemberGroup(memberId: string, groupId: string) {
-    await db.collection("members").updateOne(
-        { _id: new ObjectId(memberId) },
-        {
-            $set: {
-                groups: [groupId],
-                updatedAt: new Date().toISOString()
-            }
-        }
-    );
-    return true;
+export async function getMemberByInviteCode(code: string): Promise<Member | null> {
+    if (!code) return null;
+    const rows = await db
+        .select()
+        .from(members)
+        .where(eq(members.inviteCode, code.trim()))
+        .limit(1);
+    const [member] = await hydrate(rows);
+    return member ?? null;
 }
 
+/** Naechste Geburtstage, fuer die Kachel auf dem Dashboard. */
+export async function getUpcomingBirthdays(limit = 3): Promise<Member[]> {
+    const rows = await db
+        .select()
+        .from(members)
+        .where(and(eq(members.status, "aktiv"), sql`${members.birthday} <> ''`));
 
-/**
- * Entfernt die Gruppe eines Members
- */
-export async function removeMemberGroup(memberId: string) {
-    await db.collection("members").updateOne(
-        { _id: new ObjectId(memberId) },
-        {
-            $set: {
-                groups: [],
-                updatedAt: new Date().toISOString()
-            }
-        }
-    );
-    return true;
+    const hydrated = await hydrate(rows);
+    const today = new Date();
+
+    return hydrated
+        .map((member) => ({ member, days: daysUntilBirthday(member.birthday, today) }))
+        .filter((entry) => entry.days !== null)
+        .sort((a, b) => (a.days as number) - (b.days as number))
+        .slice(0, limit)
+        .map((entry) => entry.member);
 }
 
+function daysUntilBirthday(birthday: string, today: Date): number | null {
+    const parsed = new Date(birthday);
+    if (Number.isNaN(parsed.getTime())) return null;
 
-/**
- * Holt alle Mitglieder einer Gruppe
- */
-export async function getMembersByGroup(groupId: string) {
-    return await db.collection("members")
-        .find({ groups: groupId })
-        .toArray();
-}
-
-export async function getMembersByGroupIds(groupIds: string[]) {
-    if (!groupIds || groupIds.length === 0) return [];
-
-    const normalized = groupIds.map((id) => id?.toString?.() ?? String(id)).filter(Boolean);
-    const objectIds = normalized
-        .filter((id) => ObjectId.isValid(id))
-        .map((id) => new ObjectId(id));
-
-    return await db.collection("members")
-        .find({
-            $or: [
-                { groups: { $in: normalized } },
-                { groups: { $in: objectIds } }
-            ]
-        })
-        .toArray();
-}
-
-/**
- * Holt Member anhand der ersten passenden E-Mail
- */
-export async function getMemberByEmail(email: string) {
-    if (!email) return null;
-    return await db.collection("members").findOne({
-        "emails.email": email
-    });
-}
-
-/**
- * Holt Mitglieder per ID-Liste
- */
-export async function getMembersByIds(ids: string[]) {
-    if (!ids || ids.length === 0) return [];
-
-    const objectIds = ids.map((id) => new ObjectId(id));
-
-    return await db.collection("members")
-        .find({ _id: { $in: objectIds } })
-        .toArray();
-}
-
-
-/**
- * Entfernt eine Gruppe aus ALLEN Mitgliedern (z. B. beim Löschen der Gruppe)
- */
-export async function unlinkGroupFromAllMembers(groupId: string) {
-    await db.collection("members").updateMany(
-        { groups: groupId },
-        {
-            $pull: { groups: groupId } as never,
-            $set: {
-                updatedAt: new Date().toISOString()
-            }
-        }
-    );
-
-    return true;
+    const next = new Date(today.getFullYear(), parsed.getMonth(), parsed.getDate());
+    if (next < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+        next.setFullYear(today.getFullYear() + 1);
+    }
+    return Math.round((next.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
 }

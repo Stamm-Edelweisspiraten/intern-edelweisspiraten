@@ -15,7 +15,7 @@ const LABEL = "test@example.org";
 /** Erzeugt den gerade gültigen Code zu einem Base32-Secret. */
 function currentToken(secretBase32: string, offsetPeriods = 0): string {
     const totp = new OTPAuth.TOTP({
-        issuer: "Edelweisspiraten Intern",
+        issuer: "Internes Portal",
         label: LABEL,
         algorithm: "SHA1",
         digits: 6,
@@ -59,7 +59,7 @@ describe("createEnrolment", () => {
 
         expect(enrolment.secretBase32).toMatch(/^[A-Z2-7]+$/);
         expect(enrolment.uri).toContain("otpauth://totp/");
-        expect(enrolment.uri).toContain("Edelweisspiraten");
+        expect(enrolment.uri).toContain("Internes%20Portal");
         expect(enrolment.qrDataUrl.startsWith("data:image/png;base64,")).toBe(true);
         expect(decryptSecret(enrolment.encryptedSecret)).toBe(enrolment.secretBase32);
     });

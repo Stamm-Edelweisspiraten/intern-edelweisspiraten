@@ -2,37 +2,25 @@ import type { PageServerLoad } from "./$types";
 import { getGroup } from "$lib/server/groupService";
 import { getMembersByGroup } from "$lib/server/memberService";
 import { error } from "@sveltejs/kit";
-import { hasPermission, getLeaderGroupIdsForUser } from "$lib/server/permissionService";
+import { requirePermissionForGroup } from "$lib/server/permissionGuard";
 
-export const load: PageServerLoad = async ({ params, locals }) => {
-    const perms = locals.permissions ?? [];
-    const canAll = hasPermission(perms, "groups.view");
-    const canGroup = hasPermission(perms, "groupleader.groups.view");
-    if (!canAll && !canGroup) {
-        throw error(403, "Keine Berechtigung");
-    }
-
-    const group = await getGroup(params.id);
+export const load: PageServerLoad = async (event) => {
+    const group = await getGroup(event.params.id);
     if (!group) {
         throw error(404, "Gruppe nicht gefunden");
     }
 
-    if (!canAll) {
-        const allowed = await getLeaderGroupIdsForUser(locals.user);
-        if (!allowed.includes(group.id)) {
-            throw error(403, "Keine Berechtigung");
-        }
-    }
+    requirePermissionForGroup(event, "groups.view", group.id);
 
-    const members = await getMembersByGroup(params.id);
+    const members = await getMembersByGroup(event.params.id);
 
     return {
         group,
-        members: members.map((m: any) => ({
-            id: m._id.toString(),
+        members: members.map((m) => ({
+            id: m.id,
             firstname: m.firstname,
             lastname: m.lastname,
-            emails: m.emails ?? []
+            emails: m.emails
         }))
     };
 };

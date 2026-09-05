@@ -58,7 +58,7 @@
     });
 </script>
 
-<svelte:head><title>Fehler {status} - Stamm Edelweißpiraten</title></svelte:head>
+<svelte:head><title>Fehler {status}</title></svelte:head>
 
 <div class="min-h-screen bg-surface-muted flex items-center justify-center px-4 py-16">
     <div class="w-full max-w-xl">

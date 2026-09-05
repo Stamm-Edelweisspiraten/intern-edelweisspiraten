@@ -59,13 +59,13 @@
             "bg-success-soft text-success-soft-fg border border-success-soft-border hover:brightness-95",
         warning:
             "bg-warning-soft text-warning-soft-fg border border-warning-soft-border hover:brightness-95",
-        danger: "bg-danger text-white border border-transparent hover:bg-danger-hover shadow-sm",
+        danger: "bg-danger text-primary-fg border border-transparent hover:bg-danger-hover shadow-sm",
         ghost: "bg-transparent text-fg-muted border border-transparent hover:bg-surface-muted hover:text-fg"
     };
 
     const SIZES: Record<Size, string> = {
-        sm: "px-3 py-2 text-sm rounded-lg gap-2",
-        md: "px-4 py-3 text-sm rounded-xl gap-2"
+        sm: "px-3 py-2 text-sm rounded-control gap-2",
+        md: "px-4 py-3 text-sm rounded-control gap-2"
     };
 
     const classes = $derived(

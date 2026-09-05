@@ -1,7 +1,6 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { ObjectId } from "mongodb";
 import type { Actions, PageServerLoad } from "./$types";
-import { users } from "$lib/server/db/collections";
+import { getUser, setRecoveryCodes } from "$lib/server/userService";
 import { consumeRecoveryCode, verifyToken } from "$lib/server/auth/totp";
 import { markMfaSatisfied, readSession, revokeSession, SESSION_COOKIE } from "$lib/server/auth/session";
 import { RATE_LIMITS, rateLimitKey, registerFailure, clearRateLimit } from "$lib/server/auth/rateLimit";
@@ -39,23 +38,20 @@ export const actions: Actions = {
             throw redirect(303, "/login?hinweis=zu-viele-versuche");
         }
 
-        const user = await users().findOne({ _id: new ObjectId(locals.user.id) });
-        if (!user?.mfa?.enabled || !user.mfa.secret) {
+        const user = await getUser(locals.user.id);
+        if (!user?.mfaEnabled || !user.mfaSecret) {
             throw redirect(302, "/intern/dashboard");
         }
 
         // Zuerst als TOTP prüfen, sonst als Wiederherstellungscode.
-        const totp = verifyToken(user.mfa.secret, code, user.email);
+        const totp = verifyToken(user.mfaSecret, code, user.email);
         let accepted = totp.valid;
 
         if (!accepted && code.includes("-")) {
-            const recovery = consumeRecoveryCode(user.mfa.recoveryCodes ?? [], code);
+            const recovery = consumeRecoveryCode(user.mfaRecoveryCodes ?? [], code);
             if (recovery.valid) {
                 accepted = true;
-                await users().updateOne(
-                    { _id: user._id },
-                    { $set: { "mfa.recoveryCodes": recovery.remaining } }
-                );
+                await setRecoveryCodes(user.id, recovery.remaining);
             }
         }
 

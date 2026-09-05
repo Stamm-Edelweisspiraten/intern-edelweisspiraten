@@ -38,15 +38,29 @@
     } as const;
 
     const hasHeader = $derived(!!(title || header || actions));
+
+    /**
+     * Der Kopf braucht IMMER einen Innenabstand.
+     *
+     * Bei padding="none" bekam er vorher gar keinen -- Titel und Meta-Angabe
+     * klebten bündig an den Kartenrändern, und die Tabelle darunter begann
+     * ohne Abstand. Das betraf jede Karte, die eine DataTable ohne eigenen
+     * Innenabstand traegt, also den Grossteil der Listenseiten.
+     *
+     * Bei sm/md bleibt es beim bisherigen Verhalten: der Kopf traegt oben und
+     * seitlich den Abstand, unten nichts, und der Rumpf gleicht mit pt-4 aus.
+     * So entsteht ein durchgehender Rhythmus statt doppelter Luft an der Naht.
+     */
+    const headerPadding = $derived(padding === "none" ? "p-4" : `${PADDING[padding]} pb-0`);
 </script>
 
 <section
-    class={`border rounded-2xl shadow-sm ${TONES[tone]} ${extraClass}`}
+    class={`border rounded-card ${TONES[tone]} ${extraClass}`}
     style="box-shadow: var(--shadow-card);"
 >
     {#if hasHeader}
         <div
-            class={`flex items-start justify-between gap-4 flex-wrap ${PADDING[padding]} ${padding !== "none" ? "pb-0" : ""}`}
+            class={`flex items-start justify-between gap-4 flex-wrap ${headerPadding}`}
         >
             <div class="min-w-0">
                 {#if title}

@@ -26,7 +26,7 @@
 <svelte:element
     this={href ? "a" : "div"}
     href={href ?? undefined}
-    class={`block bg-surface border border-border rounded-2xl p-5 ${href ? "hover:border-primary-soft-border transition" : ""}`}
+    class={`block bg-surface border border-border rounded-card p-5 ${href ? "hover:border-primary-soft-border transition" : ""}`}
     style="box-shadow: var(--shadow-card);"
 >
     <div class="flex items-center justify-between gap-3">
@@ -35,7 +35,7 @@
             <span class={`bi bi-${icon} ${VALUE_TONES[tone]}`} aria-hidden="true"></span>
         {/if}
     </div>
-    <p class={`mt-2 text-2xl font-bold ${VALUE_TONES[tone]}`}>{value}</p>
+    <p class={`mt-2 text-2xl font-bold tabular-figures ${VALUE_TONES[tone]}`}>{value}</p>
     {#if hint}
         <p class="mt-1 text-xs text-fg-subtle">{hint}</p>
     {/if}

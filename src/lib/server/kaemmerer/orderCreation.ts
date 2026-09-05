@@ -1,5 +1,5 @@
 import { fail, redirect, type RequestEvent } from "@sveltejs/kit";
-import { ObjectId } from "mongodb";
+import { isUuid } from "$lib/server/db/ids";
 import { requirePermission } from "$lib/server/permissionGuard";
 import { getAllMembers, getMembersByIds } from "$lib/server/memberService";
 import { listArticles } from "./articleService";
@@ -41,10 +41,10 @@ export async function loadOrderForm(
         return {
             articles,
             scope,
-            members: all.map((member: Record<string, unknown>) => ({
-                id: String(member._id),
-                name: fullName(member as { firstname?: string; lastname?: string }),
-                stand: String(member.stand ?? "")
+            members: all.map((member) => ({
+                id: member.id,
+                name: fullName(member),
+                stand: member.stand
             }))
         };
     }
@@ -56,9 +56,9 @@ export async function loadOrderForm(
     return {
         articles,
         scope,
-        members: own.map((member: Record<string, unknown>) => ({
-            id: String(member._id),
-            name: fullName(member as { firstname?: string; lastname?: string })
+        members: own.map((member) => ({
+            id: member.id,
+            name: fullName(member)
         }))
     };
 }
@@ -98,7 +98,7 @@ export async function handleOrderSubmit(
     const memberIds = form
         .getAll("memberIds")
         .map(String)
-        .filter((id) => ObjectId.isValid(id));
+        .filter(isUuid);
 
     if (memberIds.length === 0) {
         return fail(400, { error: "Bitte mindestens ein Mitglied auswählen." });

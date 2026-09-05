@@ -44,11 +44,37 @@ declare global {
 			email: string;
 		}
 
+		/** Gesetzt, wenn der Zugriff ueber die REST-API mit einem Token kommt. */
+		interface ApiTokenInfo {
+			id: string;
+			name: string;
+			scopes: string[];
+		}
+
+		/**
+		 * Ein Recht, gueltig stammesweit (groupId === null) oder fuer genau
+		 * eine Gruppe. Siehe $lib/server/permissionService.
+		 */
+		interface Grant {
+			permission: string;
+			groupId: string | null;
+		}
+
 		interface Locals {
 			user: SessionUser | null;
 			session: SessionInfo | null;
 			impersonator: Impersonator | null;
+			apiToken: ApiTokenInfo | null;
+			/**
+			 * Die STAMMESWEITEN Rechte, flach. Navigation, can() in den
+			 * Seiten und die Scopes der REST-API arbeiten damit.
+			 */
 			permissions: string[];
+			/**
+			 * Alle Rechte samt Gruppenbezug. Grundlage von
+			 * requirePermissionForGroup() und groupsWithPermission().
+			 */
+			grants: Grant[];
 			theme: Theme;
 		}
 

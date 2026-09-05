@@ -119,11 +119,11 @@ export const actions: Actions = {
         let fileUpdates: Record<string, any> = {};
 
         try {
-            const consentMeta = await saveMemberFile(consentFile, created._id.toString(), "consent");
+            const consentMeta = await saveMemberFile(consentFile, created.id, "consent");
             if (consentMeta) {
                 fileUpdates.consentFile = consentMeta;
             }
-            const applicationMeta = await saveMemberFile(applicationFile, created._id.toString(), "application");
+            const applicationMeta = await saveMemberFile(applicationFile, created.id, "application");
             if (applicationMeta) {
                 fileUpdates.applicationFile = applicationMeta;
             }
@@ -132,13 +132,13 @@ export const actions: Actions = {
         }
 
         if (Object.keys(fileUpdates).length > 0) {
-            await updateMember(created._id.toString(), fileUpdates, updatedBy);
+            await updateMember(created.id, fileUpdates, updatedBy);
         }
 
         return {
             success: true,
             memberName: `${firstname} ${lastname}`,
-            memberId: created._id?.toString?.() ?? null
+            memberId: created.id
         };
     }
 };

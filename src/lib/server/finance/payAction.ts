@@ -1,10 +1,8 @@
 import { fail, type RequestEvent } from "@sveltejs/kit";
-import { ObjectId } from "mongodb";
 import { requirePermission } from "$lib/server/permissionGuard";
-import { payInvoice, reversePayment } from "./invoiceService";
 import { syncOrderPayment } from "$lib/server/orders/orderBilling";
-import { getInvoice } from "./invoiceService";
-import { parseEuro } from "$lib/money";
+import { formatEuro, parseEuro } from "$lib/money";
+import { getInvoice, payInvoice, reversePayment } from "./invoiceService";
 
 /**
  * Gemeinsame Aktionen für beide Ansichten offener Posten.
@@ -21,6 +19,7 @@ export async function handlePayAction(event: RequestEvent) {
     const invoiceId = String(form.get("invoiceId") ?? "");
     const rawAmount = String(form.get("amount") ?? "").trim();
     const dateValue = String(form.get("date") ?? "");
+    const bankAccountId = String(form.get("bankAccountId") ?? "") || null;
 
     if (!invoiceId) return fail(400, { error: "Es wurde keine Rechnung ausgewählt." });
 
@@ -42,6 +41,7 @@ export async function handlePayAction(event: RequestEvent) {
         invoiceId,
         amount,
         date,
+        bankAccountId,
         note: String(form.get("note") ?? ""),
         user: event.locals.user?.email ?? "system"
     });
@@ -52,13 +52,13 @@ export async function handlePayAction(event: RequestEvent) {
     // nachgeführt -- ausdrücklich hier und nicht mehr über einen dynamischen
     // Import innerhalb des Finanzdienstes.
     if (result.orderId) {
-        await syncOrderPayment(new ObjectId(result.orderId));
+        await syncOrderPayment(result.orderId);
     }
 
     return {
         success: result.settled
             ? "Die Rechnung ist vollständig beglichen."
-            : `Teilzahlung verbucht. Offen bleiben ${((result.invoice!.outstanding) / 100).toFixed(2).replace(".", ",")} EUR.`
+            : `Teilzahlung verbucht. Offen bleiben ${formatEuro(result.invoice!.outstanding)}.`
     };
 }
 
@@ -66,15 +66,15 @@ export async function handleReverseAction(event: RequestEvent) {
     requirePermission(event, "finance.manage");
 
     const form = await event.request.formData();
-    const transactionId = String(form.get("transactionId") ?? "");
+    const paymentId = String(form.get("paymentId") ?? "");
 
-    if (!transactionId) return fail(400, { error: "Es wurde keine Zahlung ausgewählt." });
+    if (!paymentId) return fail(400, { error: "Es wurde keine Zahlung ausgewählt." });
 
-    const result = await reversePayment(transactionId, event.locals.user?.email ?? "system");
+    const result = await reversePayment(paymentId, event.locals.user?.email ?? "system");
     if (!result.ok) return fail(400, { error: result.error });
 
     if (result.orderId) {
-        await syncOrderPayment(new ObjectId(result.orderId));
+        await syncOrderPayment(result.orderId);
     }
 
     return { success: "Die Zahlung wurde storniert." };

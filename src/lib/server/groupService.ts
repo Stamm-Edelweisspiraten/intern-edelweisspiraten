@@ -1,114 +1,88 @@
-import { db } from "$lib/server/mongo";
-import { ObjectId } from "mongodb";
-import { unlinkGroupFromAllMembers } from "$lib/server/memberService";
+import { asc, eq } from "drizzle-orm";
+import { db } from "$lib/server/db";
+import { isUuid } from "$lib/server/db/ids";
+import { groups } from "$lib/server/db/schema";
 
 export interface Group {
-    id?: string;
+    id: string;
     name: string;
     type: "sippe" | "meute";
-    meeting_time: string;   // z. B. "Monday 4:30 PM"
+    /** Freitext, z. B. "Montag 16:30 Uhr". */
+    meeting_time: string;
+    description: string;
+    replyTo: string;
+}
+
+export interface GroupInput {
+    name: string;
+    type: "sippe" | "meute";
+    meeting_time: string;
     description?: string;
     replyTo?: string;
 }
 
+type GroupRow = typeof groups.$inferSelect;
 
-// -----------------------------------------------------
-// CREATE GROUP
-// -----------------------------------------------------
-export async function createGroup(data: Group) {
-    const res = await db.collection("groups").insertOne({
-        name: data.name,
-        type: data.type,
-        meeting_time: data.meeting_time,
-        description: data.description || "",
-        replyTo: data.replyTo || "",
-        createdAt: new Date(),
-        updatedAt: new Date()
+function toGroup(row: GroupRow): Group {
+    return {
+        id: row.id,
+        name: row.name,
+        type: row.type,
+        meeting_time: row.meetingTime,
+        description: row.description,
+        replyTo: row.replyTo
+    };
+}
+
+export async function createGroup(input: GroupInput): Promise<Group> {
+    const [row] = await db
+        .insert(groups)
+        .values({
+            name: input.name.trim(),
+            type: input.type,
+            meetingTime: input.meeting_time ?? "",
+            description: input.description ?? "",
+            replyTo: input.replyTo ?? ""
+        })
+        .returning();
+    return toGroup(row);
+}
+
+export async function updateGroup(id: string, input: Partial<GroupInput>): Promise<boolean> {
+    if (!isUuid(id)) return false;
+
+    const update: Partial<typeof groups.$inferInsert> = { updatedAt: new Date() };
+    if (input.name !== undefined) update.name = input.name.trim();
+    if (input.type !== undefined) update.type = input.type;
+    if (input.meeting_time !== undefined) update.meetingTime = input.meeting_time;
+    if (input.description !== undefined) update.description = input.description;
+    if (input.replyTo !== undefined) update.replyTo = input.replyTo;
+
+    const rows = await db.update(groups).set(update).where(eq(groups.id, id)).returning({
+        id: groups.id
     });
-
-    return {
-        id: res.insertedId.toString(),
-        ...data
-    };
+    return rows.length > 0;
 }
 
-
-// -----------------------------------------------------
-// UPDATE GROUP
-// -----------------------------------------------------
-export async function updateGroup(id: string, data: {
-    meeting_time: string;
-    name: string;
-    description: string;
-    type: string;
-    replyTo?: string;
-}) {
-    const mongoId = new ObjectId(id);
-
-    const updateData = {
-        ...data,
-        updatedAt: new Date()
-    };
-
-    await db.collection("groups").updateOne(
-        { _id: mongoId },
-        { $set: updateData }
-    );
-
-    return true;
+/**
+ * Loescht die Gruppe. Die Zuordnungen in member_groups und die Gruppenbindung
+ * der Aemter verschwinden ueber die Fremdschluessel mit -- in MongoDB musste
+ * dafuer eigens unlinkGroupFromAllMembers laufen, das bei einem Abbruch auf
+ * halber Strecke verwaiste Kennungen hinterlassen konnte.
+ */
+export async function deleteGroup(id: string): Promise<boolean> {
+    if (!isUuid(id)) return false;
+    const rows = await db.delete(groups).where(eq(groups.id, id)).returning({ id: groups.id });
+    return rows.length > 0;
 }
 
-
-// -----------------------------------------------------
-// DELETE GROUP
-// -----------------------------------------------------
-
-export async function deleteGroup(id: string) {
-    const mongoId = new ObjectId(id);
-
-    // 1) Gruppe aus allen Membern entfernen
-    await unlinkGroupFromAllMembers(id);
-
-    // 2) Gruppe löschen
-    return await db.collection("groups").deleteOne({ _id: mongoId });
+export async function getGroup(id: string): Promise<Group | null> {
+    if (!isUuid(id)) return null;
+    const [row] = await db.select().from(groups).where(eq(groups.id, id)).limit(1);
+    return row ? toGroup(row) : null;
 }
 
-
-// -----------------------------------------------------
-// GET ONE GROUP
-// -----------------------------------------------------
-export async function getGroup(id: string) {
-    const g = await db.collection("groups").findOne({ _id: new ObjectId(id) });
-
-    if (!g) return null;
-
-    return {
-        id: g._id.toString(),
-        name: g.name,
-        type: g.type,
-        meeting_time: g.meeting_time,
-        description: g.description,
-        replyTo: g.replyTo ?? ""
-    };
-}
-
-
-
-// -----------------------------------------------------
-// GET ALL GROUPS
-// -----------------------------------------------------
-export async function getAllGroups() {
-    const groups = await db.collection("groups")
-        .find()
-        .sort({ name: 1 })
-        .toArray();
-
-    return groups.map(g => ({
-        id: g._id.toString(),
-        name: g.name,
-        type: g.type,
-        meeting_time: g.meeting_time,
-        description: g.description,
-        replyTo: g.replyTo ?? ""
-    }));
+export async function getAllGroups(): Promise<Group[]> {
+    const rows = await db.select().from(groups).orderBy(asc(groups.name));
+    return rows.map(toGroup);
 }

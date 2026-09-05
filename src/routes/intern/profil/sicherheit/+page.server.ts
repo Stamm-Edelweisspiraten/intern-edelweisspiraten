@@ -1,8 +1,11 @@
 import { error, fail } from "@sveltejs/kit";
-import { ObjectId } from "mongodb";
 import type { Actions, PageServerLoad } from "./$types";
-import { users } from "$lib/server/db/collections";
-import { checkPasswordPolicy, hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "$lib/server/auth/password";
+import {
+    checkPasswordPolicy,
+    hashPassword,
+    MIN_PASSWORD_LENGTH,
+    verifyPassword
+} from "$lib/server/auth/password";
 import {
     consumeRecoveryCode,
     createEnrolment,
@@ -17,6 +20,14 @@ import {
     rotateToken,
     SESSION_COOKIE
 } from "$lib/server/auth/session";
+import {
+    confirmMfa,
+    disableMfa,
+    getUser,
+    startMfaEnrolment,
+    updatePasswordHash
+} from "$lib/server/userService";
+import { getOrganizationSettings } from "$lib/server/settingsService";
 import { formatDateTime } from "$lib/format";
 
 /** Eigene Sicherheitseinstellungen: Passwort, Zwei-Faktor, Geräte. */
@@ -24,26 +35,25 @@ import { formatDateTime } from "$lib/format";
 export const load: PageServerLoad = async ({ locals, url }) => {
     if (!locals.user) throw error(401, "Nicht angemeldet");
 
-    const userId = new ObjectId(locals.user.id);
     const [user, sessions] = await Promise.all([
-        users().findOne({ _id: userId }),
-        listSessionsForUser(userId)
+        getUser(locals.user.id),
+        listSessionsForUser(locals.user.id)
     ]);
 
     return {
         minPasswordLength: MIN_PASSWORD_LENGTH,
-        mfaEnabled: user?.mfa?.enabled === true,
+        mfaEnabled: user?.mfaEnabled === true,
         mfaRequired: locals.user.requireMfa,
-        recoveryCodesLeft: user?.mfa?.recoveryCodes?.length ?? 0,
+        recoveryCodesLeft: user?.mfaRecoveryCodes?.length ?? 0,
         notice: url.searchParams.get("hinweis"),
         mfaHint: url.searchParams.get("mfa"),
         sessions: sessions.map((session) => ({
-            id: session._id!.toString(),
+            id: session.id,
             device: session.device ?? "Unbekanntes Gerät",
             ip: session.ip ?? "-",
             lastSeenAt: formatDateTime(session.lastSeenAt),
             createdAt: formatDateTime(session.createdAt),
-            isCurrent: session._id!.toString() === locals.session?.id
+            isCurrent: session.id === locals.session?.id
         }))
     };
 };
@@ -57,8 +67,7 @@ export const actions: Actions = {
         const next = String(form.get("password") ?? "");
         const repeat = String(form.get("passwordRepeat") ?? "");
 
-        const userId = new ObjectId(locals.user.id);
-        const user = await users().findOne({ _id: userId });
+        const user = await getUser(locals.user.id);
         if (!user) throw error(404, "Benutzer nicht gefunden");
 
         if (!(await verifyPassword(user.passwordHash, current))) {
@@ -71,21 +80,12 @@ export const actions: Actions = {
         const policy = checkPasswordPolicy(next, user.email);
         if (!policy.ok) return fail(400, { error: policy.error });
 
-        await users().updateOne(
-            { _id: userId },
-            {
-                $set: {
-                    passwordHash: await hashPassword(next),
-                    passwordChangedAt: new Date(),
-                    updatedAt: new Date()
-                }
-            }
-        );
+        await updatePasswordHash(user.id, await hashPassword(next));
 
         // Alle anderen Anmeldungen beenden, die eigene erhalten.
         const session = await readSession(cookies.get(SESSION_COOKIE));
         if (session) {
-            await revokeAllForUser(userId, session.tokenHash);
+            await revokeAllForUser(user.id, session.tokenHash);
             await rotateToken(session, cookies);
         }
 
@@ -96,17 +96,12 @@ export const actions: Actions = {
     startMfa: async ({ locals }) => {
         if (!locals.user) throw error(401, "Nicht angemeldet");
 
-        const enrolment = await createEnrolment(locals.user.email);
-
-        await users().updateOne(
-            { _id: new ObjectId(locals.user.id) },
-            {
-                $set: {
-                    mfa: { enabled: false, secret: enrolment.encryptedSecret, recoveryCodes: [] },
-                    updatedAt: new Date()
-                }
-            }
-        );
+        // Der Aussteller erscheint in der Authenticator-App und kommt aus den
+        // Organisationseinstellungen -- vorher stand dort bei jedem Stamm
+        // derselbe fest verdrahtete Name.
+        const organization = await getOrganizationSettings();
+        const enrolment = await createEnrolment(locals.user.email, organization.name);
+        await startMfaEnrolment(locals.user.id, enrolment.encryptedSecret);
 
         return {
             enrolment: {
@@ -123,30 +118,17 @@ export const actions: Actions = {
         const form = await request.formData();
         const code = String(form.get("code") ?? "");
 
-        const userId = new ObjectId(locals.user.id);
-        const user = await users().findOne({ _id: userId });
-
-        if (!user?.mfa?.secret) {
+        const user = await getUser(locals.user.id);
+        if (!user?.mfaSecret) {
             return fail(400, { error: "Die Einrichtung wurde noch nicht gestartet." });
         }
 
-        if (!verifyToken(user.mfa.secret, code, user.email).valid) {
+        if (!verifyToken(user.mfaSecret, code, user.email).valid) {
             return fail(400, { error: "Der Code ist nicht gültig. Bitte erneut versuchen." });
         }
 
         const { plain, hashed } = generateRecoveryCodes();
-
-        await users().updateOne(
-            { _id: userId },
-            {
-                $set: {
-                    "mfa.enabled": true,
-                    "mfa.confirmedAt": new Date(),
-                    "mfa.recoveryCodes": hashed,
-                    updatedAt: new Date()
-                }
-            }
-        );
+        await confirmMfa(user.id, hashed);
 
         return {
             success: "Die Zwei-Faktor-Authentifizierung ist aktiv.",
@@ -167,27 +149,24 @@ export const actions: Actions = {
         const password = String(form.get("password") ?? "");
         const code = String(form.get("code") ?? "");
 
-        const userId = new ObjectId(locals.user.id);
-        const user = await users().findOne({ _id: userId });
+        const user = await getUser(locals.user.id);
         if (!user) throw error(404, "Benutzer nicht gefunden");
 
         if (!(await verifyPassword(user.passwordHash, password))) {
             return fail(400, { error: "Das Passwort ist nicht korrekt." });
         }
 
-        const byToken = user.mfa?.secret
-            ? verifyToken(user.mfa.secret, code, user.email).valid
+        const byToken = user.mfaSecret
+            ? verifyToken(user.mfaSecret, code, user.email).valid
             : false;
-        const byRecovery = !byToken && consumeRecoveryCode(user.mfa?.recoveryCodes ?? [], code).valid;
+        const byRecovery =
+            !byToken && consumeRecoveryCode(user.mfaRecoveryCodes ?? [], code).valid;
 
         if (!byToken && !byRecovery) {
             return fail(400, { error: "Der Code ist nicht gültig." });
         }
 
-        await users().updateOne(
-            { _id: userId },
-            { $set: { mfa: { enabled: false }, updatedAt: new Date() } }
-        );
+        await disableMfa(user.id);
 
         return { success: "Die Zwei-Faktor-Authentifizierung wurde deaktiviert." };
     },
@@ -199,10 +178,12 @@ export const actions: Actions = {
         const sessionId = String(form.get("sessionId") ?? "");
 
         if (sessionId === locals.session?.id) {
-            return fail(400, { error: "Die aktuelle Sitzung kann hier nicht beendet werden. Nutze dafür „Abmelden“." });
+            return fail(400, {
+                error: "Die aktuelle Sitzung kann hier nicht beendet werden. Nutze dafür „Abmelden“."
+            });
         }
 
-        await revokeSessionById(sessionId, new ObjectId(locals.user.id));
+        await revokeSessionById(sessionId, locals.user.id);
         return { success: "Die Sitzung wurde beendet." };
     },
 
@@ -210,7 +191,7 @@ export const actions: Actions = {
         if (!locals.user) throw error(401, "Nicht angemeldet");
 
         const session = await readSession(cookies.get(SESSION_COOKIE));
-        const count = await revokeAllForUser(new ObjectId(locals.user.id), session?.tokenHash);
+        const count = await revokeAllForUser(locals.user.id, session?.tokenHash);
 
         return { success: `${count} andere Sitzungen wurden beendet.` };
     }

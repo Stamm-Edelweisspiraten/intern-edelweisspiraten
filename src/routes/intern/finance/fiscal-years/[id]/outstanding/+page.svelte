@@ -12,7 +12,9 @@
         data.invoices.filter((invoice) => {
             const needle = search.trim().toLowerCase();
             if (!needle) return true;
-            return `${invoice.member} ${invoice.kind}`.toLowerCase().includes(needle);
+            return `${invoice.member} ${invoice.kind} ${invoice.number}`
+                .toLowerCase()
+                .includes(needle);
         })
     );
 </script>
@@ -44,6 +46,8 @@
         <OutstandingTable
             invoices={filtered}
             canManage={data.canManage}
+            bankAccounts={data.bankAccounts}
+            payments={data.payments}
             empty={search ? "Keine passenden offenen Posten." : "Alle Forderungen dieses Jahres sind ausgeglichen."}
         />
     </Card>

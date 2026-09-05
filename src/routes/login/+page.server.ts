@@ -1,8 +1,11 @@
 import { fail, redirect } from "@sveltejs/kit";
-import { ObjectId } from "mongodb";
 import type { Actions, PageServerLoad } from "./$types";
-import { users } from "$lib/server/db/collections";
-import { normalizeEmail } from "$lib/server/userService";
+import {
+    getUserByEmail,
+    normalizeEmail,
+    registerFailedLogin,
+    registerSuccessfulLogin
+} from "$lib/server/userService";
 import { verifyDummy, verifyPassword } from "$lib/server/auth/password";
 import { createSession } from "$lib/server/auth/session";
 import {
@@ -12,7 +15,6 @@ import {
     registerFailure,
     checkRateLimit
 } from "$lib/server/auth/rateLimit";
-import { lockoutDuration } from "$lib/server/auth/rateLimit";
 import { hasAnyActiveUser } from "$lib/server/auth/bootstrap";
 
 /**
@@ -57,7 +59,7 @@ export const actions: Actions = {
             });
         }
 
-        const user = await users().findOne({ email });
+        const user = await getUserByEmail(email);
 
         if (!user) {
             // Vergleichsberechnung, damit die Antwortzeit nichts verraet.
@@ -93,27 +95,18 @@ export const actions: Actions = {
 
         if (!valid) {
             await registerFailure(ipKey, RATE_LIMITS.loginPerIp);
-            await registerFailedLogin(user._id!, (user.failedLoginAttempts ?? 0) + 1);
+            await registerFailedLogin(user.id, user.failedLoginAttempts + 1);
             return fail(400, { error: GENERIC_ERROR, email });
         }
 
         // Erfolgreich: Zaehler zuruecksetzen.
-        await users().updateOne(
-            { _id: user._id },
-            {
-                $set: {
-                    failedLoginAttempts: 0,
-                    lockedUntil: null,
-                    lastLoginAt: new Date()
-                }
-            }
-        );
+        await registerSuccessfulLogin(user.id);
         await clearRateLimit(ipKey);
 
-        const mfaRequired = user.mfa?.enabled === true;
+        const mfaRequired = user.mfaEnabled;
 
         await createSession(cookies, {
-            userId: user._id!,
+            userId: user.id,
             ip,
             userAgent: request.headers.get("user-agent"),
             mfaSatisfied: !mfaRequired
@@ -127,19 +120,6 @@ export const actions: Actions = {
         throw redirect(303, redirectTo || "/intern/dashboard");
     }
 };
-
-async function registerFailedLogin(userId: ObjectId, attempts: number): Promise<void> {
-    const duration = lockoutDuration(attempts);
-    await users().updateOne(
-        { _id: userId },
-        {
-            $set: {
-                failedLoginAttempts: attempts,
-                lockedUntil: duration > 0 ? new Date(Date.now() + duration) : null
-            }
-        }
-    );
-}
 
 /** Nur anwendungsinterne Ziele zulassen, keine offene Weiterleitung. */
 function sanitizeRedirect(value: string | null): string {

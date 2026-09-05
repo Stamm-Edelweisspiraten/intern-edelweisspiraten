@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-    <title>Registrierung erfolgreich - Stamm Edelweisspiraten</title>
+    <title>Registrierung erfolgreich</title>
 </svelte:head>
 
 <AuthShell

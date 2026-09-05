@@ -1,11 +1,26 @@
 import PDFDocument from "pdfkit";
+import { formatEuro } from "$lib/money";
+import type { Cents } from "$lib/money";
+
+/**
+ * Beitragsbescheid als PDF.
+ *
+ * Die Betraege kommen jetzt als ganzzahlige Cents herein und laufen durch
+ * formatEuro -- vorher rechnete diese Datei als einzige im Projekt mit
+ * Euro-Fliesskommazahlen und formatierte selbst.
+ */
 
 interface Options {
     subject: string;
     message: string;
     year: number;
-    breakdown: { label: string; amount: number }[];
-    total: number;
+    /** Betraege in Cents. */
+    breakdown: { label: string; amount: Cents }[];
+    total: Cents;
+    /** Name des Stamms; kommt aus den Organisationseinstellungen. */
+    organization?: string;
+    /** Empfaenger; ohne Angabe steht dort "An alle Mitglieder". */
+    recipient?: string;
     iban?: string;
     bic?: string;
     accountHolder?: string;
@@ -22,17 +37,17 @@ export async function createPaymentNoticePdf(opts: Options) {
     doc.on("data", (chunk) => chunks.push(chunk));
     const endPromise = new Promise<Buffer>((resolve) => doc.on("end", () => resolve(Buffer.concat(chunks))));
 
-    const formatEuro = (val: number) => `${(val || 0).toFixed(2)} €`;
-
     // Sender
-    doc.font("Helvetica").fontSize(10).fillColor("#111827").text("Stamm Edelweisspiraten", 60, 60);
-    doc.text("Interner Bereich", 60, 74);
+    const organization = opts.organization || "Interner Bereich";
 
-    // Empfänger neutral
+    doc.font("Helvetica").fontSize(10).fillColor("#111827").text(organization, 60, 60);
+    doc.text("Beitragsbescheid", 60, 74);
+
     const receiverY = 120;
-    doc.font("Helvetica-Bold").fontSize(12).text("An alle Mitglieder", 60, receiverY);
-    doc.font("Helvetica").fontSize(12).text("Stamm Edelweisspiraten", 60, receiverY + 16);
-    doc.text("Bremen", 60, receiverY + 32);
+    doc.font("Helvetica-Bold")
+        .fontSize(12)
+        .text(opts.recipient || "An alle Mitglieder", 60, receiverY);
+    doc.font("Helvetica").fontSize(12).text(organization, 60, receiverY + 16);
 
     let y = receiverY + 80;
 

@@ -12,19 +12,19 @@ export async function load({ locals }) {
     const users = await getAllUsers();
     const members = await getAllMembers();
 
-    const normalized = users.map((u: any) => ({
-        id: u._id.toString(),
+    const normalized = users.map((u) => ({
+        id: u.id,
         name: u.name,
         email: u.email,
-        memberId: u.memberId,
-        createdAt: u.createdAt,
+        memberIds: u.memberIds,
+        createdAt: u.createdAt
     }));
 
     return {
         users: normalized,
-        members: members.map(m => ({
-            id: m._id.toString(),
-            name: m.firstname + " " + m.lastname
+        members: members.map((m) => ({
+            id: m.id,
+            name: `${m.firstname} ${m.lastname}`
         }))
     };
 }

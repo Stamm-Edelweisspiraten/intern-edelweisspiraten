@@ -1,5 +1,7 @@
-import { ObjectId } from "mongodb";
-import { articles, type ArticleDoc, type ArticleSizeDoc } from "$lib/server/db/collections";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { db, withTransaction, type Executor } from "$lib/server/db";
+import { isUuid } from "$lib/server/db/ids";
+import { articleSizes, articles, stockMovements } from "$lib/server/db/schema";
 import { parseEuro, type Cents } from "$lib/money";
 
 /**
@@ -10,10 +12,9 @@ import { parseEuro, type Cents } from "$lib/money";
  * Größenbestände) und wird nie direkt geschrieben; bei Artikeln OHNE Größen
  * ist `stock` maßgeblich.
  *
- * Vorher überschrieb createArticle die Größensumme mit 0, sobald das Formular
- * ein leeres Bestandsfeld sendete, und updateArticle berechnete den Bestand
- * bei jedem Speichern neu -- um ihn direkt danach wieder mit dem gesendeten
- * Wert zu überschreiben.
+ * Neu ist die Tabelle stock_movements: jede Veränderung wird protokolliert.
+ * Vorher war der Bestand nur eine Zahl -- nach einer Inventurkorrektur war
+ * nicht mehr nachvollziehbar, was sie bewirkt hatte.
  */
 
 export interface ArticleSizeInput {
@@ -24,12 +25,17 @@ export interface ArticleSizeInput {
     orderUrl?: string;
 }
 
+export interface ArticleSizeView extends ArticleSizeInput {
+    id: string;
+    orderUrl: string;
+}
+
 export interface ArticleView {
     id: string;
     name: string;
     description: string;
     price: Cents;
-    sizes: ArticleSizeDoc[];
+    sizes: ArticleSizeView[];
     stock: number;
     minStock: number;
     active: boolean;
@@ -38,20 +44,55 @@ export interface ArticleView {
     hasSizes: boolean;
 }
 
-export function toArticleView(doc: ArticleDoc): ArticleView {
-    const sizes = doc.sizes ?? [];
+type ArticleRow = typeof articles.$inferSelect;
+type SizeRow = typeof articleSizes.$inferSelect;
+
+function toArticleView(row: ArticleRow, sizeRows: SizeRow[]): ArticleView {
+    const sizes = sizeRows.map((size) => ({
+        id: size.id,
+        name: size.name,
+        price: size.price,
+        stock: size.stock,
+        minStock: size.minStock,
+        orderUrl: size.orderUrl
+    }));
+
     return {
-        id: doc._id!.toString(),
-        name: doc.name,
-        description: doc.description ?? "",
-        price: doc.price,
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        price: row.price,
         sizes,
-        stock: sizes.length > 0 ? sizes.reduce((sum, s) => sum + (s.stock ?? 0), 0) : (doc.stock ?? 0),
-        minStock: doc.minStock ?? 0,
-        active: doc.active !== false,
-        orderUrl: doc.orderUrl ?? "",
+        stock: sizes.length > 0 ? sizes.reduce((sum, s) => sum + s.stock, 0) : row.stock,
+        minStock: row.minStock,
+        active: row.active,
+        orderUrl: row.orderUrl,
         hasSizes: sizes.length > 0
     };
+}
+
+async function hydrate(rows: ArticleRow[]): Promise<ArticleView[]> {
+    if (rows.length === 0) return [];
+
+    const sizeRows = await db
+        .select()
+        .from(articleSizes)
+        .where(
+            inArray(
+                articleSizes.articleId,
+                rows.map((row) => row.id)
+            )
+        )
+        .orderBy(asc(articleSizes.position));
+
+    const byArticle = new Map<string, SizeRow[]>();
+    for (const size of sizeRows) {
+        const list = byArticle.get(size.articleId) ?? [];
+        list.push(size);
+        byArticle.set(size.articleId, list);
+    }
+
+    return rows.map((row) => toArticleView(row, byArticle.get(row.id) ?? []));
 }
 
 /**
@@ -111,17 +152,29 @@ function normalizeSize(raw: unknown): ArticleSizeInput {
     };
 }
 
+// ---------------------------------------------------------------------------
+// Lesen
+// ---------------------------------------------------------------------------
+
 export async function listArticles(includeInactive = false): Promise<ArticleView[]> {
-    const query = includeInactive ? {} : { active: { $ne: false } };
-    const docs = await articles().find(query).sort({ name: 1 }).toArray();
-    return docs.map(toArticleView);
+    const rows = await db
+        .select()
+        .from(articles)
+        .where(includeInactive ? undefined : eq(articles.active, true))
+        .orderBy(asc(articles.name));
+    return hydrate(rows);
 }
 
 export async function getArticle(id: string): Promise<ArticleView | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const doc = await articles().findOne({ _id: new ObjectId(id) });
-    return doc ? toArticleView(doc) : null;
+    if (!isUuid(id)) return null;
+    const rows = await db.select().from(articles).where(eq(articles.id, id)).limit(1);
+    const [article] = await hydrate(rows);
+    return article ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Schreiben
+// ---------------------------------------------------------------------------
 
 export interface ArticleInput {
     name: string;
@@ -134,42 +187,68 @@ export interface ArticleInput {
     orderUrl?: string;
 }
 
+async function replaceSizes(
+    tx: Executor,
+    articleId: string,
+    sizes: ArticleSizeInput[]
+): Promise<void> {
+    await tx.delete(articleSizes).where(eq(articleSizes.articleId, articleId));
+    if (sizes.length === 0) return;
+
+    await tx.insert(articleSizes).values(
+        sizes.map((size, index) => ({
+            articleId,
+            name: size.name,
+            price: size.price,
+            stock: size.stock,
+            minStock: size.minStock,
+            orderUrl: size.orderUrl ?? "",
+            position: index
+        }))
+    );
+}
+
 export async function createArticle(input: ArticleInput): Promise<ArticleView> {
-    const sizes = (input.sizes ?? []).map((size) => ({ ...size }));
-    const now = new Date();
+    const sizes = input.sizes ?? [];
 
-    const doc: ArticleDoc = {
-        name: input.name.trim(),
-        description: input.description ?? "",
-        price: input.price,
-        sizes,
-        // Bei Größen ist der Bestand abgeleitet; ein gesendeter Wert wird
-        // bewusst ignoriert statt die Summe zu überschreiben.
-        stock: sizes.length > 0
-            ? sizes.reduce((sum, size) => sum + size.stock, 0)
-            : Math.max(0, Math.trunc(input.stock ?? 0)),
-        minStock: Math.max(0, Math.trunc(input.minStock ?? 0)),
-        active: input.active !== false,
-        orderUrl: input.orderUrl ?? "",
-        createdAt: now
-    };
+    const id = await withTransaction(async (tx) => {
+        const [row] = await tx
+            .insert(articles)
+            .values({
+                name: input.name.trim(),
+                description: input.description ?? "",
+                price: input.price,
+                // Bei Größen ist der Bestand abgeleitet; ein gesendeter Wert
+                // wird bewusst ignoriert statt die Summe zu überschreiben.
+                stock:
+                    sizes.length > 0
+                        ? sizes.reduce((sum, size) => sum + size.stock, 0)
+                        : Math.max(0, Math.trunc(input.stock ?? 0)),
+                minStock: Math.max(0, Math.trunc(input.minStock ?? 0)),
+                active: input.active !== false,
+                orderUrl: input.orderUrl ?? ""
+            })
+            .returning({ id: articles.id });
 
-    const result = await articles().insertOne(doc);
-    return toArticleView({ ...doc, _id: result.insertedId });
+        await replaceSizes(tx, row.id, sizes);
+        return row.id;
+    });
+
+    const article = await getArticle(id);
+    if (!article) throw new Error("Artikel konnte nicht gelesen werden.");
+    return article;
 }
 
 export async function updateArticle(
     id: string,
     input: Partial<ArticleInput>
 ): Promise<{ ok: boolean; error?: string }> {
-    if (!ObjectId.isValid(id)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(id)) return { ok: false, error: "Ungültige Kennung." };
 
-    const articleId = new ObjectId(id);
-    const existing = await articles().findOne({ _id: articleId });
+    const existing = await getArticle(id);
     if (!existing) return { ok: false, error: "Artikel nicht gefunden." };
 
-    const update: Record<string, unknown> = { updatedAt: new Date() };
-
+    const update: Partial<typeof articles.$inferInsert> = { updatedAt: new Date() };
     if (input.name !== undefined) update.name = input.name.trim();
     if (input.description !== undefined) update.description = input.description;
     if (input.price !== undefined) update.price = input.price;
@@ -178,11 +257,10 @@ export async function updateArticle(
     if (input.orderUrl !== undefined) update.orderUrl = input.orderUrl;
 
     if (input.sizes !== undefined) {
-        update.sizes = input.sizes;
         update.stock = input.sizes.reduce((sum, size) => sum + size.stock, 0);
     } else if (input.stock !== undefined) {
         // Direkter Bestand nur bei Artikeln ohne Größen.
-        if ((existing.sizes ?? []).length > 0) {
+        if (existing.hasSizes) {
             return {
                 ok: false,
                 error: "Bei Artikeln mit Größen wird der Bestand je Größe geführt."
@@ -191,17 +269,22 @@ export async function updateArticle(
         update.stock = Math.max(0, Math.trunc(input.stock));
     }
 
-    await articles().updateOne({ _id: articleId }, { $set: update });
+    await withTransaction(async (tx) => {
+        await tx.update(articles).set(update).where(eq(articles.id, id));
+        if (input.sizes !== undefined) await replaceSizes(tx, id, input.sizes);
+    });
+
     return { ok: true };
 }
 
 export async function setArticleActive(id: string, active: boolean): Promise<boolean> {
-    if (!ObjectId.isValid(id)) return false;
-    const result = await articles().updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { active, updatedAt: new Date() } }
-    );
-    return result.matchedCount > 0;
+    if (!isUuid(id)) return false;
+    const rows = await db
+        .update(articles)
+        .set({ active, updatedAt: new Date() })
+        .where(eq(articles.id, id))
+        .returning({ id: articles.id });
+    return rows.length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,117 +296,241 @@ export interface StockResult {
     error?: string;
 }
 
+type MovementKind = "in" | "out" | "correction" | "order" | "return";
+
+async function logMovement(
+    tx: Executor,
+    input: {
+        articleId: string;
+        sizeId?: string | null;
+        kind: MovementKind;
+        quantity: number;
+        stockAfter: number;
+        orderId?: string | null;
+        note?: string;
+        user?: string;
+    }
+): Promise<void> {
+    await tx.insert(stockMovements).values({
+        articleId: input.articleId,
+        sizeId: input.sizeId ?? null,
+        kind: input.kind,
+        quantity: input.quantity,
+        stockAfter: input.stockAfter,
+        orderId: input.orderId ?? null,
+        note: input.note ?? "",
+        createdBy: input.user ?? "system"
+    });
+}
+
+/** Führt den abgeleiteten Gesamtbestand eines Artikels mit Größen nach. */
+async function recomputeStock(tx: Executor, articleId: string): Promise<number> {
+    const [row] = await tx
+        .select({ total: sql<number>`coalesce(sum(${articleSizes.stock}), 0)::int` })
+        .from(articleSizes)
+        .where(eq(articleSizes.articleId, articleId));
+
+    const total = Number(row?.total ?? 0);
+    await tx.update(articles).set({ stock: total, updatedAt: new Date() }).where(eq(articles.id, articleId));
+    return total;
+}
+
 /**
- * Bucht Bestand ab. Der bedingte $inc verhindert, dass der Bestand negativ
- * wird -- vorher gab es keine Untergrenze, weshalb die Oberfläche sogar ein
- * eigenes Abzeichen "Bestand negativ" führte.
+ * Bucht Bestand ab.
+ *
+ * Das bedingte UPDATE verhindert, dass der Bestand negativ wird -- vorher gab
+ * es keine Untergrenze, weshalb die Oberfläche sogar ein eigenes Abzeichen
+ * "Bestand negativ" führte.
  */
 export async function decrementStock(
     articleId: string,
     quantity: number,
-    size?: string | null
+    size?: string | null,
+    options: { orderId?: string | null; note?: string; user?: string } = {}
 ): Promise<StockResult> {
-    if (!ObjectId.isValid(articleId)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(articleId)) return { ok: false, error: "Ungültige Kennung." };
     if (quantity <= 0) return { ok: true };
 
-    const id = new ObjectId(articleId);
+    return withTransaction(async (tx) => {
+        if (size) {
+            const rows = await tx
+                .update(articleSizes)
+                .set({ stock: sql`${articleSizes.stock} - ${quantity}` })
+                .where(
+                    and(
+                        eq(articleSizes.articleId, articleId),
+                        eq(articleSizes.name, size),
+                        sql`${articleSizes.stock} >= ${quantity}`
+                    )
+                )
+                .returning({ id: articleSizes.id, stock: articleSizes.stock });
 
-    if (size) {
-        const result = await articles().updateOne(
-            {
-                _id: id,
-                sizes: { $elemMatch: { name: size, stock: { $gte: quantity } } }
-            },
-            {
-                $inc: { "sizes.$[entry].stock": -quantity, stock: -quantity },
-                $set: { updatedAt: new Date() }
-            },
-            { arrayFilters: [{ "entry.name": size }] }
-        );
+            if (rows.length === 0) {
+                return { ok: false, error: `Nicht genug Bestand in Größe ${size}.` };
+            }
 
-        if (result.matchedCount === 0) {
-            return { ok: false, error: `Nicht genug Bestand in Größe ${size}.` };
+            await recomputeStock(tx, articleId);
+            await logMovement(tx, {
+                articleId,
+                sizeId: rows[0].id,
+                kind: options.orderId ? "order" : "out",
+                quantity: -quantity,
+                stockAfter: rows[0].stock,
+                orderId: options.orderId,
+                note: options.note,
+                user: options.user
+            });
+            return { ok: true };
         }
+
+        const rows = await tx
+            .update(articles)
+            .set({ stock: sql`${articles.stock} - ${quantity}`, updatedAt: new Date() })
+            .where(and(eq(articles.id, articleId), sql`${articles.stock} >= ${quantity}`))
+            .returning({ stock: articles.stock });
+
+        if (rows.length === 0) return { ok: false, error: "Nicht genug Bestand." };
+
+        await logMovement(tx, {
+            articleId,
+            kind: options.orderId ? "order" : "out",
+            quantity: -quantity,
+            stockAfter: rows[0].stock,
+            orderId: options.orderId,
+            note: options.note,
+            user: options.user
+        });
         return { ok: true };
-    }
-
-    const result = await articles().updateOne(
-        { _id: id, stock: { $gte: quantity } },
-        { $inc: { stock: -quantity }, $set: { updatedAt: new Date() } }
-    );
-
-    if (result.matchedCount === 0) return { ok: false, error: "Nicht genug Bestand." };
-    return { ok: true };
+    });
 }
 
 /** Bucht Bestand zurück, etwa beim Stornieren einer Bestellung. */
 export async function incrementStock(
     articleId: string,
     quantity: number,
-    size?: string | null
+    size?: string | null,
+    options: { orderId?: string | null; note?: string; user?: string } = {}
 ): Promise<StockResult> {
-    if (!ObjectId.isValid(articleId)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(articleId)) return { ok: false, error: "Ungültige Kennung." };
     if (quantity <= 0) return { ok: true };
 
-    const id = new ObjectId(articleId);
+    return withTransaction(async (tx) => {
+        if (size) {
+            const rows = await tx
+                .update(articleSizes)
+                .set({ stock: sql`${articleSizes.stock} + ${quantity}` })
+                .where(and(eq(articleSizes.articleId, articleId), eq(articleSizes.name, size)))
+                .returning({ id: articleSizes.id, stock: articleSizes.stock });
 
-    if (size) {
-        const result = await articles().updateOne(
-            { _id: id, "sizes.name": size },
-            {
-                $inc: { "sizes.$[entry].stock": quantity, stock: quantity },
-                $set: { updatedAt: new Date() }
-            },
-            { arrayFilters: [{ "entry.name": size }] }
-        );
-        if (result.matchedCount > 0) return { ok: true };
-    }
+            if (rows.length > 0) {
+                await recomputeStock(tx, articleId);
+                await logMovement(tx, {
+                    articleId,
+                    sizeId: rows[0].id,
+                    kind: options.orderId ? "return" : "in",
+                    quantity,
+                    stockAfter: rows[0].stock,
+                    orderId: options.orderId,
+                    note: options.note,
+                    user: options.user
+                });
+                return { ok: true };
+            }
+        }
 
-    await articles().updateOne(
-        { _id: id },
-        { $inc: { stock: quantity }, $set: { updatedAt: new Date() } }
-    );
-    return { ok: true };
+        const rows = await tx
+            .update(articles)
+            .set({ stock: sql`${articles.stock} + ${quantity}`, updatedAt: new Date() })
+            .where(eq(articles.id, articleId))
+            .returning({ stock: articles.stock });
+
+        if (rows.length === 0) return { ok: false, error: "Artikel nicht gefunden." };
+
+        await logMovement(tx, {
+            articleId,
+            kind: options.orderId ? "return" : "in",
+            quantity,
+            stockAfter: rows[0].stock,
+            orderId: options.orderId,
+            note: options.note,
+            user: options.user
+        });
+        return { ok: true };
+    });
 }
 
 /** Setzt einen Bestand absolut (Inventurkorrektur), nie unter 0. */
 export async function correctStock(
     articleId: string,
     value: number,
-    size?: string | null
+    size?: string | null,
+    options: { note?: string; user?: string } = {}
 ): Promise<StockResult> {
-    if (!ObjectId.isValid(articleId)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(articleId)) return { ok: false, error: "Ungültige Kennung." };
 
-    const id = new ObjectId(articleId);
     const target = Math.max(0, Math.trunc(value));
+    const article = await getArticle(articleId);
+    if (!article) return { ok: false, error: "Artikel nicht gefunden." };
 
-    if (size) {
-        await articles().updateOne(
-            { _id: id, "sizes.name": size },
-            { $set: { "sizes.$[entry].stock": target, updatedAt: new Date() }, },
-            { arrayFilters: [{ "entry.name": size }] }
-        );
-        await recomputeStock(id);
-        return { ok: true };
-    }
-
-    const article = await articles().findOne({ _id: id });
-    if ((article?.sizes ?? []).length > 0) {
+    if (!size && article.hasSizes) {
         return { ok: false, error: "Bei Artikeln mit Größen bitte je Größe korrigieren." };
     }
 
-    await articles().updateOne({ _id: id }, { $set: { stock: target, updatedAt: new Date() } });
-    return { ok: true };
+    return withTransaction(async (tx) => {
+        if (size) {
+            const before = article.sizes.find((entry) => entry.name === size);
+            if (!before) return { ok: false, error: `Größe ${size} gibt es nicht.` };
+
+            const rows = await tx
+                .update(articleSizes)
+                .set({ stock: target })
+                .where(and(eq(articleSizes.articleId, articleId), eq(articleSizes.name, size)))
+                .returning({ id: articleSizes.id });
+
+            await recomputeStock(tx, articleId);
+            await logMovement(tx, {
+                articleId,
+                sizeId: rows[0]?.id ?? null,
+                kind: "correction",
+                quantity: target - before.stock,
+                stockAfter: target,
+                note: options.note,
+                user: options.user
+            });
+            return { ok: true };
+        }
+
+        await tx
+            .update(articles)
+            .set({ stock: target, updatedAt: new Date() })
+            .where(eq(articles.id, articleId));
+
+        await logMovement(tx, {
+            articleId,
+            kind: "correction",
+            quantity: target - article.stock,
+            stockAfter: target,
+            note: options.note,
+            user: options.user
+        });
+        return { ok: true };
+    });
 }
 
-/** Führt den abgeleiteten Gesamtbestand nach. */
-async function recomputeStock(id: ObjectId): Promise<void> {
-    const article = await articles().findOne({ _id: id });
-    if (!article || (article.sizes ?? []).length === 0) return;
-
-    const total = article.sizes.reduce((sum, size) => sum + (size.stock ?? 0), 0);
-    await articles().updateOne({ _id: id }, { $set: { stock: total } });
+/** Bewegungen eines Artikels, neueste zuerst. */
+export async function listStockMovements(articleId: string, limit = 50) {
+    if (!isUuid(articleId)) return [];
+    return db
+        .select()
+        .from(stockMovements)
+        .where(eq(stockMovements.articleId, articleId))
+        .orderBy(sql`${stockMovements.createdAt} desc`)
+        .limit(limit);
 }
+
+// ---------------------------------------------------------------------------
+// Nachbestellliste
+// ---------------------------------------------------------------------------
 
 export interface ReorderRow {
     articleId: string;
@@ -344,39 +551,36 @@ export interface ReorderRow {
  * Jetzt hat jede Größe ihren eigenen Mindestbestand.
  */
 export async function getReorderList(): Promise<ReorderRow[]> {
-    const docs = await articles().find({ active: { $ne: false } }).sort({ name: 1 }).toArray();
+    const list = await listArticles(false);
     const rows: ReorderRow[] = [];
 
-    for (const doc of docs) {
-        const view = toArticleView(doc);
-
-        if (view.hasSizes) {
-            for (const size of view.sizes) {
-                const minStock = size.minStock ?? 0;
-                const missing = Math.max(0, minStock - (size.stock ?? 0));
+    for (const article of list) {
+        if (article.hasSizes) {
+            for (const size of article.sizes) {
+                const missing = Math.max(0, size.minStock - size.stock);
                 if (missing > 0) {
                     rows.push({
-                        articleId: view.id,
-                        name: view.name,
+                        articleId: article.id,
+                        name: article.name,
                         size: size.name,
-                        stock: size.stock ?? 0,
-                        minStock,
+                        stock: size.stock,
+                        minStock: size.minStock,
                         missing,
-                        orderUrl: size.orderUrl || view.orderUrl
+                        orderUrl: size.orderUrl || article.orderUrl
                     });
                 }
             }
         } else {
-            const missing = Math.max(0, view.minStock - view.stock);
+            const missing = Math.max(0, article.minStock - article.stock);
             if (missing > 0) {
                 rows.push({
-                    articleId: view.id,
-                    name: view.name,
+                    articleId: article.id,
+                    name: article.name,
                     size: null,
-                    stock: view.stock,
-                    minStock: view.minStock,
+                    stock: article.stock,
+                    minStock: article.minStock,
                     missing,
-                    orderUrl: view.orderUrl
+                    orderUrl: article.orderUrl
                 });
             }
         }

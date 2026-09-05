@@ -27,7 +27,7 @@
     aria-live="polite"
 >
     {#each $toasts as toast (toast.id)}
-        <div class={`border rounded-xl px-4 py-3 flex items-start gap-3 shadow-lg ${TONES[toast.kind] ?? TONES.info}`}>
+        <div class={`border rounded-control px-4 py-3 flex items-start gap-3 shadow-lg ${TONES[toast.kind] ?? TONES.info}`}>
             <span class={`bi bi-${ICONS[toast.kind] ?? ICONS.info} mt-0.5 text-lg`} aria-hidden="true"></span>
             <div class="flex-1 text-sm leading-relaxed min-w-0">{toast.message}</div>
             <button

@@ -19,7 +19,7 @@
 <button
     type="button"
     onclick={cycle}
-    class="flex items-center justify-center gap-2 w-full py-3 rounded-lg border border-border bg-surface text-fg hover:bg-surface-muted font-semibold transition"
+    class="flex items-center justify-center gap-2 w-full py-3 rounded-control border border-border bg-surface text-fg hover:bg-surface-muted font-semibold transition"
     title={`Darstellung: ${THEME_LABELS[current]}`}
     aria-label={`Darstellung umschalten, aktuell ${THEME_LABELS[current]}`}
 >

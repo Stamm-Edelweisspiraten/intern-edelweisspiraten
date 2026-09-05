@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-    <title>Bestätigung - Stamm Edelweisspiraten</title>
+    <title>Bestätigung</title>
 </svelte:head>
 
 <AuthShell

@@ -14,7 +14,7 @@
 </script>
 
 <svelte:head>
-    <title>Neues Passwort - Stamm Edelweisspiraten</title>
+    <title>Neues Passwort</title>
 </svelte:head>
 
 <AuthShell

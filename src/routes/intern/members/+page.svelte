@@ -5,7 +5,6 @@
     } from "$lib/components/ui";
     import type { Column } from "$lib/components/ui";
     import { calculateAge, formatDate } from "$lib/format";
-    import { can, canAny } from "$lib/can";
     import type { ActionData, PageData } from "./$types";
 
     let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -26,10 +25,37 @@
     let deleteForm = $state<HTMLFormElement | null>(null);
 
     const permissions = $derived(data.permissions ?? []);
-    const canCreate = $derived(can(permissions, "members.create"));
-    const canEdit = $derived(canAny(permissions, ["members.edit", "groupleader.members.edit"]));
-    const canDelete = $derived(canAny(permissions, ["members.delete", "groupleader.members.delete"]));
-    const canInvite = $derived(canAny(permissions, ["members.view", "groupleader.members.invitepdf"]));
+    const canCreate = $derived(data.canCreate);
+
+    /**
+     * Zustaendigkeit je Mitglied statt einer pauschalen Aussage: `null` heisst
+     * stammesweit, sonst zaehlt, ob das Mitglied in einer der Gruppen ist.
+     */
+    function allowedFor(scope: string[] | null, groups: string[]): boolean {
+        if (scope === null) return true;
+        return groups.some((id) => scope.includes(id));
+    }
+
+    /**
+     * Die gesetzten Filter wandern in die Adresse des PDFs, damit die
+     * ausgedruckte Liste dasselbe zeigt wie der Bildschirm. Die Volltextsuche
+     * bleibt aussen vor -- sie laeuft im Browser und waere serverseitig eine
+     * zweite Umsetzung derselben Regeln.
+     */
+    const listPdfHref = $derived.by(() => {
+        const params = new URLSearchParams();
+        if (groupFilter) params.set("gruppe", groupFilter);
+        if (statusFilter) params.set("status", statusFilter);
+        const query = params.toString();
+        return `/intern/members/liste.pdf${query ? `?${query}` : ""}`;
+    });
+
+    const canEditMember = $derived((member: Member) =>
+        allowedFor(data.editableGroups, member.groups)
+    );
+    const canDeleteMember = $derived((member: Member) =>
+        allowedFor(data.deletableGroups, member.groups)
+    );
 
     const groupNameById = $derived(
         new Map(data.groupNames.map((group) => [group.id, group.name]))
@@ -124,6 +150,9 @@
     >
         {#snippet actions()}
             <SearchInput bind:value={search} placeholder="Name, Gruppe, E-Mail..." label="Mitglieder durchsuchen" />
+            <Button href={listPdfHref} variant="secondary" icon="file-earmark-pdf">
+                Liste als PDF
+            </Button>
             {#if canCreate}
                 <Button href="/intern/members/create" variant="primary" icon="person-plus">
                     Mitglied anlegen
@@ -211,22 +240,21 @@
                     href={`/intern/members/${member.id}`}
                     variant="secondary"
                     size="sm"
-                    icon={canEdit ? "pencil" : "eye"}
+                    icon={canEditMember(member) ? "pencil" : "eye"}
                 >
-                    {canEdit ? "Bearbeiten" : "Ansehen"}
+                    {canEditMember(member) ? "Bearbeiten" : "Ansehen"}
                 </Button>
 
-                {#if canInvite}
-                    <Button
-                        href={`/intern/members/${member.id}/invite.pdf`}
-                        variant="ghost"
-                        size="sm"
-                        icon="file-earmark-pdf"
-                        ariaLabel={`Einladung für ${member.firstname} ${member.lastname} herunterladen`}
-                    />
-                {/if}
+                <!-- Wer das Mitglied hier sieht, darf auch die Einladung holen. -->
+                <Button
+                    href={`/intern/members/${member.id}/invite.pdf`}
+                    variant="ghost"
+                    size="sm"
+                    icon="file-earmark-pdf"
+                    ariaLabel={`Einladung für ${member.firstname} ${member.lastname} herunterladen`}
+                />
 
-                {#if canDelete}
+                {#if canDeleteMember(member)}
                     <Button
                         variant="ghost"
                         size="sm"

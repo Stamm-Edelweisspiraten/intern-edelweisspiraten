@@ -27,8 +27,9 @@ describe("matchesPermission", () => {
 
     it("laesst eine Wildcard nicht ueber ihren Praefix hinaus wirken", () => {
         expect(matchesPermission(["members.*"], "groups.view")).toBe(false);
-        // "groupleader.members.view" liegt NICHT unter "members".
-        expect(matchesPermission(["members.*"], "groupleader.members.view")).toBe(false);
+        // Der Platzhalter greift nur im eigenen Namensraum: "members.*" deckt
+        // "kaemmerer.members.view" NICHT ab, obwohl "members" darin vorkommt.
+        expect(matchesPermission(["members.*"], "kaemmerer.members.view")).toBe(false);
         expect(matchesPermission(["kaemmerer.order.*"], "kaemmerer.orders.view")).toBe(false);
     });
 

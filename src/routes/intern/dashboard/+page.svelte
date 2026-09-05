@@ -158,7 +158,62 @@
             </Card>
         </div>
 
-        <Card title="Nächste Geburtstage" subtitle="Die drei nächsten Termine.">
+        <div class="space-y-6">
+            <Card title="Nächste Termine" subtitle="Was ansteht – und wo noch eine Rückmeldung fehlt.">
+                {#snippet actions()}
+                    <Button href="/intern/termine" variant="ghost" size="sm" iconRight="arrow-right">
+                        Alle
+                    </Button>
+                {/snippet}
+
+                {#if data.events.length === 0}
+                    <EmptyState inline title="Keine kommenden Termine." />
+                {:else}
+                    <ul class="space-y-2">
+                        {#each data.events as item (item.id)}
+                            <li>
+                                <a
+                                    href={`/intern/termine/${item.id}`}
+                                    class="block rounded-xl border border-border p-3 hover:bg-surface-muted transition"
+                                >
+                                    <div class="flex items-start justify-between gap-2 flex-wrap">
+                                        <span
+                                            class={`text-sm font-semibold ${item.cancelled ? "text-fg-muted line-through" : "text-fg"}`}
+                                        >
+                                            {item.title}
+                                        </span>
+                                        {#if item.openResponses > 0 && !item.cancelled}
+                                            <Badge
+                                                tone="warning"
+                                                size="xs"
+                                                icon="question-circle"
+                                                label={item.openResponses === 1
+                                                    ? "Rückmeldung offen"
+                                                    : `${item.openResponses} Rückmeldungen offen`}
+                                            />
+                                        {/if}
+                                    </div>
+                                    <p class="text-xs text-fg-subtle mt-1">
+                                        {new Date(item.startsAt).toLocaleString("de-DE", {
+                                            weekday: "short",
+                                            day: "2-digit",
+                                            month: "2-digit",
+                                            ...(item.allDay
+                                                ? {}
+                                                : { hour: "2-digit", minute: "2-digit" })
+                                        })}{item.allDay ? ", ganztägig" : " Uhr"}
+                                        {#if item.location}
+                                            · {item.location}
+                                        {/if}
+                                    </p>
+                                </a>
+                            </li>
+                        {/each}
+                    </ul>
+                {/if}
+            </Card>
+
+            <Card title="Nächste Geburtstage" subtitle="Die drei nächsten Termine.">
             {#if data.birthdays.length === 0}
                 <EmptyState inline title="Keine Geburtstage gefunden." />
             {:else}
@@ -183,6 +238,7 @@
                     {/each}
                 </ul>
             {/if}
-        </Card>
+            </Card>
+        </div>
     </div>
 </div>

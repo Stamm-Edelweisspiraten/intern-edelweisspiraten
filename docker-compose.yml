@@ -1,0 +1,56 @@
+# Entwicklungsumgebung: nur die Datenbank. Die Anwendung laeuft daneben mit
+# `npm run dev`.
+#
+# Fuer den Betrieb zusaetzlich das Profil "app" starten:
+#   docker compose --profile app up -d
+# Das baut das Abbild aus dem Dockerfile, wendet die Migrationen an und
+# startet den Server auf Port 3000.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: ep-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: intern
+      POSTGRES_PASSWORD: intern
+      POSTGRES_DB: intern
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intern -d intern"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    profiles: ["app"]
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://intern:intern@postgres:5432/intern
+      # Beide je 32 Byte, base64: openssl rand -base64 32
+      SESSION_SECRET: ${SESSION_SECRET}
+      MFA_ENC_KEY: ${MFA_ENC_KEY}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+      # Ohne diese Angaben sieht die Anwendung nur die IP des Proxys, wodurch
+      # die Begrenzung der Anmeldeversuche pro IP wirkungslos waere.
+      ADDRESS_HEADER: ${ADDRESS_HEADER:-}
+      XFF_DEPTH: ${XFF_DEPTH:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # Kommagetrennte Herkuenfte, die die REST-API aus einem Browser
+      # aufrufen duerfen. Leer bedeutet: kein Zugriff aus fremden Seiten.
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-}
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

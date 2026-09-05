@@ -1,12 +1,12 @@
 import { fail } from "@sveltejs/kit";
 import type { Actions } from "./$types";
 import { env } from "$env/dynamic/private";
-import { users } from "$lib/server/db/collections";
-import { normalizeEmail } from "$lib/server/userService";
+import { getUserByEmail, normalizeEmail } from "$lib/server/userService";
 import { emailHash, issueToken } from "$lib/server/auth/passwordReset";
 import { RATE_LIMITS, rateLimitKey, registerFailure, checkRateLimit } from "$lib/server/auth/rateLimit";
 import { sendEmail } from "$lib/server/emailService";
 import { passwordResetTemplate } from "$lib/server/emailTemplates/passwordReset";
+import { getOrganizationSettings } from "$lib/server/settingsService";
 
 /**
  * Anforderung eines Links zum Zuruecksetzen des Passworts.
@@ -41,18 +41,20 @@ export const actions: Actions = {
         await registerFailure(ipKey, RATE_LIMITS.passwordResetPerIp);
         await registerFailure(mailKey, RATE_LIMITS.passwordResetPerEmail);
 
-        const user = await users().findOne({ email });
+        const user = await getUserByEmail(email);
 
-        if (user?._id && user.status !== "disabled") {
+        if (user && user.status !== "disabled") {
             try {
-                const { token } = await issueToken(user._id, "reset");
+                const { token } = await issueToken(user.id, "reset");
                 const base = env.PUBLIC_APP_URL || url.origin;
                 const link = `${base}/password/reset/${token}`;
 
+                const organization = await getOrganizationSettings();
+
                 await sendEmail({
                     to: user.email,
-                    subject: "Passwort zurücksetzen - Edelweisspiraten Intern",
-                    html: passwordResetTemplate(user.name, link, 2)
+                    subject: `Passwort zurücksetzen – ${organization.name}`,
+                    html: passwordResetTemplate(user.name, link, 2, organization.name)
                 });
             } catch (err) {
                 // Der Versand darf nach aussen nichts verraten, muss aber

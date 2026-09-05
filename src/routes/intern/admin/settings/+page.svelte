@@ -16,7 +16,7 @@
      * Cents umgerechnet.
      */
     const LEVELS: { key: LevelKey; label: string }[] = [
-        { key: "stamm", label: "Stamm (Edelweißpiraten)" },
+        { key: "stamm", label: "Stamm" },
         { key: "gau", label: "Gau (Bremen)" },
         { key: "landesmark", label: "Landesmark (Achtern Diek)" },
         { key: "bund", label: "Bund (Christliche Pfadfinderschaft Deutschlands e.V.)" }
@@ -98,7 +98,7 @@
                             {describedBy}
                             name="bank_accountHolder"
                             value={data.finance.bank.accountHolder}
-                            placeholder="Stamm Edelweißpiraten Bremen"
+                            placeholder="Name des Kontoinhabers"
                             disabled={!data.canUpdate}
                         />
                     {/snippet}

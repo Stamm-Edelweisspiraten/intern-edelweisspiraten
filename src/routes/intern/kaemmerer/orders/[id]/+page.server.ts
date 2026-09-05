@@ -1,6 +1,7 @@
 import { error, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { requirePermission } from "$lib/server/permissionGuard";
+import { matchesPermission } from "$lib/permissions/match";
 import { cancelOrder, getOrderById, setItemReceived } from "$lib/server/kaemmerer/orderService";
 import { listArticles } from "$lib/server/kaemmerer/articleService";
 
@@ -17,12 +18,10 @@ export const load: PageServerLoad = async (event) => {
     return {
         order,
         articles,
-        canManage: event.locals.permissions.includes("*") ||
-            event.locals.permissions.includes("kaemmerer.*") ||
-            event.locals.permissions.includes("kaemmerer.orders.manage"),
-        canCancel: event.locals.permissions.includes("*") ||
-            event.locals.permissions.includes("kaemmerer.*") ||
-            event.locals.permissions.includes("kaemmerer.order.cancel")
+        // Siehe Kommentar in der Bestelluebersicht: der gemeinsame Matcher
+        // kennt Platzhalter, Array.includes nicht.
+        canManage: matchesPermission(event.locals.permissions, "kaemmerer.orders.manage"),
+        canCancel: matchesPermission(event.locals.permissions, "kaemmerer.order.cancel")
     };
 };
 
@@ -32,10 +31,10 @@ export const actions: Actions = {
         requirePermission(event, "kaemmerer.orders.manage");
 
         const form = await event.request.formData();
-        const itemIndex = Number(form.get("itemIndex"));
+        const itemId = String(form.get("itemId") ?? "");
         const received = String(form.get("received")) === "true";
 
-        const result = await setItemReceived(event.params.id, itemIndex, received);
+        const result = await setItemReceived(event.params.id, itemId, received);
         if (!result.ok) return fail(400, { error: result.error });
 
         return {

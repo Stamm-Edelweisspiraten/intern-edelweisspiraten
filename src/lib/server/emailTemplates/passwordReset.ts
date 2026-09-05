@@ -2,9 +2,14 @@
  * E-Mail-Vorlagen fuer das Zuruecksetzen des Passworts und fuer Einladungen.
  * Bewusst als Tabellenlayout mit Inline-Styles, damit die Darstellung auch in
  * aelteren Mail-Programmen stimmt.
+ *
+ * Der Name der Organisation wird uebergeben statt fest eingetragen -- sonst
+ * traegt jede Mail den Namen eines fremden Stamms.
  */
 
-function layout(title: string, body: string): string {
+const FALLBACK_ORGANIZATION = "Internes Portal";
+
+function layout(title: string, body: string, organization: string): string {
     return `<!DOCTYPE html>
 <html lang="de" style="margin:0;padding:0;">
 <head>
@@ -27,7 +32,7 @@ function layout(title: string, body: string): string {
                     ${body}
                     <tr>
                         <td style="padding-top:32px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:12px;line-height:1.6;">
-                            Stamm Edelweisspiraten Bremen &middot; Interner Bereich<br />
+                            ${escapeHtml(organization)} &middot; Interner Bereich<br />
                             Diese Nachricht wurde automatisch erzeugt.
                         </td>
                     </tr>
@@ -57,7 +62,12 @@ function button(url: string, label: string): string {
     </tr>`;
 }
 
-export function passwordResetTemplate(name: string, url: string, validHours: number): string {
+export function passwordResetTemplate(
+    name: string,
+    url: string,
+    validHours: number,
+    organization = FALLBACK_ORGANIZATION
+): string {
     return layout(
         "Passwort zurücksetzen",
         `<tr>
@@ -74,22 +84,30 @@ export function passwordResetTemplate(name: string, url: string, validHours: num
                 Wenn du das nicht angefordert hast, kannst du diese E-Mail ignorieren.
                 Dein bisheriges Passwort bleibt dann unverändert gültig.
             </td>
-        </tr>`
+        </tr>`,
+        organization
     );
 }
 
-export function inviteTemplate(name: string, url: string, validDays: number): string {
+export function inviteTemplate(
+    name: string,
+    url: string,
+    validDays: number,
+    organization = FALLBACK_ORGANIZATION
+): string {
     return layout(
         "Zugang aktivieren",
         `<tr>
             <td style="color:#374151;font-size:15px;line-height:1.7;">
                 Hallo ${escapeHtml(name)},<br /><br />
-                für dich wurde ein Zugang zum internen Bereich der Edelweisspiraten
-                eingerichtet. Lege über die folgende Schaltfläche dein Passwort fest.
+                für dich wurde ein Zugang zum internen Bereich von
+                ${escapeHtml(organization)} eingerichtet. Lege über die folgende
+                Schaltfläche dein Passwort fest.
                 Der Link ist ${validDays} Tage gültig.
             </td>
         </tr>
-        ${button(url, "Zugang aktivieren")}`
+        ${button(url, "Zugang aktivieren")}`,
+        organization
     );
 }
 

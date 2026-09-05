@@ -1,15 +1,20 @@
 import { error } from "@sveltejs/kit";
+import type { RequestHandler } from "./$types";
 import { getMember } from "$lib/server/memberService";
-import { hasPermission } from "$lib/server/permissionService";
+import { requirePermissionForAnyGroup } from "$lib/server/permissionGuard";
 import { getMemberFile } from "$lib/server/fileStore";
 
-export async function GET({ params, locals }) {
-    if (!hasPermission(locals.permissions ?? [], "members.view")) {
-        throw error(403, "Keine Berechtigung");
-    }
-
-    const memberId = params.id;
-    const type = params.type;
+/**
+ * Einwilligung und Aufnahmeantrag eines Mitglieds.
+ *
+ * Verlangte vorher members.view STAMMESWEIT -- eine Gruppenleitung kam
+ * dadurch nicht an die Unterlagen der eigenen Mitglieder, obwohl sie deren
+ * Datensatz sonst vollstaendig sieht. Jetzt zaehlt die Zustaendigkeit fuer
+ * die Gruppen des Mitglieds.
+ */
+export const GET: RequestHandler = async (event) => {
+    const memberId = event.params.id;
+    const type = event.params.type;
 
     if (!["consent", "application"].includes(type)) {
         throw error(400, "Ungültiger Dateityp");
@@ -18,6 +23,8 @@ export async function GET({ params, locals }) {
     const member = await getMember(memberId);
     if (!member) throw error(404, "Mitglied nicht gefunden");
 
+    requirePermissionForAnyGroup(event, "members.view", member.groups);
+
     const meta = type === "consent" ? member.consentFile : member.applicationFile;
     if (!meta?.id) throw error(404, "Datei nicht gefunden");
 
@@ -25,16 +32,13 @@ export async function GET({ params, locals }) {
     if (!stored) throw error(404, "Datei nicht gefunden");
 
     const headers = new Headers({
-        "Content-Type": meta.contentType ?? (stored.file as { contentType?: string }).contentType ?? "application/octet-stream",
+        "Content-Type": meta.contentType || stored.file.contentType || "application/octet-stream",
         "Content-Disposition": `inline; filename="${meta.filename}"`,
+        "Content-Length": String(stored.content.byteLength),
+        // Mitgliedsunterlagen gehoeren nicht in einen Zwischenspeicher.
+        "Cache-Control": "no-store"
     });
 
-    if (meta.size) {
-        headers.set("Content-Length", meta.size.toString());
-    }
-
-    return new Response(stored.stream as any, {
-        status: 200,
-        headers
-    });
-}
+    // Buffer ist kein gueltiger BodyInit; die Ansicht darauf schon.
+    return new Response(new Uint8Array(stored.content), { status: 200, headers });
+};

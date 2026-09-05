@@ -31,7 +31,7 @@
 </script>
 
 <span
-    class={`inline-flex items-center gap-1.5 font-semibold rounded-full border whitespace-nowrap ${TONES[tone]} ${SIZES[size]}`}
+    class={`inline-flex items-center gap-1.5 font-semibold rounded-control border whitespace-nowrap ${TONES[tone]} ${SIZES[size]}`}
 >
     {#if icon}
         <span class={`bi bi-${icon}`} aria-hidden="true"></span>

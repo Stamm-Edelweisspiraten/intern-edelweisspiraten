@@ -6,7 +6,7 @@ import { readSession, SESSION_COOKIE, stopImpersonation } from "$lib/server/auth
 export const POST: RequestHandler = async ({ cookies }) => {
     const session = await readSession(cookies.get(SESSION_COOKIE));
 
-    if (session?.impersonation) {
+    if (session?.impersonationUserId) {
         await stopImpersonation(session, cookies);
     }
 

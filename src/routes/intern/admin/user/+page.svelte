@@ -28,16 +28,19 @@
     const permissions = $derived(page.data.permissions ?? []);
     const canDelete = $derived(can(permissions, "user.delete"));
 
-    function memberName(memberId: string | null | undefined): string {
-        if (!memberId) return "";
-        return data.members.find((member) => member.id === memberId)?.name ?? memberId;
+    /** Ein Zugang kann mit mehreren Mitgliedern verknuepft sein. */
+    function memberNames(memberIds: string[] | null | undefined): string {
+        if (!memberIds || memberIds.length === 0) return "";
+        return memberIds
+            .map((id) => data.members.find((member) => member.id === id)?.name ?? id)
+            .join(", ");
     }
 
     const filtered = $derived(
         (data.users ?? []).filter((user) => {
             const needle = search.trim().toLowerCase();
             if (!needle) return true;
-            return `${user.name} ${user.email} ${user.id} ${memberName(user.memberId)}`
+            return `${user.name} ${user.email} ${user.id} ${memberNames(user.memberIds)}`
                 .toLowerCase()
                 .includes(needle);
         })
@@ -46,7 +49,7 @@
     const columns: Column<User>[] = [
         { key: "name", label: "Name", value: (u) => u.name },
         { key: "email", label: "E-Mail-Adresse", value: (u) => u.email },
-        { key: "member", label: "Verknüpftes Mitglied", value: (u) => memberName(u.memberId) }
+        { key: "member", label: "Verknüpfte Mitglieder", value: (u) => memberNames(u.memberIds) }
     ];
 
     function askDelete(user: User) {

@@ -45,7 +45,7 @@
 
     const classes = $derived(
         [
-            "w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg shadow-sm transition",
+            "w-full px-4 py-3 rounded-control text-sm bg-surface text-fg shadow-sm transition",
             "border placeholder:text-fg-subtle",
             invalid ? "border-danger" : "border-border-strong",
             disabled ? "opacity-60 cursor-not-allowed" : "",

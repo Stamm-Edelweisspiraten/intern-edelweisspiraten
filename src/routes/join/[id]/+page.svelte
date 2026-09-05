@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-    <title>Einladung bestätigen - Stamm Edelweisspiraten</title>
+    <title>Einladung bestätigen</title>
 </svelte:head>
 
 <AuthShell

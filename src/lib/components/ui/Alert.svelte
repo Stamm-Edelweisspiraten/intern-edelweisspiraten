@@ -27,7 +27,7 @@
 </script>
 
 <div
-    class={`border rounded-xl px-4 py-3 flex items-start gap-3 ${TONES[tone].box}`}
+    class={`border rounded-control px-4 py-3 flex items-start gap-3 ${TONES[tone].box}`}
     role={tone === "danger" ? "alert" : "status"}
 >
     <span class={`bi bi-${TONES[tone].icon} mt-0.5`} aria-hidden="true"></span>

@@ -4,6 +4,8 @@ import { getAllMembers } from "$lib/server/memberService";
 import { getAllGroups } from "$lib/server/groupService";
 import { computeOutstanding } from "$lib/server/finance/invoiceService";
 import { listOrdersForMembers } from "$lib/server/kaemmerer/orderService";
+import { listEvents, getOwnResponses } from "$lib/server/eventService";
+import { matchesPermission } from "$lib/permissions/match";
 import { sumCents } from "$lib/money";
 
 interface UpcomingBirthday {
@@ -25,14 +27,47 @@ export const load: PageServerLoad = async (event) => {
     // persoenlichen Kacheln (offene Posten und Bestellungen).
     const memberIds = event.locals.user?.memberIds ?? [];
 
-    const [members, groups, invoiceLists, ownOrders] = await Promise.all([
+    const canSeeEvents = matchesPermission(event.locals.permissions ?? [], "events.view");
+
+    const [members, groups, invoiceLists, ownOrders, upcomingEvents] = await Promise.all([
         getAllMembers(),
         getAllGroups(),
         Promise.all(memberIds.map((memberId) => computeOutstanding({ memberId }))),
-        listOrdersForMembers(memberIds)
+        listOrdersForMembers(memberIds),
+        canSeeEvents
+            ? listEvents(
+                  { id: event.locals.user?.id, memberIds },
+                  {
+                      manageAll: matchesPermission(
+                          event.locals.permissions ?? [],
+                          "events.manage"
+                      ),
+                      range: "upcoming",
+                      limit: 5
+                  }
+              )
+            : Promise.resolve([])
     ]);
 
-    const groupMap = new Map((groups ?? []).map((g: any) => [g.id, g]));
+    /**
+     * Zu jedem kommenden Termin: fehlt noch eine Rueckmeldung fuer eines der
+     * verknuepften Mitglieder? Genau das ist der Grund, warum die Kachel
+     * ueberhaupt auf dem Dashboard steht.
+     */
+    const eventResponseState = await Promise.all(
+        upcomingEvents.map(async (entry) => {
+            if (memberIds.length === 0) return { id: entry.id, open: 0 };
+            const own = await getOwnResponses(entry.id, memberIds);
+            return {
+                id: entry.id,
+                open: memberIds.filter((memberId) => !own.has(memberId)).length
+            };
+        })
+    );
+
+    const openByEvent = new Map(eventResponseState.map((entry) => [entry.id, entry.open]));
+
+    const groupMap = new Map(groups.map((g) => [g.id, g]));
 
     const today = new Date();
     const startOfToday = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
@@ -64,7 +99,7 @@ export const load: PageServerLoad = async (event) => {
             }
 
             return {
-                id: m._id?.toString?.() ?? "",
+                id: m.id,
                 firstname: m.firstname,
                 group: groupLabel,
                 dateISO: next.toISOString(),
@@ -91,6 +126,16 @@ export const load: PageServerLoad = async (event) => {
     return {
         userName,
         birthdays: upcoming,
+        events: upcomingEvents.map((entry) => ({
+            id: entry.id,
+            title: entry.title,
+            location: entry.location,
+            startsAt: entry.startsAt.toISOString(),
+            allDay: entry.allDay,
+            cancelled: entry.status === "cancelled",
+            /** Wie viele der eigenen Mitglieder noch nicht zurueckgemeldet haben. */
+            openResponses: openByEvent.get(entry.id) ?? 0
+        })),
         hasLinkedMembers: memberIds.length > 0,
         outstandingTotal: sumCents(openInvoices.map((invoice) => invoice.outstanding)),
         outstandingCount: openInvoices.length,

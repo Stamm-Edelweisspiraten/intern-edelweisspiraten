@@ -1,57 +1,70 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { error, fail } from "@sveltejs/kit";
 import { getGroup } from "$lib/server/groupService";
-import { getMemberByEmail, getMembersByGroup, getMembersByIds } from "$lib/server/memberService";
-import { hasPermission, getLeaderGroupIdsForUser } from "$lib/server/permissionService";
+import {
+    getMemberByEmail,
+    getMembersByGroup,
+    getMembersByIds,
+    type Member
+} from "$lib/server/memberService";
+import { groupsWithPermission, requirePermissionForGroup } from "$lib/server/permissionGuard";
 import { getPositionsByMemberIds } from "$lib/server/positionService";
+import type { RequestEvent } from "./$types";
 
-export const load: PageServerLoad = async ({ url, locals }) => {
-    const perms = locals.permissions ?? [];
+/**
+ * Empfaenger aufloesen -- eine Stelle fuer das Laden und fuer den Versand.
+ *
+ * Vorher stand die Aufloesung zweimal im Modul, und im Zweig ueber
+ * Mitgliedskennungen wurden Mitglieder ausserhalb der eigenen Zustaendigkeit
+ * STILL weggefiltert: die Nachricht ging dann an weniger Empfaenger als
+ * ausgewaehlt, ohne Hinweis. Jetzt wird abgewiesen.
+ */
+async function resolveRecipients(
+    event: RequestEvent,
+    input: { groupId?: string; memberIdsParam?: string }
+): Promise<{ group: Awaited<ReturnType<typeof getGroup>>; members: Member[] }> {
+    if (input.groupId) {
+        const group = await getGroup(input.groupId);
+        if (!group) throw error(404, "Gruppe nicht gefunden");
+
+        requirePermissionForGroup(event, "groups.view", group.id);
+        return { group, members: await getMembersByGroup(input.groupId) };
+    }
+
+    const ids = (input.memberIdsParam ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+    if (ids.length === 0) throw error(400, "Keine Mitglieder ausgewählt");
+
+    const members = await getMembersByIds(ids);
+    const allowed = groupsWithPermission(event, "members.view");
+
+    if (allowed !== null) {
+        if (allowed.length === 0) throw error(403, "Keine Berechtigung");
+        const outside = members.filter((m) => !m.groups.some((g) => allowed.includes(g)));
+        if (outside.length > 0) {
+            throw error(403, "Keine Berechtigung für diese Mitglieder");
+        }
+    }
+
+    return { group: null, members };
+}
+
+export const load: PageServerLoad = async (event) => {
+    const { url, locals } = event;
     const groupId = url.searchParams.get("group");
     const memberIdsParam = url.searchParams.get("members");
 
-    let group = null;
-    let members: any[] = [];
-    let mode: "group" | "members" = "group";
-
-    if (groupId) {
-        const canAllGroups = hasPermission(perms, "groups.view");
-        const canGroupGroups = hasPermission(perms, "groupleader.groups.view");
-        if (!canAllGroups && !canGroupGroups) {
-            throw error(403, "Keine Berechtigung");
-        }
-        group = await getGroup(groupId);
-        if (!group) {
-            throw error(404, "Gruppe nicht gefunden");
-        }
-        if (!canAllGroups) {
-            const allowed = await getLeaderGroupIdsForUser(locals.user);
-            if (!allowed.includes(group.id)) throw error(403, "Keine Berechtigung");
-        }
-        members = await getMembersByGroup(groupId);
-        mode = "group";
-    } else if (memberIdsParam) {
-        const canAllMembers = hasPermission(perms, "members.view");
-        const canGroupMembers = hasPermission(perms, "groupleader.members.view");
-        if (!canAllMembers && !canGroupMembers) {
-            throw error(403, "Keine Berechtigung");
-        }
-        const ids = memberIdsParam.split(",").map((id) => id.trim()).filter(Boolean);
-        if (ids.length === 0) {
-            throw error(400, "Keine Mitglieder ausgewählt");
-        }
-        members = await getMembersByIds(ids);
-        if (!canAllMembers) {
-            const allowed = await getLeaderGroupIdsForUser(locals.user);
-            members = members.filter((m: any) => (m.groups ?? []).some((g: any) => allowed.includes(g?.toString?.() ?? g)));
-            if (members.length === 0) {
-                throw error(403, "Keine Berechtigung für diese Mitglieder");
-            }
-        }
-        mode = "members";
-    } else {
+    if (!groupId && !memberIdsParam) {
         throw error(400, "Keine Gruppe oder Mitglieder ausgewählt");
     }
+
+    const { group, members } = await resolveRecipients(event, {
+        groupId: groupId ?? undefined,
+        memberIdsParam: memberIdsParam ?? undefined
+    });
+    const mode: "group" | "members" = groupId ? "group" : "members";
 
     const userEmail = locals.user?.userinfo?.email ?? "";
     const replyToOptions: { label: string; email: string }[] = [];
@@ -61,9 +74,8 @@ export const load: PageServerLoad = async ({ url, locals }) => {
     }
 
     const member = userEmail ? await getMemberByEmail(userEmail) : null;
-    if (member?._id) {
-        const memberIdStr = member._id.toString();
-        const positions = await getPositionsByMemberIds([memberIdStr]);
+    if (member) {
+        const positions = await getPositionsByMemberIds([member.id]);
         positions.forEach((p) => {
             if (p.email) {
                 replyToOptions.push({
@@ -79,17 +91,18 @@ export const load: PageServerLoad = async ({ url, locals }) => {
         mode,
         replyToDefault: replyToOptions[0]?.email ?? group?.replyTo ?? userEmail ?? "",
         replyToOptions,
-        members: members.map((m: any) => ({
-            id: m._id.toString(),
+        members: members.map((m) => ({
+            id: m.id,
             firstname: m.firstname,
             lastname: m.lastname,
-            emails: m.emails ?? []
+            emails: m.emails
         }))
     };
 };
 
 export const actions: Actions = {
-    sendMail: async ({ request, locals }) => {
+    sendMail: async (event) => {
+        const { request, locals } = event;
         const form = await request.formData();
         const subject = form.get("subject")?.toString() ?? "";
         const bodyHtml = form.get("bodyHtml")?.toString() ?? "";
@@ -111,44 +124,14 @@ export const actions: Actions = {
             return fail(400, { error: "Betreff und Nachricht sind Pflicht." });
         }
 
-        let group: any = null;
-        let members: any[] = [];
-
-        if (groupId) {
-            const canAllGroups = hasPermission(locals.permissions ?? [], "groups.view");
-            const canGroupGroups = hasPermission(locals.permissions ?? [], "groupleader.groups.view");
-            if (!canAllGroups && !canGroupGroups) {
-                throw error(403, "Keine Berechtigung");
-            }
-            group = await getGroup(groupId);
-            if (!group) {
-                throw error(404, "Gruppe nicht gefunden");
-            }
-            if (!canAllGroups) {
-                const allowed = await getLeaderGroupIdsForUser(locals.user);
-                if (!allowed.includes(group.id)) throw error(403, "Keine Berechtigung");
-            }
-            members = await getMembersByGroup(groupId);
-        } else {
-            const canAllMembers = hasPermission(locals.permissions ?? [], "members.view");
-            const canGroupMembers = hasPermission(locals.permissions ?? [], "groupleader.members.view");
-            if (!canAllMembers && !canGroupMembers) {
-                throw error(403, "Keine Berechtigung");
-            }
-            const ids = memberIdsParam.split(",").map((id) => id.trim()).filter(Boolean);
-            members = await getMembersByIds(ids);
-            if (!canAllMembers) {
-                const allowed = await getLeaderGroupIdsForUser(locals.user);
-                members = members.filter((m: any) => (m.groups ?? []).some((g: any) => allowed.includes(g?.toString?.() ?? g)));
-                if (members.length === 0) {
-                    throw error(403, "Keine Berechtigung für diese Mitglieder");
-                }
-            }
-        }
+        const { group, members } = await resolveRecipients(event, {
+            groupId: groupId || undefined,
+            memberIdsParam
+        });
 
         const emails = new Set<string>();
-        members.forEach((m: any) => {
-            (m.emails ?? []).forEach((e: any) => {
+        members.forEach((m) => {
+            m.emails.forEach((e) => {
                 if (e.email) emails.add(e.email);
             });
         });

@@ -45,6 +45,11 @@
         return data.groups.find((group) => group.id === groupId)?.name ?? groupId;
     }
 
+    function roleName(roleId: string | undefined | null): string {
+        if (!roleId) return "";
+        return data.roles.find((role) => role.id === roleId)?.name ?? "";
+    }
+
     function askDelete(position: Position) {
         deleteTarget = position;
         deleteOpen = true;
@@ -115,18 +120,41 @@
                     </div>
                 </fieldset>
 
-                <FormField label="Gruppe" hint="Nur für Gruppenleiter erforderlich.">
+                <FormField
+                    label="Gruppe"
+                    hint="Bestimmt den Bezug: Mit Gruppe gelten die Rechte der Rolle nur dort."
+                >
                     {#snippet children({ id, describedBy })}
                         <select
                             {id}
                             aria-describedby={describedBy}
                             name="groupId"
-                            disabled={type !== "gruppenleiter"}
-                            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm disabled:opacity-60"
+                            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
                         >
-                            <option value="">Keine Gruppe</option>
+                            <option value="">Keine Gruppe – gilt für den ganzen Stamm</option>
                             {#each data.groups as group (group.id)}
                                 <option value={group.id}>{group.name}</option>
+                            {/each}
+                        </select>
+                    {/snippet}
+                </FormField>
+
+                <FormField
+                    label="Rolle"
+                    hint="Wer dieses Amt innehat, erhält die Rechte dieser Rolle. Ohne Rolle trägt das Amt keine Rechte."
+                >
+                    {#snippet children({ id, describedBy })}
+                        <select
+                            {id}
+                            aria-describedby={describedBy}
+                            name="roleId"
+                            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
+                        >
+                            <option value="">Keine Rolle</option>
+                            {#each data.roles as role (role.id)}
+                                <option value={role.id}>
+                                    {role.name}{role.groupScopable ? " (gruppenfähig)" : ""}
+                                </option>
                             {/each}
                         </select>
                     {/snippet}
@@ -214,10 +242,21 @@
                                             size="xs"
                                             label={position.type === "gruppenleiter" ? "Gruppenleiter" : "Amt"}
                                         />
-                                        {#if position.type === "gruppenleiter" && position.groupId}
-                                            <span class="text-xs text-fg-subtle">
-                                                Gruppe: {groupName(position.groupId)}
-                                            </span>
+                                        {#if position.groupId}
+                                            <Badge
+                                                tone="neutral"
+                                                size="xs"
+                                                label={`Gruppe: ${groupName(position.groupId)}`}
+                                            />
+                                        {/if}
+                                        {#if position.roleId}
+                                            <Badge
+                                                tone="success"
+                                                size="xs"
+                                                label={`Rolle: ${roleName(position.roleId)}`}
+                                            />
+                                        {:else}
+                                            <span class="text-xs text-fg-subtle">Ohne Rechte</span>
                                         {/if}
                                     </div>
                                     <p class="text-lg font-semibold text-fg">{position.name}</p>
@@ -314,7 +353,7 @@
 
                                     <FormField
                                         label="Gruppe"
-                                        hint="Nur für Gruppenleiter erforderlich."
+                                        hint="Mit Gruppe gelten die Rechte der Rolle nur dort."
                                         class="md:col-span-2"
                                     >
                                         {#snippet children({ id, describedBy })}
@@ -324,10 +363,32 @@
                                                 name="groupId"
                                                 class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
                                             >
-                                                <option value="">Keine Gruppe</option>
+                                                <option value="">Keine Gruppe – gilt für den ganzen Stamm</option>
                                                 {#each data.groups as group (group.id)}
                                                     <option value={group.id} selected={position.groupId === group.id}>
                                                         {group.name}
+                                                    </option>
+                                                {/each}
+                                            </select>
+                                        {/snippet}
+                                    </FormField>
+
+                                    <FormField
+                                        label="Rolle"
+                                        hint="Rechte, die die Inhaber dieses Amts erhalten."
+                                        class="md:col-span-2"
+                                    >
+                                        {#snippet children({ id, describedBy })}
+                                            <select
+                                                {id}
+                                                aria-describedby={describedBy}
+                                                name="roleId"
+                                                class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
+                                            >
+                                                <option value="">Keine Rolle</option>
+                                                {#each data.roles as role (role.id)}
+                                                    <option value={role.id} selected={position.roleId === role.id}>
+                                                        {role.name}
                                                     </option>
                                                 {/each}
                                             </select>

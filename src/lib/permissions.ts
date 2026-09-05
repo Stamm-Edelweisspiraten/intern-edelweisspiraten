@@ -1,16 +1,25 @@
+/**
+ * Berechtigungsschluessel des Portals.
+ *
+ * Die frueher parallele Reihe `groupleader.*` (sieben Schluessel) ist
+ * entfallen. Ein Gruppenbezug entsteht jetzt nicht mehr ueber einen eigenen
+ * Namensraum, sondern darueber, dass eine Rolle einem Zugang **fuer eine
+ * bestimmte Gruppe** zugewiesen wird -- siehe user_roles.groupId und
+ * positions.roleId. `members.view` bedeutet dadurch je nach Zuweisung
+ * "alle Mitglieder" oder "die Mitglieder meiner Gruppe"; der Schluessel
+ * bleibt derselbe.
+ *
+ * Reihenfolge und Gruppierung bestimmen die Darstellung in der
+ * Rechteverwaltung; die Beschriftungen stehen in ./permissions/labels.ts.
+ */
 export const ALL_PERMISSIONS = [
     // -----------------------
-    // Member
+    // Mitglieder
     // -----------------------
     "members.view",
     "members.create",
     "members.edit",
     "members.delete",
-    "groupleader.members.view",
-    "groupleader.members.edit",
-    "groupleader.members.delete",
-    "groupleader.members.log",
-    "groupleader.members.invitepdf",
     "members.*",
 
     // -----------------------
@@ -19,24 +28,31 @@ export const ALL_PERMISSIONS = [
     "dashboard.view",
 
     // -----------------------
-    // Termine / Downloads
+    // Termine
     // -----------------------
-    "termine.view",
-    "downloads.view",
+    "events.view",
+    "events.manage",
+    "events.*",
 
     // -----------------------
-    // Groups
+    // Dateien
+    // -----------------------
+    "files.view",
+    "files.upload",
+    "files.manage",
+    "files.*",
+
+    // -----------------------
+    // Gruppen
     // -----------------------
     "groups.view",
     "groups.create",
     "groups.edit",
     "groups.delete",
-    "groupleader.groups.view",
-    "groupleader.groups.memberspdf",
     "groups.*",
 
     // -----------------------
-    // User
+    // Zugaenge
     // -----------------------
     "user.view",
     "user.create",
@@ -47,7 +63,7 @@ export const ALL_PERMISSIONS = [
     "user.*",
 
     // -----------------------
-    // System / Settings
+    // System / Einstellungen
     // -----------------------
     "system.settings.view",
     "system.settings.update",
@@ -55,7 +71,7 @@ export const ALL_PERMISSIONS = [
     "system.*",
 
     // -----------------------
-    // Admin
+    // Administration
     // -----------------------
     "admin.view",
     "admin.*",
@@ -74,7 +90,7 @@ export const ALL_PERMISSIONS = [
     "kaemmerer.*",
 
     // -----------------------
-    // Finanzen
+    // Kasse
     // -----------------------
     "finance.view",
     "finance.manage",
@@ -83,7 +99,37 @@ export const ALL_PERMISSIONS = [
     "finance.*",
 
     // -----------------------
-    // Test / Misc
+    // Alles
     // -----------------------
     "*"
 ];
+
+/**
+ * Rechte, die sich sinnvoll auf eine einzelne Gruppe einschraenken lassen.
+ *
+ * Nur fuer diese bietet die Rechteverwaltung eine gruppenbezogene Zuweisung
+ * an. Eine Rolle mit `finance.manage` fuer "Meute Wildkatzen" waere sinnlos --
+ * die Kasse kennt keinen Gruppenbezug.
+ */
+export const GROUP_SCOPED_PERMISSIONS = [
+    "members.view",
+    "members.create",
+    "members.edit",
+    "members.delete",
+    "members.*",
+    "groups.view",
+    "groups.edit",
+    "groups.*",
+    "events.view",
+    "events.manage",
+    "events.*",
+    "files.view",
+    "files.upload",
+    "files.manage",
+    "files.*"
+];
+
+/** true, wenn das Recht auf eine Gruppe eingeschraenkt werden kann. */
+export function isGroupScopable(permission: string): boolean {
+    return GROUP_SCOPED_PERMISSIONS.includes(permission);
+}

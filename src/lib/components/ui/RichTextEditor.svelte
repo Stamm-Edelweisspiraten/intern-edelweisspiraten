@@ -76,7 +76,7 @@
 <div class="rich-text" style={`--editor-min-height:${minHeight}`}>
     {#if !ready}
         <div
-            class="flex items-center gap-2 px-4 py-3 text-sm text-fg-subtle border border-border-strong rounded-xl bg-surface"
+            class="flex items-center gap-2 px-4 py-3 text-sm text-fg-subtle border border-border-strong rounded-control bg-surface"
             style={`min-height:${minHeight}`}
         >
             <span class="bi bi-arrow-repeat animate-spin" aria-hidden="true"></span>
@@ -91,7 +91,7 @@
         <textarea
             name="bodyHtmlFallback"
             {placeholder}
-            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong"
+            class="w-full px-4 py-3 rounded-control text-sm bg-surface text-fg border border-border-strong"
             style={`min-height:${minHeight}`}
         ></textarea>
     </noscript>
@@ -108,14 +108,14 @@
     }
 
     .rich-text :global(.ql-toolbar.ql-snow) {
-        border-top-left-radius: 0.75rem;
-        border-top-right-radius: 0.75rem;
+        border-top-left-radius: var(--radius-control);
+        border-top-right-radius: var(--radius-control);
         background: var(--surface-muted);
     }
 
     .rich-text :global(.ql-container.ql-snow) {
-        border-bottom-left-radius: 0.75rem;
-        border-bottom-right-radius: 0.75rem;
+        border-bottom-left-radius: var(--radius-control);
+        border-bottom-right-radius: var(--radius-control);
         background: var(--surface);
         color: var(--fg);
         font-size: 0.875rem;

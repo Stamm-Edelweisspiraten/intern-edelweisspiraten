@@ -1,9 +1,17 @@
 import crypto from "node:crypto";
-import { ObjectId } from "mongodb";
-import { articles, orders, type OrderDoc, type OrderItemDoc } from "$lib/server/db/collections";
-import { db } from "$lib/server/mongo";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { db, withTransaction } from "$lib/server/db";
+import { isUuid, onlyUuids } from "$lib/server/db/ids";
+import {
+    articleSizes,
+    articles,
+    orderItems,
+    orderMembers,
+    orders
+} from "$lib/server/db/schema";
 import { sumCents, type Cents } from "$lib/money";
 import { fullName } from "$lib/format";
+import { getMembersByIds } from "$lib/server/memberService";
 import {
     isOrderStatus,
     isPaymentStatus,
@@ -11,18 +19,32 @@ import {
     type PaymentStatus
 } from "$lib/kaemmerer/orderStatus";
 import { decrementStock, incrementStock } from "./articleService";
-import { createInvoicesForOrder, cancelOrderBilling } from "$lib/server/orders/orderBilling";
+import { cancelOrderBilling, createInvoicesForOrder } from "$lib/server/orders/orderBilling";
 import { NoActiveFiscalYearError } from "$lib/server/finance/types";
 
 /** Bestellungen des Kämmerers. */
 
+export interface OrderItemView {
+    id: string;
+    position: number;
+    articleId: string | null;
+    name: string;
+    size: string | null;
+    price: Cents;
+    quantity: number;
+    total: Cents;
+    received: boolean;
+    stockBooked: boolean;
+    /** true, wenn der Bestand beim Anlegen nicht reichte. */
+    backorder: boolean;
+}
+
 export interface OrderView {
     id: string;
     number: string;
-    items: (OrderItemDoc & { backorder?: boolean })[];
+    items: OrderItemView[];
     members: { id: string; name: string }[];
     memberIds: string[];
-    invoiceIds: string[];
     total: Cents;
     status: OrderStatus;
     paymentStatus: PaymentStatus;
@@ -33,24 +55,66 @@ export interface OrderView {
     receivedCount: number;
 }
 
-export function toOrderView(doc: OrderDoc): OrderView {
-    const items = doc.items ?? [];
-    return {
-        id: doc._id!.toString(),
-        number: doc.number,
-        items,
-        members: doc.members ?? [],
-        memberIds: doc.memberIds ?? [],
-        invoiceIds: doc.invoiceIds ?? [],
-        total: doc.total,
-        status: doc.status,
-        paymentStatus: doc.paymentStatus,
-        cancelled: !!doc.cancelledAt,
-        createdBy: doc.createdBy ?? "",
-        createdByName: doc.createdByName ?? "",
-        createdAt: doc.createdAt.toISOString(),
-        receivedCount: items.filter((item) => item.received).length
-    };
+type OrderRow = typeof orders.$inferSelect;
+
+async function hydrate(rows: OrderRow[]): Promise<OrderView[]> {
+    if (rows.length === 0) return [];
+
+    const ids = rows.map((row) => row.id);
+    const [itemRows, memberRows] = await Promise.all([
+        db
+            .select()
+            .from(orderItems)
+            .where(inArray(orderItems.orderId, ids))
+            .orderBy(asc(orderItems.position)),
+        db.select().from(orderMembers).where(inArray(orderMembers.orderId, ids))
+    ]);
+
+    const itemsByOrder = new Map<string, OrderItemView[]>();
+    for (const item of itemRows) {
+        const list = itemsByOrder.get(item.orderId) ?? [];
+        list.push({
+            id: item.id,
+            position: item.position,
+            articleId: item.articleId,
+            name: item.name,
+            size: item.size,
+            price: item.price,
+            quantity: item.quantity,
+            total: item.total,
+            received: item.received,
+            stockBooked: item.stockBooked,
+            backorder: !item.stockBooked && !item.received
+        });
+        itemsByOrder.set(item.orderId, list);
+    }
+
+    const membersByOrder = new Map<string, { id: string; name: string }[]>();
+    for (const member of memberRows) {
+        const list = membersByOrder.get(member.orderId) ?? [];
+        list.push({ id: member.memberId, name: member.memberName });
+        membersByOrder.set(member.orderId, list);
+    }
+
+    return rows.map((row) => {
+        const items = itemsByOrder.get(row.id) ?? [];
+        const members = membersByOrder.get(row.id) ?? [];
+        return {
+            id: row.id,
+            number: row.number,
+            items,
+            members,
+            memberIds: members.map((member) => member.id),
+            total: row.total,
+            status: row.status,
+            paymentStatus: row.paymentStatus,
+            cancelled: row.cancelledAt !== null,
+            createdBy: row.createdBy ?? "",
+            createdByName: row.createdByName,
+            createdAt: row.createdAt.toISOString(),
+            receivedCount: items.filter((item) => item.received).length
+        };
+    });
 }
 
 function generateOrderNumber(): string {
@@ -64,27 +128,33 @@ function generateOrderNumber(): string {
 // ---------------------------------------------------------------------------
 
 export async function listOrders(filter: { status?: string } = {}): Promise<OrderView[]> {
-    const query: Record<string, unknown> = {};
     // Nur gültige Statuswerte wirken als Filter.
-    if (filter.status && isOrderStatus(filter.status)) query.status = filter.status;
+    const condition =
+        filter.status && isOrderStatus(filter.status) ? eq(orders.status, filter.status) : undefined;
 
-    const docs = await orders().find(query as never).sort({ createdAt: -1 }).toArray();
-    return docs.map(toOrderView);
+    const rows = await db.select().from(orders).where(condition).orderBy(desc(orders.createdAt));
+    return hydrate(rows);
 }
 
 export async function listOrdersForMembers(memberIds: string[]): Promise<OrderView[]> {
-    if (memberIds.length === 0) return [];
-    const docs = await orders()
-        .find({ memberIds: { $in: memberIds } })
-        .sort({ createdAt: -1 })
-        .toArray();
-    return docs.map(toOrderView);
+    const valid = onlyUuids(memberIds);
+    if (valid.length === 0) return [];
+
+    const rows = await db
+        .selectDistinct({ order: orders })
+        .from(orders)
+        .innerJoin(orderMembers, eq(orderMembers.orderId, orders.id))
+        .where(inArray(orderMembers.memberId, valid))
+        .orderBy(desc(orders.createdAt));
+
+    return hydrate(rows.map((row) => row.order));
 }
 
 export async function getOrderById(id: string): Promise<OrderView | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const doc = await orders().findOne({ _id: new ObjectId(id) });
-    return doc ? toOrderView(doc) : null;
+    if (!isUuid(id)) return null;
+    const rows = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    const [order] = await hydrate(rows);
+    return order ?? null;
 }
 
 /** Nur Bestellungen, an denen der Benutzer selbst beteiligt ist. */
@@ -92,9 +162,18 @@ export async function getOrderForMembers(
     id: string,
     memberIds: string[]
 ): Promise<OrderView | null> {
-    if (!ObjectId.isValid(id) || memberIds.length === 0) return null;
-    const doc = await orders().findOne({ _id: new ObjectId(id), memberIds: { $in: memberIds } });
-    return doc ? toOrderView(doc) : null;
+    const valid = onlyUuids(memberIds);
+    if (!isUuid(id) || valid.length === 0) return null;
+
+    const rows = await db
+        .selectDistinct({ order: orders })
+        .from(orders)
+        .innerJoin(orderMembers, eq(orderMembers.orderId, orders.id))
+        .where(and(eq(orders.id, id), inArray(orderMembers.memberId, valid)))
+        .limit(1);
+
+    const [order] = await hydrate(rows.map((row) => row.order));
+    return order ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,25 +210,44 @@ export interface CreateOrderResult {
  * selbst gewählten Preis bestellen.
  */
 export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
-    const lines = input.lines.filter((line) => line.quantity > 0 && ObjectId.isValid(line.articleId));
+    const lines = input.lines.filter((line) => line.quantity > 0 && isUuid(line.articleId));
     if (lines.length === 0) {
         return { ok: false, error: "Bitte mindestens eine Position mit Menge auswählen." };
     }
-    if (input.memberIds.length === 0) {
+
+    const memberIds = onlyUuids(input.memberIds);
+    if (memberIds.length === 0) {
         return { ok: false, error: "Bitte mindestens ein Mitglied auswählen." };
     }
 
-    const articleDocs = await articles()
-        .find({ _id: { $in: lines.map((line) => new ObjectId(line.articleId)) } })
-        .toArray();
-    const byId = new Map(articleDocs.map((doc) => [doc._id!.toString(), doc]));
+    const articleIds = Array.from(new Set(lines.map((line) => line.articleId)));
+    const [articleRows, sizeRows] = await Promise.all([
+        db.select().from(articles).where(inArray(articles.id, articleIds)),
+        db.select().from(articleSizes).where(inArray(articleSizes.articleId, articleIds))
+    ]);
 
-    const items: OrderItemDoc[] = [];
+    const byId = new Map(articleRows.map((row) => [row.id, row]));
+    const sizesByArticle = new Map<string, typeof sizeRows>();
+    for (const size of sizeRows) {
+        const list = sizesByArticle.get(size.articleId) ?? [];
+        list.push(size);
+        sizesByArticle.set(size.articleId, list);
+    }
+
+    const items: {
+        articleId: string;
+        sizeId: string | null;
+        name: string;
+        size: string | null;
+        price: Cents;
+        quantity: number;
+        total: Cents;
+    }[] = [];
 
     for (const line of lines) {
         const article = byId.get(line.articleId);
         if (!article) return { ok: false, error: "Ein ausgewählter Artikel existiert nicht mehr." };
-        if (article.active === false) {
+        if (!article.active) {
             return { ok: false, error: `„${article.name}“ ist derzeit nicht bestellbar.` };
         }
 
@@ -157,73 +255,86 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         const size = line.size || null;
 
         let price = article.price;
+        let sizeId: string | null = null;
+
         if (size) {
-            const variant = (article.sizes ?? []).find((entry) => entry.name === size);
+            const variant = (sizesByArticle.get(article.id) ?? []).find(
+                (entry) => entry.name === size
+            );
             if (!variant) {
                 return { ok: false, error: `Größe „${size}“ gibt es bei „${article.name}“ nicht.` };
             }
             price = variant.price || article.price;
+            sizeId = variant.id;
         }
 
         items.push({
-            articleId: line.articleId,
+            articleId: article.id,
+            sizeId,
             name: article.name,
+            size,
             price,
-            size: size ?? undefined,
             quantity,
-            total: price * quantity,
-            received: false,
-            stockBooked: false
+            total: price * quantity
         });
     }
 
     const total = sumCents(items.map((item) => item.total));
 
     // Mitgliedsnamen in einer Abfrage auflösen.
-    const memberDocs = await db
-        .collection("members")
-        .find({ _id: { $in: input.memberIds.filter(ObjectId.isValid).map((id) => new ObjectId(id)) } })
-        .toArray();
+    const memberRows = await getMembersByIds(memberIds);
+    const nameById = new Map(memberRows.map((member) => [member.id, fullName(member)]));
+    const members = memberIds.map((id) => ({ id, name: nameById.get(id) ?? "Unbekannt" }));
 
-    const nameById = new Map(
-        memberDocs.map((doc) => [
-            String(doc._id),
-            fullName(doc as { firstname?: string; lastname?: string })
-        ])
-    );
+    const number = generateOrderNumber();
 
-    const members = input.memberIds.map((id) => ({
-        id,
-        name: nameById.get(id) ?? "Unbekannt"
-    }));
+    const orderId = await withTransaction(async (tx) => {
+        const [row] = await tx
+            .insert(orders)
+            .values({
+                number,
+                total,
+                status: "ordered",
+                paymentStatus: "open",
+                createdBy: isUuid(input.createdBy) ? input.createdBy : null,
+                createdByName: input.createdByName
+            })
+            .returning({ id: orders.id });
 
-    const now = new Date();
-    const doc: OrderDoc = {
-        number: generateOrderNumber(),
-        items,
-        members,
-        memberIds: members.map((member) => member.id),
-        invoiceIds: [],
-        total,
-        status: "ordered",
-        paymentStatus: "open",
-        cancelledAt: null,
-        createdBy: input.createdBy,
-        createdByName: input.createdByName,
-        createdAt: now
-    };
+        await tx.insert(orderItems).values(
+            items.map((item, index) => ({
+                orderId: row.id,
+                position: index,
+                articleId: item.articleId,
+                sizeId: item.sizeId,
+                name: item.name,
+                size: item.size,
+                price: item.price,
+                quantity: item.quantity,
+                total: item.total,
+                received: false,
+                stockBooked: false
+            }))
+        );
 
-    const inserted = await orders().insertOne(doc);
-    const orderId = inserted.insertedId;
+        await tx.insert(orderMembers).values(
+            members.map((member) => ({
+                orderId: row.id,
+                memberId: member.id,
+                memberName: member.name
+            }))
+        );
+
+        return row.id;
+    });
 
     // Rechnungen anlegen. Fehlt ein aktives Geschäftsjahr, schlägt das jetzt
     // sichtbar fehl -- vorher entstand still eine Bestellung, die niemand
     // jemals bezahlen musste.
-    let invoiceIds: string[];
     try {
-        invoiceIds = await createInvoicesForOrder({
+        await createInvoicesForOrder({
             orderId,
-            orderNumber: doc.number,
+            orderNumber: number,
             members,
             total,
             createdBy: input.createdBy,
@@ -232,7 +343,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
                 .join(", ")
         });
     } catch (err) {
-        await orders().deleteOne({ _id: orderId });
+        await db.delete(orders).where(eq(orders.id, orderId));
 
         if (err instanceof NoActiveFiscalYearError) {
             return {
@@ -243,34 +354,38 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         throw err;
     }
 
-    await orders().updateOne({ _id: orderId }, { $set: { invoiceIds, updatedAt: new Date() } });
-
     // Lagerabgang buchen, soweit Bestand vorhanden ist. Fehlender Bestand
     // führt zu einem Vermerk statt zu einem negativen Bestand.
     const backorders: string[] = [];
-    for (const [index, item] of items.entries()) {
+    const stored = await db
+        .select()
+        .from(orderItems)
+        .where(eq(orderItems.orderId, orderId))
+        .orderBy(asc(orderItems.position));
+
+    for (const item of stored) {
         if (!item.articleId) continue;
 
-        const result = await decrementStock(item.articleId, item.quantity, item.size ?? null);
-        await orders().updateOne(
-            { _id: orderId },
-            {
-                $set: {
-                    [`items.${index}.stockBooked`]: result.ok,
-                    ...(result.ok ? {} : { [`items.${index}.backorder`]: true })
-                }
-            }
-        );
+        const result = await decrementStock(item.articleId, item.quantity, item.size, {
+            orderId,
+            note: `Bestellung ${number}`,
+            user: input.createdByName
+        });
+
+        await db
+            .update(orderItems)
+            .set({ stockBooked: result.ok })
+            .where(eq(orderItems.id, item.id));
 
         if (!result.ok) {
             backorders.push(`${item.name}${item.size ? ` (${item.size})` : ""}`);
         }
     }
 
-    const saved = await orders().findOne({ _id: orderId });
+    const order = await getOrderById(orderId);
     return {
         ok: true,
-        order: saved ? toOrderView(saved) : undefined,
+        order: order ?? undefined,
         backorders: backorders.length > 0 ? backorders : undefined
     };
 }
@@ -284,14 +399,12 @@ export async function updateOrderStatus(
     status: string,
     paymentStatus?: string
 ): Promise<{ ok: boolean; error?: string }> {
-    if (!ObjectId.isValid(id)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(id)) return { ok: false, error: "Ungültige Kennung." };
 
     // Vorher wurde der Formularwert per `as any` ungeprüft gespeichert.
-    if (!isOrderStatus(status)) {
-        return { ok: false, error: "Unbekannter Bestellstatus." };
-    }
+    if (!isOrderStatus(status)) return { ok: false, error: "Unbekannter Bestellstatus." };
 
-    const update: Record<string, unknown> = { status, updatedAt: new Date() };
+    const update: Partial<typeof orders.$inferInsert> = { status, updatedAt: new Date() };
 
     if (paymentStatus !== undefined && paymentStatus !== "") {
         if (!isPaymentStatus(paymentStatus)) {
@@ -300,48 +413,54 @@ export async function updateOrderStatus(
         update.paymentStatus = paymentStatus;
     }
 
-    const result = await orders().updateOne({ _id: new ObjectId(id) }, { $set: update });
-    return result.matchedCount > 0
-        ? { ok: true }
-        : { ok: false, error: "Bestellung nicht gefunden." };
+    const rows = await db
+        .update(orders)
+        .set(update)
+        .where(eq(orders.id, id))
+        .returning({ id: orders.id });
+
+    return rows.length > 0 ? { ok: true } : { ok: false, error: "Bestellung nicht gefunden." };
 }
 
 /**
  * Markiert eine Position als geliefert.
  *
- * Der Index wird jetzt gegen die tatsächliche Länge geprüft. Vorher wurde nur
- * auf "kleiner 0" getestet, sodass ein zu großer Index MongoDB veranlasste,
- * das items-Array mit null-Einträgen aufzufüllen.
+ * Angesprochen wird die Position jetzt über ihre Kennung statt über einen
+ * Index ins Array. Vorher konnte ein zu großer Index MongoDB veranlassen, das
+ * items-Array mit null-Einträgen aufzufüllen.
  */
 export async function setItemReceived(
     orderId: string,
-    itemIndex: number,
+    itemId: string,
     received: boolean
 ): Promise<{ ok: boolean; error?: string; allReceived?: boolean }> {
-    if (!ObjectId.isValid(orderId)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(orderId) || !isUuid(itemId)) return { ok: false, error: "Ungültige Kennung." };
 
-    const id = new ObjectId(orderId);
-    const order = await orders().findOne({ _id: id });
+    const rows = await db
+        .update(orderItems)
+        .set({ received })
+        .where(and(eq(orderItems.id, itemId), eq(orderItems.orderId, orderId)))
+        .returning({ id: orderItems.id });
+
+    if (rows.length === 0) return { ok: false, error: "Diese Position gibt es nicht." };
+
+    const order = await getOrderById(orderId);
     if (!order) return { ok: false, error: "Bestellung nicht gefunden." };
 
-    if (!Number.isInteger(itemIndex) || itemIndex < 0 || itemIndex >= (order.items?.length ?? 0)) {
-        return { ok: false, error: "Diese Position gibt es nicht." };
-    }
-
-    await orders().updateOne(
-        { _id: id },
-        { $set: { [`items.${itemIndex}.received`]: received, updatedAt: new Date() } }
-    );
-
-    const updated = await orders().findOne({ _id: id });
-    const allReceived = (updated?.items ?? []).every((item) => item.received);
+    const allReceived = order.items.length > 0 && order.items.every((item) => item.received);
 
     // Nur der Lieferstatus wird angepasst -- der Zahlungsstatus bleibt
     // unberührt und umgekehrt.
-    if (allReceived && updated?.status !== "delivered" && !updated?.cancelledAt) {
-        await orders().updateOne({ _id: id }, { $set: { status: "delivered", updatedAt: new Date() } });
-    } else if (!allReceived && updated?.status === "delivered") {
-        await orders().updateOne({ _id: id }, { $set: { status: "processing", updatedAt: new Date() } });
+    if (allReceived && order.status !== "delivered" && !order.cancelled) {
+        await db
+            .update(orders)
+            .set({ status: "delivered", updatedAt: new Date() })
+            .where(eq(orders.id, orderId));
+    } else if (!allReceived && order.status === "delivered") {
+        await db
+            .update(orders)
+            .set({ status: "processing", updatedAt: new Date() })
+            .where(eq(orders.id, orderId));
     }
 
     return { ok: true, allReceived };
@@ -356,29 +475,32 @@ export async function cancelOrder(
     id: string,
     user: string
 ): Promise<{ ok: boolean; error?: string; restored?: number }> {
-    if (!ObjectId.isValid(id)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(id)) return { ok: false, error: "Ungültige Kennung." };
 
-    const orderId = new ObjectId(id);
-    const order = await orders().findOne({ _id: orderId });
+    const order = await getOrderById(id);
     if (!order) return { ok: false, error: "Bestellung nicht gefunden." };
-    if (order.cancelledAt) return { ok: false, error: "Diese Bestellung ist bereits storniert." };
+    if (order.cancelled) return { ok: false, error: "Diese Bestellung ist bereits storniert." };
 
     let restored = 0;
-    for (const item of order.items ?? []) {
+    for (const item of order.items) {
         // Nur zurückbuchen, was tatsächlich abgebucht und noch nicht
         // ausgehändigt wurde.
         if (item.articleId && item.stockBooked && !item.received) {
-            await incrementStock(item.articleId, item.quantity, item.size ?? null);
+            await incrementStock(item.articleId, item.quantity, item.size, {
+                orderId: id,
+                note: `Storno Bestellung ${order.number}`,
+                user
+            });
             restored += 1;
         }
     }
 
-    await cancelOrderBilling(orderId, user);
+    await cancelOrderBilling(id, user);
 
-    await orders().updateOne(
-        { _id: orderId },
-        { $set: { status: "cancelled" as OrderStatus, cancelledAt: new Date(), updatedAt: new Date() } }
-    );
+    await db
+        .update(orders)
+        .set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
+        .where(eq(orders.id, id));
 
     return { ok: true, restored };
 }

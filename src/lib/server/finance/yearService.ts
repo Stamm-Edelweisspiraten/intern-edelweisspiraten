@@ -1,37 +1,53 @@
-import { ObjectId } from "mongodb";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { db, withTransaction } from "$lib/server/db";
+import { isUuid } from "$lib/server/db/ids";
 import {
-    fiscalYears,
-    fiscalInvoices,
-    fiscalTransactions,
     financeLogs,
-    type FiscalYearDoc
-} from "$lib/server/db/collections";
+    fiscalYears,
+    invoices,
+    journalEntries,
+    journalLines,
+    accounts
+} from "$lib/server/db/schema";
 import type { Cents } from "$lib/money";
-import type { Dues, FiscalYearStatus, FiscalYearView, YearSummary } from "./types";
+import { nextNumber } from "./numbering";
+import type { Dues, FiscalYearView, YearSummary } from "./types";
 
 /** Geschäftsjahre: anlegen, auflisten, abschließen, archivieren. */
 
-export function toYearView(doc: FiscalYearDoc): FiscalYearView {
+type YearRow = typeof fiscalYears.$inferSelect;
+
+export function toYearView(row: YearRow): FiscalYearView {
     return {
-        id: doc._id!.toString(),
-        year: doc.year,
-        dues: doc.dues,
-        status: doc.status,
-        openingBalance: doc.openingBalance ?? 0,
-        closedAt: doc.closedAt ? doc.closedAt.toISOString() : null,
-        createdAt: doc.createdAt.toISOString()
+        id: row.id,
+        year: row.year,
+        dues: {
+            stamm: row.duesStamm,
+            gau: row.duesGau,
+            landesmark: row.duesLandesmark,
+            bund: row.duesBund
+        },
+        status: row.status,
+        openingBalance: row.openingBalance,
+        closedAt: row.closedAt ? row.closedAt.toISOString() : null,
+        createdAt: row.createdAt.toISOString()
     };
 }
 
 export async function listFiscalYears(): Promise<FiscalYearView[]> {
-    const docs = await fiscalYears().find().sort({ year: -1 }).toArray();
-    return docs.map(toYearView);
+    const rows = await db.select().from(fiscalYears).orderBy(desc(fiscalYears.year));
+    return rows.map(toYearView);
 }
 
 export async function getFiscalYear(id: string): Promise<FiscalYearView | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const doc = await fiscalYears().findOne({ _id: new ObjectId(id) });
-    return doc ? toYearView(doc) : null;
+    if (!isUuid(id)) return null;
+    const [row] = await db.select().from(fiscalYears).where(eq(fiscalYears.id, id)).limit(1);
+    return row ? toYearView(row) : null;
+}
+
+export async function getFiscalYearByYear(year: number): Promise<FiscalYearView | null> {
+    const [row] = await db.select().from(fiscalYears).where(eq(fiscalYears.year, year)).limit(1);
+    return row ? toYearView(row) : null;
 }
 
 /**
@@ -39,19 +55,23 @@ export async function getFiscalYear(id: string): Promise<FiscalYearView | null> 
  * jüngste aktive.
  */
 export async function getActiveFiscalYear(): Promise<FiscalYearView | null> {
-    const current = await fiscalYears().findOne({
-        year: new Date().getFullYear(),
-        status: "active"
-    });
+    const [current] = await db
+        .select()
+        .from(fiscalYears)
+        .where(
+            and(eq(fiscalYears.year, new Date().getFullYear()), eq(fiscalYears.status, "active"))
+        )
+        .limit(1);
     if (current) return toYearView(current);
 
-    const newest = await fiscalYears()
-        .find({ status: "active" })
-        .sort({ year: -1 })
-        .limit(1)
-        .toArray();
+    const [newest] = await db
+        .select()
+        .from(fiscalYears)
+        .where(eq(fiscalYears.status, "active"))
+        .orderBy(desc(fiscalYears.year))
+        .limit(1);
 
-    return newest[0] ? toYearView(newest[0]) : null;
+    return newest ? toYearView(newest) : null;
 }
 
 export interface CreateYearInput {
@@ -64,33 +84,33 @@ export interface CreateYearInput {
 export async function createFiscalYear(
     input: CreateYearInput
 ): Promise<{ ok: boolean; year?: FiscalYearView; error?: string }> {
-    const doc: FiscalYearDoc = {
-        year: input.year,
-        dues: input.dues,
-        status: "active",
-        openingBalance: input.openingBalance ?? 0,
-        closedAt: null,
-        createdAt: new Date()
-    };
-
     try {
-        const result = await fiscalYears().insertOne(doc);
-        const view = toYearView({ ...doc, _id: result.insertedId });
+        const [row] = await db
+            .insert(fiscalYears)
+            .values({
+                year: input.year,
+                duesStamm: input.dues.stamm,
+                duesGau: input.dues.gau,
+                duesLandesmark: input.dues.landesmark,
+                duesBund: input.dues.bund,
+                status: "active",
+                openingBalance: input.openingBalance ?? 0
+            })
+            .returning();
 
-        await financeLogs().insertOne({
-            fiscalYearId: result.insertedId,
+        await db.insert(financeLogs).values({
+            fiscalYearId: row.id,
             entity: "fiscalYear",
-            entityId: result.insertedId.toString(),
+            entityId: row.id,
             action: "create",
-            user: input.createdBy,
-            createdAt: new Date()
+            user: input.createdBy
         });
 
-        return { ok: true, year: view };
+        return { ok: true, year: toYearView(row) };
     } catch (err: unknown) {
         // Der eindeutige Index auf year verhindert Doppelanlagen, die vorher
         // moeglich waren -- inklusive widerspruechlicher Beitragssaetze.
-        if ((err as { code?: number })?.code === 11000) {
+        if ((err as { code?: string })?.code === "23505") {
             return { ok: false, error: `Für ${input.year} existiert bereits ein Geschäftsjahr.` };
         }
         throw err;
@@ -102,52 +122,66 @@ export async function updateDues(
     dues: Dues,
     user: string
 ): Promise<{ ok: boolean; error?: string }> {
-    if (!ObjectId.isValid(id)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(id)) return { ok: false, error: "Ungültige Kennung." };
 
-    const objectId = new ObjectId(id);
-    const year = await fiscalYears().findOne({ _id: objectId });
+    const year = await getFiscalYear(id);
     if (!year) return { ok: false, error: "Geschäftsjahr nicht gefunden." };
     if (year.status !== "active") {
         return { ok: false, error: "Abgeschlossene Geschäftsjahre können nicht geändert werden." };
     }
 
-    await fiscalYears().updateOne({ _id: objectId }, { $set: { dues, updatedAt: new Date() } });
-    await financeLogs().insertOne({
-        fiscalYearId: objectId,
+    await db
+        .update(fiscalYears)
+        .set({
+            duesStamm: dues.stamm,
+            duesGau: dues.gau,
+            duesLandesmark: dues.landesmark,
+            duesBund: dues.bund,
+            updatedAt: new Date()
+        })
+        .where(eq(fiscalYears.id, id));
+
+    await db.insert(financeLogs).values({
+        fiscalYearId: id,
         entity: "fiscalYear",
         entityId: id,
         action: "update",
         changes: [{ field: "dues", before: year.dues, after: dues }],
-        user,
-        createdAt: new Date()
+        user
     });
 
     return { ok: true };
 }
 
 /**
- * Schließt ein Geschäftsjahr ab. Offene Posten müssen entweder ausgeglichen
- * oder ausdrücklich ins Folgejahr übernommen werden -- vorher gab es weder
- * einen Abschluss noch einen Übertrag ("Archivieren (soon)").
+ * Schließt ein Geschäftsjahr ab.
+ *
+ * Reihenfolge ist wesentlich: erst die Übertragsbuchungen, dann der Status.
+ * Der Trigger journal_entries_year_open weist Buchungen in einem bereits
+ * geschlossenen Jahr ab -- andersherum liefe der Abschluss in seine eigene
+ * Sperre.
+ *
+ * Offene Posten müssen entweder ausgeglichen oder ausdrücklich ins Folgejahr
+ * übernommen werden; vorher gab es weder einen Abschluss noch einen Übertrag.
  */
 export async function closeFiscalYear(
     id: string,
     options: { user: string; carryOverOpenInvoices: boolean }
 ): Promise<{ ok: boolean; error?: string; carriedOver?: number }> {
-    if (!ObjectId.isValid(id)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(id)) return { ok: false, error: "Ungültige Kennung." };
 
-    const objectId = new ObjectId(id);
-    const year = await fiscalYears().findOne({ _id: objectId });
+    const year = await getFiscalYear(id);
     if (!year) return { ok: false, error: "Geschäftsjahr nicht gefunden." };
     if (year.status !== "active") {
         return { ok: false, error: "Dieses Geschäftsjahr ist bereits abgeschlossen." };
     }
 
-    const open = await fiscalInvoices()
-        .find({ fiscalYearId: objectId, status: { $in: ["open", "partial"] } })
-        .toArray();
+    const open = await db
+        .select()
+        .from(invoices)
+        .where(and(eq(invoices.fiscalYearId, id), inArray(invoices.status, ["open", "partial"])));
 
-    let carriedOver = 0;
+    let nextYear: FiscalYearView | null = null;
 
     if (open.length > 0) {
         if (!options.carryOverOpenInvoices) {
@@ -157,166 +191,238 @@ export async function closeFiscalYear(
             };
         }
 
-        const next = await fiscalYears().findOne({ year: year.year + 1 });
-        if (!next?._id) {
+        nextYear = await getFiscalYearByYear(year.year + 1);
+        if (!nextYear) {
             return {
                 ok: false,
                 error: `Für den Übertrag muss zuerst das Geschäftsjahr ${year.year + 1} angelegt werden.`
             };
         }
+        if (nextYear.status !== "active") {
+            return {
+                ok: false,
+                error: `Das Geschäftsjahr ${nextYear.year} ist nicht aktiv; der Übertrag ist dorthin nicht möglich.`
+            };
+        }
+    } else {
+        nextYear = await getFiscalYearByYear(year.year + 1);
+    }
 
-        // Offene Restbeträge als neue Rechnung im Folgejahr anlegen.
+    const balance = await calculateBalance(id);
+    let carriedOver = 0;
+
+    await withTransaction(async (tx) => {
+        // 1) Offene Restbeträge als neue Rechnung im Folgejahr anlegen.
         for (const invoice of open) {
             const rest = invoice.amount - invoice.paidAmount;
             if (rest <= 0) continue;
 
-            await fiscalInvoices().insertOne({
-                fiscalYearId: next._id,
-                memberId: invoice.memberId ?? null,
-                member: invoice.member,
-                kind: invoice.kind,
+            const number = await nextNumber("invoice", nextYear!.year, tx);
+
+            await tx.insert(invoices).values({
+                number,
+                fiscalYearId: nextYear!.id,
+                memberId: invoice.memberId,
+                memberName: invoice.memberName,
+                // Die Art wird umbenannt, damit der eindeutige Index auf
+                // (Jahr, Mitglied, Art) den Übertrag nicht mit dem regulären
+                // Jahresbeitrag des Folgejahres kollidieren lässt.
+                kind: `${invoice.kind} (Übertrag ${year.year})`,
+                categoryId: invoice.categoryId,
                 amount: rest,
                 paidAmount: 0,
                 date: new Date(),
                 dueDate: null,
                 note: `Übertrag aus ${year.year}`,
-                orderId: invoice.orderId ?? null,
+                orderId: invoice.orderId,
                 status: "open",
-                createdBy: options.user,
-                createdAt: new Date()
+                createdBy: options.user
             });
 
-            await fiscalInvoices().updateOne(
-                { _id: invoice._id },
-                {
-                    $set: {
-                        status: "cancelled",
-                        note: `${invoice.note ?? ""} (übertragen nach ${year.year + 1})`.trim(),
-                        updatedAt: new Date()
-                    }
-                }
-            );
+            await tx
+                .update(invoices)
+                .set({
+                    status: "cancelled",
+                    note: `${invoice.note} (übertragen nach ${year.year + 1})`.trim(),
+                    updatedAt: new Date()
+                })
+                .where(eq(invoices.id, invoice.id));
 
             carriedOver += 1;
         }
-    }
 
-    const balance = await calculateBalance(objectId);
+        // 2) Status setzen -- erst jetzt, siehe Anmerkung oben.
+        await tx
+            .update(fiscalYears)
+            .set({ status: "closed", closedAt: new Date(), updatedAt: new Date() })
+            .where(eq(fiscalYears.id, id));
 
-    await fiscalYears().updateOne(
-        { _id: objectId },
-        { $set: { status: "closed", closedAt: new Date(), updatedAt: new Date() } }
-    );
+        // 3) Saldo als Anfangsbestand ins Folgejahr übernehmen.
+        if (nextYear) {
+            await tx
+                .update(fiscalYears)
+                .set({ openingBalance: year.openingBalance + balance })
+                .where(eq(fiscalYears.id, nextYear.id));
+        }
 
-    // Saldo als Anfangsbestand ins Folgejahr übernehmen, sofern vorhanden.
-    const next = await fiscalYears().findOne({ year: year.year + 1 });
-    if (next?._id) {
-        await fiscalYears().updateOne(
-            { _id: next._id },
-            { $set: { openingBalance: (year.openingBalance ?? 0) + balance } }
-        );
-    }
-
-    await financeLogs().insertOne({
-        fiscalYearId: objectId,
-        entity: "fiscalYear",
-        entityId: id,
-        action: "archive",
-        user: options.user,
-        createdAt: new Date()
+        await tx.insert(financeLogs).values({
+            fiscalYearId: id,
+            entity: "fiscalYear",
+            entityId: id,
+            action: "close",
+            changes: [{ field: "balance", before: null, after: balance }],
+            user: options.user
+        });
     });
 
     return { ok: true, carriedOver };
 }
 
 export async function archiveFiscalYear(id: string, user: string): Promise<boolean> {
-    if (!ObjectId.isValid(id)) return false;
+    if (!isUuid(id)) return false;
 
-    const objectId = new ObjectId(id);
-    const result = await fiscalYears().updateOne(
-        { _id: objectId },
-        { $set: { status: "archived" as FiscalYearStatus, updatedAt: new Date() } }
-    );
+    const rows = await db
+        .update(fiscalYears)
+        .set({ status: "archived", updatedAt: new Date() })
+        .where(eq(fiscalYears.id, id))
+        .returning({ id: fiscalYears.id });
 
-    if (result.matchedCount > 0) {
-        await financeLogs().insertOne({
-            fiscalYearId: objectId,
+    if (rows.length > 0) {
+        await db.insert(financeLogs).values({
+            fiscalYearId: id,
             entity: "fiscalYear",
             entityId: id,
             action: "archive",
-            user,
-            createdAt: new Date()
+            user
         });
     }
 
-    return result.matchedCount > 0;
-}
-
-/** Einnahmen minus Ausgaben eines Jahres. */
-async function calculateBalance(fiscalYearId: ObjectId): Promise<Cents> {
-    const rows = await fiscalTransactions()
-        .aggregate<{ _id: string; total: number }>([
-            { $match: { fiscalYearId } },
-            { $group: { _id: "$direction", total: { $sum: "$amount" } } }
-        ])
-        .toArray();
-
-    const income = rows.find((row) => row._id === "in")?.total ?? 0;
-    const expense = rows.find((row) => row._id === "out")?.total ?? 0;
-    return income - expense;
+    return rows.length > 0;
 }
 
 /**
- * Kennzahlen aller Jahre in EINER Abfrage je Collection.
+ * Einnahmen minus Ausgaben eines Jahres.
+ *
+ * Grundlage sind jetzt die Erfolgskonten, nicht mehr ein Richtungsfeld an der
+ * Buchung: Ertraege stehen im Haben, Aufwendungen im Soll.
+ */
+export async function calculateBalance(fiscalYearId: string): Promise<Cents> {
+    const { income, expense } = await incomeAndExpense(fiscalYearId);
+    return income - expense;
+}
+
+async function incomeAndExpense(
+    fiscalYearId: string
+): Promise<{ income: Cents; expense: Cents; entryCount: number }> {
+    const [row] = await db
+        .select({
+            income: sql<string>`coalesce(sum(case when ${accounts.type} = 'income' then ${journalLines.credit} - ${journalLines.debit} else 0 end)::bigint, 0)`,
+            expense: sql<string>`coalesce(sum(case when ${accounts.type} = 'expense' then ${journalLines.debit} - ${journalLines.credit} else 0 end)::bigint, 0)`,
+            entryCount: sql<number>`count(distinct ${journalEntries.id})::int`
+        })
+        .from(journalLines)
+        .innerJoin(journalEntries, eq(journalEntries.id, journalLines.entryId))
+        .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+        .where(eq(journalEntries.fiscalYearId, fiscalYearId));
+
+    return {
+        income: Number(row?.income ?? 0),
+        expense: Number(row?.expense ?? 0),
+        entryCount: Number(row?.entryCount ?? 0)
+    };
+}
+
+/**
+ * Kennzahlen aller Jahre in EINER Abfrage je Tabelle.
  *
  * Vorher wurde erst die Liste geladen und anschließend für JEDES Jahr das
  * vollständige Dokument ein zweites Mal geholt -- inklusive aller Buchungen
  * und Rechnungen, nur um vier Zahlen anzuzeigen.
  */
 export async function getYearSummaries(): Promise<YearSummary[]> {
-    const [years, txRows, invRows] = await Promise.all([
-        fiscalYears().find().sort({ year: -1 }).toArray(),
-        fiscalTransactions()
-            .aggregate<{ _id: { year: ObjectId; direction: string }; total: number; count: number }>([
-                {
-                    $group: {
-                        _id: { year: "$fiscalYearId", direction: "$direction" },
-                        total: { $sum: "$amount" },
-                        count: { $sum: 1 }
-                    }
-                }
-            ])
-            .toArray(),
-        fiscalInvoices()
-            .aggregate<{ _id: ObjectId; total: number; count: number }>([
-                { $match: { status: { $in: ["open", "partial"] } } },
-                {
-                    $group: {
-                        _id: "$fiscalYearId",
-                        total: { $sum: { $subtract: ["$amount", "$paidAmount"] } },
-                        count: { $sum: 1 }
-                    }
-                }
-            ])
-            .toArray()
+    const [years, resultRows, outstandingRows] = await Promise.all([
+        db.select().from(fiscalYears).orderBy(desc(fiscalYears.year)),
+        db
+            .select({
+                fiscalYearId: journalEntries.fiscalYearId,
+                income: sql<string>`coalesce(sum(case when ${accounts.type} = 'income' then ${journalLines.credit} - ${journalLines.debit} else 0 end)::bigint, 0)`,
+                expense: sql<string>`coalesce(sum(case when ${accounts.type} = 'expense' then ${journalLines.debit} - ${journalLines.credit} else 0 end)::bigint, 0)`,
+                entryCount: sql<number>`count(distinct ${journalEntries.id})::int`
+            })
+            .from(journalEntries)
+            .innerJoin(journalLines, eq(journalLines.entryId, journalEntries.id))
+            .innerJoin(accounts, eq(accounts.id, journalLines.accountId))
+            .groupBy(journalEntries.fiscalYearId),
+        db
+            .select({
+                fiscalYearId: invoices.fiscalYearId,
+                total: sql<string>`coalesce(sum(${invoices.amount} - ${invoices.paidAmount})::bigint, 0)`,
+                count: sql<number>`count(*)::int`
+            })
+            .from(invoices)
+            .where(inArray(invoices.status, ["open", "partial"]))
+            .groupBy(invoices.fiscalYearId)
     ]);
 
+    const results = new Map(resultRows.map((row) => [row.fiscalYearId, row]));
+    const outstanding = new Map(outstandingRows.map((row) => [row.fiscalYearId, row]));
+
     return years.map((year) => {
-        const id = year._id!.toString();
-        const income = txRows.find((r) => r._id.year.toString() === id && r._id.direction === "in");
-        const expense = txRows.find((r) => r._id.year.toString() === id && r._id.direction === "out");
-        const outstanding = invRows.find((r) => r._id.toString() === id);
+        const result = results.get(year.id);
+        const open = outstanding.get(year.id);
+        const income = Number(result?.income ?? 0);
+        const expense = Number(result?.expense ?? 0);
 
         return {
-            id,
+            id: year.id,
             year: year.year,
             status: year.status,
-            income: income?.total ?? 0,
-            expense: expense?.total ?? 0,
-            balance: (income?.total ?? 0) - (expense?.total ?? 0),
-            outstanding: outstanding?.total ?? 0,
-            outstandingCount: outstanding?.count ?? 0,
-            transactionCount: (income?.count ?? 0) + (expense?.count ?? 0)
+            income,
+            expense,
+            balance: income - expense,
+            outstanding: Number(open?.total ?? 0),
+            outstandingCount: Number(open?.count ?? 0),
+            transactionCount: Number(result?.entryCount ?? 0)
         };
     });
+}
+
+/** Kennzahlen eines einzelnen Jahres. */
+export async function getYearSummary(id: string): Promise<YearSummary | null> {
+    const year = await getFiscalYear(id);
+    if (!year) return null;
+
+    const [{ income, expense, entryCount }, openRows] = await Promise.all([
+        incomeAndExpense(id),
+        db
+            .select({
+                total: sql<string>`coalesce(sum(${invoices.amount} - ${invoices.paidAmount})::bigint, 0)`,
+                count: sql<number>`count(*)::int`
+            })
+            .from(invoices)
+            .where(
+                and(eq(invoices.fiscalYearId, id), inArray(invoices.status, ["open", "partial"]))
+            )
+    ]);
+
+    return {
+        id: year.id,
+        year: year.year,
+        status: year.status,
+        income,
+        expense,
+        balance: income - expense,
+        outstanding: Number(openRows[0]?.total ?? 0),
+        outstandingCount: Number(openRows[0]?.count ?? 0),
+        transactionCount: entryCount
+    };
+}
+
+/** Jahre, die nicht archiviert sind -- Grundlage der Ansicht offener Posten. */
+export async function listUnarchivedYearIds(): Promise<string[]> {
+    const rows = await db
+        .select({ id: fiscalYears.id })
+        .from(fiscalYears)
+        .where(ne(fiscalYears.status, "archived"));
+    return rows.map((row) => row.id);
 }

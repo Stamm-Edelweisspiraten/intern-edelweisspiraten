@@ -1,14 +1,24 @@
-import { settings, type SettingsDoc } from "$lib/server/db/collections";
+import { eq } from "drizzle-orm";
+import { db } from "$lib/server/db";
+import { settings } from "$lib/server/db/schema";
 import type { Cents } from "$lib/money";
 
 /**
- * Einstellungen der Kasse.
+ * Einstellungen als Schluessel-Wert-Ablage.
  *
- * Neu sind die Bankdaten: der Beitragsbescheid als PDF war bereits fertig
- * implementiert, druckte einen Abschnitt "Bankverbindung" -- und es gab
- * nirgends einen Ort, an dem IBAN, BIC oder Kontoinhaber hinterlegt werden
- * konnten. Entsprechend war das PDF an keine Route angeschlossen.
+ * Zwei Bereiche: "organization" traegt Name und Kontaktdaten des Stamms --
+ * dadurch laeuft dieselbe Anwendung fuer verschiedene Staemme, ohne dass der
+ * Name im Quelltext steht. "finance" traegt die Standard-Beitragssaetze und
+ * die Bankverbindung.
+ *
+ * Die Bankdaten waren der fehlende Baustein fuer den Beitragsbescheid: das
+ * PDF druckte bereits einen Abschnitt "Bankverbindung", es gab aber nirgends
+ * einen Ort, an dem IBAN, BIC oder Kontoinhaber hinterlegt werden konnten.
  */
+
+// ---------------------------------------------------------------------------
+// Kasse
+// ---------------------------------------------------------------------------
 
 export interface BankDetails {
     accountHolder: string;
@@ -31,7 +41,8 @@ export interface FinanceSettings {
     updatedBy?: string;
 }
 
-const FINANCE_SETTINGS_ID = "finance";
+const FINANCE_KEY = "finance";
+const ORGANIZATION_KEY = "organization";
 
 const EMPTY_BANK: BankDetails = {
     accountHolder: "",
@@ -41,19 +52,72 @@ const EMPTY_BANK: BankDetails = {
     creditorId: ""
 };
 
+async function readSetting(key: string): Promise<{
+    value: Record<string, unknown>;
+    updatedAt?: string;
+    updatedBy?: string;
+} | null> {
+    const [row] = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+    if (!row) return null;
+    return {
+        value: row.value ?? {},
+        updatedAt: row.updatedAt?.toISOString(),
+        updatedBy: row.updatedBy
+    };
+}
+
+/**
+ * Rohzugriff auf einen Einstellungsbereich.
+ *
+ * Fuer Bereiche mit eigenem Zuschnitt -- der Objektspeicher etwa legt seinen
+ * geheimen Schluessel verschluesselt ab und braucht deshalb eine eigene
+ * Auf- und Abbildung. Die uebrigen Bereiche gehen weiter ueber ihre
+ * typisierten Funktionen.
+ */
+export async function readSettingRaw(key: string): Promise<Record<string, unknown> | null> {
+    const setting = await readSetting(key);
+    return setting?.value ?? null;
+}
+
+export async function writeSettingRaw(
+    key: string,
+    value: Record<string, unknown>,
+    updatedBy: string
+): Promise<void> {
+    await writeSetting(key, value, updatedBy);
+}
+
+async function writeSetting(
+    key: string,
+    value: Record<string, unknown>,
+    updatedBy: string
+): Promise<void> {
+    await db
+        .insert(settings)
+        .values({ key, value, updatedBy, updatedAt: new Date() })
+        .onConflictDoUpdate({
+            target: settings.key,
+            set: { value, updatedBy, updatedAt: new Date() }
+        });
+}
+
 export async function getFinanceSettings(): Promise<FinanceSettings> {
-    const doc = await settings().findOne({ _id: FINANCE_SETTINGS_ID });
+    const row = await readSetting(FINANCE_KEY);
+    const value = (row?.value ?? {}) as {
+        contributions?: Partial<FinanceSettings["contributions"]>;
+        bank?: Partial<BankDetails>;
+    };
 
     return {
         contributions: {
-            stamm: Number(doc?.contributions?.stamm) || 0,
-            gau: Number(doc?.contributions?.gau) || 0,
-            landesmark: Number(doc?.contributions?.landesmark) || 0,
-            bund: Number(doc?.contributions?.bund) || 0
+            stamm: Number(value.contributions?.stamm) || 0,
+            gau: Number(value.contributions?.gau) || 0,
+            landesmark: Number(value.contributions?.landesmark) || 0,
+            bund: Number(value.contributions?.bund) || 0
         },
-        bank: { ...EMPTY_BANK, ...(doc?.bank ?? {}) },
-        updatedAt: doc?.updatedAt,
-        updatedBy: doc?.updatedBy
+        bank: { ...EMPTY_BANK, ...(value.bank ?? {}) },
+        updatedAt: row?.updatedAt,
+        updatedBy: row?.updatedBy
     };
 }
 
@@ -61,21 +125,74 @@ export async function saveFinanceSettings(
     input: { contributions: FinanceSettings["contributions"]; bank?: Partial<BankDetails> },
     updatedBy: string
 ): Promise<FinanceSettings> {
-    const payload: Omit<SettingsDoc, "_id"> = {
-        contributions: input.contributions,
-        bank: { ...EMPTY_BANK, ...(input.bank ?? {}) },
-        updatedAt: new Date().toISOString(),
-        updatedBy
-    };
-
-    await settings().updateOne(
-        { _id: FINANCE_SETTINGS_ID },
-        { $set: payload },
-        { upsert: true }
-    );
-
-    return { ...payload, bank: payload.bank! } as FinanceSettings;
+    const bank = { ...EMPTY_BANK, ...(input.bank ?? {}) };
+    await writeSetting(FINANCE_KEY, { contributions: input.contributions, bank }, updatedBy);
+    return getFinanceSettings();
 }
+
+// ---------------------------------------------------------------------------
+// Organisation
+// ---------------------------------------------------------------------------
+
+export interface OrganizationSettings {
+    /** Vollstaendiger Name, z. B. "Stamm Musterstadt". */
+    name: string;
+    /** Kurzform fuer enge Stellen, z. B. "Musterstadt". */
+    shortName: string;
+    city: string;
+    contactEmail: string;
+    website: string;
+    imprintUrl: string;
+    privacyUrl: string;
+    instagramUrl: string;
+    /** Kennung in der Dateiablage; leer, wenn kein Logo hinterlegt ist. */
+    logoFileId: string;
+    /** Ueberschreibt --primary, wenn gesetzt (Hex-Wert). */
+    primaryColor: string;
+}
+
+/**
+ * Vorbelegung, solange die Einrichtung nicht durchlaufen wurde. Bewusst
+ * neutral -- ein fest verdrahteter Stammesname waere genau das, was diese
+ * Einstellung abschaffen soll.
+ */
+export const DEFAULT_ORGANIZATION: OrganizationSettings = {
+    name: "Internes Portal",
+    shortName: "Portal",
+    city: "",
+    contactEmail: "",
+    website: "",
+    imprintUrl: "",
+    privacyUrl: "",
+    instagramUrl: "",
+    logoFileId: "",
+    primaryColor: ""
+};
+
+export async function getOrganizationSettings(): Promise<OrganizationSettings> {
+    const row = await readSetting(ORGANIZATION_KEY);
+    return { ...DEFAULT_ORGANIZATION, ...((row?.value ?? {}) as Partial<OrganizationSettings>) };
+}
+
+export async function saveOrganizationSettings(
+    input: Partial<OrganizationSettings>,
+    updatedBy: string
+): Promise<OrganizationSettings> {
+    const current = await getOrganizationSettings();
+    const merged: OrganizationSettings = { ...current, ...input };
+    await writeSetting(ORGANIZATION_KEY, { ...merged }, updatedBy);
+    return merged;
+}
+
+/** true, sobald die Einrichtung einmal durchlaufen wurde. */
+export async function isOrganizationConfigured(): Promise<boolean> {
+    const row = await readSetting(ORGANIZATION_KEY);
+    return Boolean(row);
+}
+
+// ---------------------------------------------------------------------------
+// IBAN
+// ---------------------------------------------------------------------------
 
 /** Grobe Plausibilitätsprüfung einer IBAN inklusive Prüfziffer. */
 export function isValidIban(value: string): boolean {

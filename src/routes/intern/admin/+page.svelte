@@ -44,10 +44,31 @@
             perms: ["admin.view"]
         },
         {
+            name: "Organisation",
+            href: "/intern/admin/organisation",
+            description: "Name, Logo und Kontaktdaten des Stamms.",
+            icon: "building",
+            perms: ["system.settings.view"]
+        },
+        {
             name: "Einstellungen",
             href: "/intern/admin/settings",
-            description: "Beitragssätze und Systemoptionen konfigurieren.",
+            description: "Beitragssätze und Bankverbindung.",
             icon: "gear-fill",
+            perms: ["system.settings.view"]
+        },
+        {
+            name: "Speicher",
+            href: "/intern/admin/speicher",
+            description: "Objektspeicher für Dateien statt der Datenbank.",
+            icon: "hdd-network-fill",
+            perms: ["system.settings.view"]
+        },
+        {
+            name: "API-Tokens",
+            href: "/intern/admin/api-tokens",
+            description: "Zugänge für Fremdsysteme über die REST-Schnittstelle.",
+            icon: "key-fill",
             perms: ["system.settings.view"]
         }
     ];

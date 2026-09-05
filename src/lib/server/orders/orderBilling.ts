@@ -1,8 +1,11 @@
-import { ObjectId } from "mongodb";
-import { fiscalInvoices, orders } from "$lib/server/db/collections";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { db } from "$lib/server/db";
+import { isUuid } from "$lib/server/db/ids";
+import { invoices, orderInvoices, orders } from "$lib/server/db/schema";
 import { splitEvenly } from "$lib/money";
-import { createInvoice, cancelInvoicesForOrder } from "$lib/server/finance/invoiceService";
+import { cancelInvoicesForOrder, createInvoice } from "$lib/server/finance/invoiceService";
 import { getActiveFiscalYear } from "$lib/server/finance/yearService";
+import { getCategoryByName } from "$lib/server/finance/categoryService";
 import { KIND_ORDER, NoActiveFiscalYearError } from "$lib/server/finance/types";
 import type { PaymentStatus } from "$lib/kaemmerer/orderStatus";
 
@@ -17,7 +20,7 @@ import type { PaymentStatus } from "$lib/kaemmerer/orderStatus";
  */
 
 export interface OrderInvoiceInput {
-    orderId: ObjectId;
+    orderId: string;
     orderNumber: string;
     members: { id: string; name: string }[];
     total: number;
@@ -40,22 +43,33 @@ export async function createInvoicesForOrder(input: OrderInvoiceInput): Promise<
         throw new NoActiveFiscalYearError();
     }
 
+    const category = await getCategoryByName(KIND_ORDER);
     const shares = splitEvenly(input.total, input.members.length);
     const dueDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
     const invoiceIds: string[] = [];
 
     for (const [index, member] of input.members.entries()) {
         const invoice = await createInvoice({
-            fiscalYearId: new ObjectId(year.id),
+            fiscalYearId: year.id,
             memberId: member.id,
             member: member.name,
-            kind: KIND_ORDER,
+            // Die Bestellnummer gehoert in die Art, sonst verhindert der
+            // eindeutige Index (Jahr, Mitglied, Art) eine zweite Bestellung
+            // desselben Mitglieds im selben Jahr.
+            kind: `${KIND_ORDER} ${input.orderNumber}`,
+            categoryId: category?.id ?? null,
+            revenueAccountId: category?.accountId ?? null,
             amount: shares[index],
             dueDate,
             note: `Bestellung ${input.orderNumber}: ${input.itemSummary}`,
             orderId: input.orderId,
             createdBy: input.createdBy
         });
+
+        await db
+            .insert(orderInvoices)
+            .values({ orderId: input.orderId, invoiceId: invoice.id })
+            .onConflictDoNothing();
 
         invoiceIds.push(invoice.id);
     }
@@ -66,16 +80,18 @@ export async function createInvoicesForOrder(input: OrderInvoiceInput): Promise<
 /**
  * Gleicht den Zahlungsstatus einer Bestellung mit ihren Rechnungen ab.
  *
- * Wichtig: der Lieferstatus (status) wird NICHT mehr angefasst. Vorher wurde
- * bei vollständiger Bezahlung status auf "paid" gesetzt und damit die
- * Information "geliefert" überschrieben. Lieferung und Bezahlung sind zwei
- * unabhängige Merkmale.
+ * Wichtig: der Lieferstatus (status) wird NICHT angefasst. Vorher wurde bei
+ * vollständiger Bezahlung status auf "paid" gesetzt und damit die Information
+ * "geliefert" überschrieben. Lieferung und Bezahlung sind zwei unabhängige
+ * Merkmale.
  */
-export async function syncOrderPayment(orderId: ObjectId): Promise<PaymentStatus | null> {
-    const invoices = await fiscalInvoices().find({ orderId }).toArray();
-    if (invoices.length === 0) return null;
+export async function syncOrderPayment(orderId: string): Promise<PaymentStatus | null> {
+    if (!isUuid(orderId)) return null;
 
-    const relevant = invoices.filter((invoice) => invoice.status !== "cancelled");
+    const rows = await db.select().from(invoices).where(eq(invoices.orderId, orderId));
+    if (rows.length === 0) return null;
+
+    const relevant = rows.filter((invoice) => invoice.status !== "cancelled");
     if (relevant.length === 0) return null;
 
     const allPaid = relevant.every((invoice) => invoice.status === "paid");
@@ -83,35 +99,58 @@ export async function syncOrderPayment(orderId: ObjectId): Promise<PaymentStatus
 
     const paymentStatus: PaymentStatus = allPaid ? "paid" : anyPaid ? "partial" : "open";
 
-    await orders().updateOne(
-        { _id: orderId },
-        { $set: { paymentStatus, updatedAt: new Date() } }
-    );
+    await db
+        .update(orders)
+        .set({ paymentStatus, updatedAt: new Date() })
+        .where(eq(orders.id, orderId));
 
     return paymentStatus;
 }
 
 /** Wird beim Stornieren einer Bestellung aufgerufen. */
-export async function cancelOrderBilling(orderId: ObjectId, user: string): Promise<number> {
+export async function cancelOrderBilling(orderId: string, user: string): Promise<number> {
+    if (!isUuid(orderId)) return 0;
+
     const cancelled = await cancelInvoicesForOrder(orderId, user);
-    await orders().updateOne(
-        { _id: orderId },
-        { $set: { paymentStatus: "open" as PaymentStatus, updatedAt: new Date() } }
-    );
+    await db
+        .update(orders)
+        .set({ paymentStatus: "open", updatedAt: new Date() })
+        .where(eq(orders.id, orderId));
     return cancelled;
 }
 
 /** Bestellungen, deren Rechnungen zu einem Geschäftsjahr gehören. */
-export async function getOrdersForFiscalYear(fiscalYearId: ObjectId) {
-    const invoices = await fiscalInvoices()
-        .find({ fiscalYearId, orderId: { $ne: null } })
-        .toArray();
+export async function getOrdersForFiscalYear(fiscalYearId: string) {
+    if (!isUuid(fiscalYearId)) return [];
 
-    const orderIds = Array.from(
-        new Set(invoices.map((invoice) => invoice.orderId!.toString()))
-    ).map((id) => new ObjectId(id));
+    const rows = await db
+        .selectDistinct({ order: orders })
+        .from(orders)
+        .innerJoin(invoices, eq(invoices.orderId, orders.id))
+        .where(eq(invoices.fiscalYearId, fiscalYearId))
+        .orderBy(desc(orders.createdAt));
 
-    if (orderIds.length === 0) return [];
+    return rows.map((row) => row.order);
+}
 
-    return orders().find({ _id: { $in: orderIds } }).sort({ createdAt: -1 }).toArray();
+/** Offene Rechnungsbetraege je Bestellung -- fuer die Bestelluebersicht. */
+export async function outstandingByOrder(orderIds: string[]): Promise<Map<string, number>> {
+    const valid = orderIds.filter(isUuid);
+    if (valid.length === 0) return new Map();
+
+    const rows = await db
+        .select({
+            orderId: invoices.orderId,
+            amount: invoices.amount,
+            paidAmount: invoices.paidAmount
+        })
+        .from(invoices)
+        .where(and(inArray(invoices.orderId, valid), ne(invoices.status, "cancelled")));
+
+    const map = new Map<string, number>();
+    for (const row of rows) {
+        if (!row.orderId) continue;
+        map.set(row.orderId, (map.get(row.orderId) ?? 0) + (row.amount - row.paidAmount));
+    }
+    return map;
 }

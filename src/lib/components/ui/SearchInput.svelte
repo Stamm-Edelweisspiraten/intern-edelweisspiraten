@@ -32,7 +32,7 @@
         type="search"
         {placeholder}
         bind:value
-        class="w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm placeholder:text-fg-subtle transition"
+        class="w-full pl-10 pr-4 py-3 rounded-control text-sm bg-surface text-fg border border-border-strong shadow-sm placeholder:text-fg-subtle transition"
     />
     {#if count !== null}
         <span class="sr-only" aria-live="polite">{count} Treffer</span>

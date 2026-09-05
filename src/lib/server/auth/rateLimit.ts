@@ -1,4 +1,6 @@
-import { loginAttempts } from "$lib/server/db/collections";
+import { eq, lt, sql } from "drizzle-orm";
+import { db } from "$lib/server/db";
+import { loginAttempts } from "$lib/server/db/schema";
 
 /**
  * Zaehler gegen automatisiertes Durchprobieren.
@@ -7,7 +9,8 @@ import { loginAttempts } from "$lib/server/db/collections";
  * des sechsstelligen Einladungscodes, der damit in kurzer Zeit vollstaendig
  * durchprobierbar war.
  *
- * Aufgeraeumt wird ausschliesslich ueber den TTL-Index auf expiresAt.
+ * Aufgeraeumt wird ueber cleanupRateLimits(); in MongoDB uebernahm das ein
+ * TTL-Index auf expiresAt.
  */
 
 export interface RateLimitResult {
@@ -31,8 +34,18 @@ export const rateLimitKey = {
     user: (userId: string) => `user:${userId}`,
     reset: (emailHash: string) => `reset:${emailHash}`,
     invite: (memberId: string, ip: string) => `invite:${memberId}:${ip}`,
-    mfa: (sessionId: string) => `mfa:${sessionId}`
+    mfa: (sessionId: string) => `mfa:${sessionId}`,
+    apiToken: (tokenId: string) => `api:${tokenId}`
 };
+
+async function readEntry(key: string) {
+    const [entry] = await db
+        .select()
+        .from(loginAttempts)
+        .where(eq(loginAttempts.key, key))
+        .limit(1);
+    return entry ?? null;
+}
 
 /**
  * Prueft, ohne zu zaehlen. Fuer Vorabpruefungen, bevor ueberhaupt Arbeit
@@ -42,7 +55,7 @@ export async function checkRateLimit(
     key: string,
     options: RateLimitOptions
 ): Promise<RateLimitResult> {
-    const entry = await loginAttempts().findOne({ key });
+    const entry = await readEntry(key);
     const now = new Date();
 
     if (!entry || entry.expiresAt <= now) {
@@ -66,42 +79,56 @@ export async function registerFailure(
     const now = new Date();
     const expiresAt = new Date(now.getTime() + options.windowSeconds * 1000);
 
-    const existing = await loginAttempts().findOne({ key });
+    /*
+     * Datumswerte werden als ISO-Zeichenkette mit ausdruecklicher
+     * Typumwandlung eingesetzt. Ein rohes Date-Objekt in einem sql-Template
+     * laeuft an der Typzuordnung von Drizzle vorbei und erreicht den Treiber
+     * unserialisiert -- der lehnt es ab.
+     */
+    const nowIso = sql`${now.toISOString()}::timestamptz`;
+    const expiresIso = sql`${expiresAt.toISOString()}::timestamptz`;
 
-    // Abgelaufenes Fenster wird zurueckgesetzt statt weitergezaehlt.
-    if (!existing || existing.expiresAt <= now) {
-        await loginAttempts().updateOne(
-            { key },
-            { $set: { key, count: 1, firstAt: now, lastAt: now, expiresAt } },
-            { upsert: true }
-        );
-        return {
-            allowed: options.limit > 1,
-            remaining: Math.max(0, options.limit - 1),
-            retryAfterSeconds: 0
-        };
-    }
+    /**
+     * Ein einziger Schreibvorgang statt Lesen-dann-Schreiben: bei
+     * abgelaufenem Fenster beginnt der Zaehler wieder bei 1, sonst zaehlt er
+     * hoch. Die alte Fassung las erst und schrieb dann -- zwei gleichzeitige
+     * Fehlversuche konnten sich so gegenseitig ueberschreiben.
+     */
+    const [entry] = await db
+        .insert(loginAttempts)
+        .values({ key, count: 1, firstAt: now, lastAt: now, expiresAt })
+        .onConflictDoUpdate({
+            target: loginAttempts.key,
+            set: {
+                count: sql`case when ${loginAttempts.expiresAt} <= ${nowIso} then 1 else ${loginAttempts.count} + 1 end`,
+                firstAt: sql`case when ${loginAttempts.expiresAt} <= ${nowIso} then ${nowIso} else ${loginAttempts.firstAt} end`,
+                lastAt: now,
+                expiresAt: sql`case when ${loginAttempts.expiresAt} <= ${nowIso} then ${expiresIso} else ${loginAttempts.expiresAt} end`
+            }
+        })
+        .returning();
 
-    const updated = await loginAttempts().findOneAndUpdate(
-        { key },
-        { $inc: { count: 1 }, $set: { lastAt: now } },
-        { returnDocument: "after" }
-    );
-
-    const count = updated?.count ?? existing.count + 1;
-    const remaining = Math.max(0, options.limit - count);
-
+    const remaining = Math.max(0, options.limit - entry.count);
     return {
         allowed: remaining > 0,
         remaining,
         retryAfterSeconds:
-            remaining > 0 ? 0 : Math.ceil((existing.expiresAt.getTime() - now.getTime()) / 1000)
+            remaining > 0 ? 0 : Math.ceil((entry.expiresAt.getTime() - now.getTime()) / 1000)
     };
 }
 
 /** Loescht den Zaehler, z.B. nach erfolgreicher Anmeldung. */
 export async function clearRateLimit(key: string): Promise<void> {
-    await loginAttempts().deleteOne({ key });
+    await db.delete(loginAttempts).where(eq(loginAttempts.key, key));
+}
+
+/** Entfernt abgelaufene Zaehler. Ersetzt den frueheren TTL-Index. */
+export async function cleanupRateLimits(): Promise<number> {
+    const rows = await db
+        .delete(loginAttempts)
+        .where(lt(loginAttempts.expiresAt, new Date()))
+        .returning({ key: loginAttempts.key });
+    return rows.length;
 }
 
 /** Voreinstellungen fuer die verschiedenen Angriffsflaechen. */
@@ -116,7 +143,9 @@ export const RATE_LIMITS = {
     /** Eingabe des Einladungscodes. */
     invite: { limit: 5, windowSeconds: 10 * 60 },
     /** Eingabe des zweiten Faktors. */
-    mfa: { limit: 5, windowSeconds: 10 * 60 }
+    mfa: { limit: 5, windowSeconds: 10 * 60 },
+    /** Anfragen je API-Token. */
+    api: { limit: 600, windowSeconds: 60 }
 } as const;
 
 /**

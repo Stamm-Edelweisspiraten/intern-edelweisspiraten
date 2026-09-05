@@ -21,7 +21,7 @@
     <main id="hauptinhalt" class="flex-1 flex items-center justify-center p-4 sm:p-6">
         <div class="w-full max-w-md">
             <div
-                class="bg-surface border border-border rounded-2xl p-6 sm:p-8 space-y-6"
+                class="bg-surface border border-border rounded-card p-6 sm:p-8 space-y-6"
                 style="box-shadow: var(--shadow-raised);"
             >
                 <div class="flex items-start justify-between gap-4">
@@ -35,7 +35,7 @@
                         {/if}
                     </div>
                     <div
-                        class="hidden sm:flex h-12 w-12 shrink-0 rounded-full bg-primary-soft border border-primary-soft-border items-center justify-center"
+                        class="hidden sm:flex h-12 w-12 shrink-0 rounded-card bg-primary-soft border border-primary-soft-border items-center justify-center"
                     >
                         <span class={`bi bi-${icon} text-xl text-primary`} aria-hidden="true"></span>
                     </div>

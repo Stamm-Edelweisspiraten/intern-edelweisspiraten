@@ -113,7 +113,7 @@
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={description ? descriptionId : undefined}
-            class={`relative w-full ${SIZES[size]} bg-surface border border-border rounded-2xl shadow-2xl max-h-full flex flex-col`}
+            class={`relative w-full ${SIZES[size]} bg-surface border border-border rounded-card shadow-2xl max-h-full flex flex-col`}
         >
             <div class="flex items-start justify-between gap-4 p-6 pb-4">
                 <div class="min-w-0">
@@ -124,7 +124,7 @@
                 </div>
                 <button
                     type="button"
-                    class="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-lg text-fg-muted hover:bg-surface-muted hover:text-fg transition"
+                    class="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-control text-fg-muted hover:bg-surface-muted hover:text-fg transition"
                     aria-label="Dialog schließen"
                     onclick={close}
                 >

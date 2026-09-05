@@ -1,5 +1,7 @@
+import { and, eq, ne, sql } from "drizzle-orm";
 import { env } from "$env/dynamic/private";
-import { users } from "$lib/server/db/collections";
+import { db } from "$lib/server/db";
+import { userRoles, users } from "$lib/server/db/schema";
 import { getRoleByKey, SYSTEM_ROLE_KEYS } from "$lib/server/roleService";
 import { hashPassword } from "$lib/server/auth/password";
 import { normalizeEmail } from "$lib/server/userService";
@@ -19,24 +21,30 @@ import { normalizeEmail } from "$lib/server/userService";
 
 export async function hasActiveAdmin(): Promise<boolean> {
     const adminRole = await getRoleByKey(SYSTEM_ROLE_KEYS.admin);
-    if (!adminRole?._id) return false;
+    if (!adminRole) return false;
 
-    const count = await users().countDocuments({
-        status: "active",
-        passwordHash: { $nin: ["", null] as never },
-        roleIds: adminRole._id
-    });
+    const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .innerJoin(userRoles, eq(userRoles.userId, users.id))
+        .where(
+            and(
+                eq(users.status, "active"),
+                ne(users.passwordHash, ""),
+                eq(userRoles.roleId, adminRole.id)
+            )
+        );
 
-    return count > 0;
+    return Number(row?.count ?? 0) > 0;
 }
 
 /** Gibt es ueberhaupt einen anmeldefaehigen Zugang? */
 export async function hasAnyActiveUser(): Promise<boolean> {
-    const count = await users().countDocuments({
-        status: "active",
-        passwordHash: { $nin: ["", null] as never }
-    });
-    return count > 0;
+    const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(and(eq(users.status, "active"), ne(users.passwordHash, "")));
+    return Number(row?.count ?? 0) > 0;
 }
 
 export async function ensureBootstrapAdmin(): Promise<void> {
@@ -47,29 +55,37 @@ export async function ensureBootstrapAdmin(): Promise<void> {
 
     try {
         const adminRole = await getRoleByKey(SYSTEM_ROLE_KEYS.admin);
-        if (!adminRole?._id) {
+        if (!adminRole) {
             console.error("Bootstrap: Die Rolle 'admin' existiert nicht.");
             return;
         }
 
         const normalized = normalizeEmail(email);
-        const existing = await users().findOne({ email: normalized });
+        const [existing] = await db
+            .select()
+            .from(users)
+            .where(eq(users.email, normalized))
+            .limit(1);
         const force = env.BOOTSTRAP_ADMIN_FORCE === "1";
 
         if (!existing) {
-            await users().insertOne({
-                name: "Administration",
-                email: normalized,
-                passwordHash: await hashPassword(password),
-                passwordChangedAt: new Date(),
-                status: "active",
-                type: "parent",
-                roleIds: [adminRole._id],
-                memberIds: [],
-                failedLoginAttempts: 0,
-                lockedUntil: null,
-                createdAt: new Date()
-            });
+            const [created] = await db
+                .insert(users)
+                .values({
+                    name: "Administration",
+                    email: normalized,
+                    passwordHash: await hashPassword(password),
+                    passwordChangedAt: new Date(),
+                    status: "active",
+                    type: "parent"
+                })
+                .returning({ id: users.id });
+
+            await db
+                .insert(userRoles)
+                .values({ userId: created.id, roleId: adminRole.id })
+                .onConflictDoNothing();
+
             console.warn(
                 `Bootstrap-Zugang angelegt: ${normalized}. Bitte das Passwort aendern und die BOOTSTRAP_ADMIN_* Variablen anschliessend entfernen.`
             );
@@ -81,20 +97,22 @@ export async function ensureBootstrapAdmin(): Promise<void> {
         const needsRepair = !existing.passwordHash || existing.status !== "active";
         if (!needsRepair && !force) return;
 
-        await users().updateOne(
-            { _id: existing._id },
-            {
-                $set: {
-                    passwordHash: await hashPassword(password),
-                    passwordChangedAt: new Date(),
-                    status: "active",
-                    failedLoginAttempts: 0,
-                    lockedUntil: null,
-                    updatedAt: new Date()
-                },
-                $addToSet: { roleIds: adminRole._id }
-            }
-        );
+        await db
+            .update(users)
+            .set({
+                passwordHash: await hashPassword(password),
+                passwordChangedAt: new Date(),
+                status: "active",
+                failedLoginAttempts: 0,
+                lockedUntil: null,
+                updatedAt: new Date()
+            })
+            .where(eq(users.id, existing.id));
+
+        await db
+            .insert(userRoles)
+            .values({ userId: existing.id, roleId: adminRole.id })
+            .onConflictDoNothing();
 
         console.warn(
             `Bootstrap-Zugang wiederhergestellt: ${normalized}. Bitte das Passwort aendern und die BOOTSTRAP_ADMIN_* Variablen anschliessend entfernen.`

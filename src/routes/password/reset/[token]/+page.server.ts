@@ -25,7 +25,7 @@ export const actions: Actions = {
         // Token wird bei jedem Versuch neu geprueft, nicht aus dem load
         // uebernommen.
         const lookup = await lookupToken(params.token);
-        if (!lookup.valid || !lookup.user?._id || !lookup.tokenHash) {
+        if (!lookup.valid || !lookup.user || !lookup.tokenHash) {
             return fail(400, {
                 error: "Dieser Link ist nicht mehr gültig. Bitte fordere einen neuen an."
             });
@@ -48,7 +48,7 @@ export const actions: Actions = {
         }
 
         // setPassword beendet zugleich alle bestehenden Sitzungen.
-        await setPassword(lookup.user._id.toString(), password);
+        await setPassword(lookup.user.id, password);
 
         throw redirect(303, "/login?hinweis=passwort-geaendert");
     }

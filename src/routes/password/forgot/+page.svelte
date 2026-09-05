@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-    <title>Passwort vergessen - Stamm Edelweisspiraten</title>
+    <title>Passwort vergessen</title>
 </svelte:head>
 
 <AuthShell

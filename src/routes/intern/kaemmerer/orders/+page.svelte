@@ -78,14 +78,14 @@
             <div class="flex flex-wrap gap-2">
                 <a
                     href="/intern/kaemmerer/orders"
-                    class={`px-3 py-1.5 text-xs font-semibold rounded-full border transition ${data.status === "" ? "bg-primary-soft border-primary-soft-border text-primary-soft-fg" : "bg-surface border-border text-fg-muted hover:bg-surface-muted"}`}
+                    class={`px-3 py-1.5 text-xs font-semibold rounded-control border transition ${data.status === "" ? "bg-primary-soft border-primary-soft-border text-primary-soft-fg" : "bg-surface border-border text-fg-muted hover:bg-surface-muted"}`}
                 >
                     Alle
                 </a>
                 {#each ORDER_STATUS_OPTIONS as option (option.value)}
                     <a
                         href={`/intern/kaemmerer/orders?status=${option.value}`}
-                        class={`px-3 py-1.5 text-xs font-semibold rounded-full border transition ${data.status === option.value ? "bg-primary-soft border-primary-soft-border text-primary-soft-fg" : "bg-surface border-border text-fg-muted hover:bg-surface-muted"}`}
+                        class={`px-3 py-1.5 text-xs font-semibold rounded-control border transition ${data.status === option.value ? "bg-primary-soft border-primary-soft-border text-primary-soft-fg" : "bg-surface border-border text-fg-muted hover:bg-surface-muted"}`}
                     >
                         {option.label}
                     </a>

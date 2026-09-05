@@ -15,7 +15,7 @@
 </script>
 
 <svelte:head>
-    <title>Registrierung - Stamm Edelweisspiraten</title>
+    <title>Registrierung</title>
 </svelte:head>
 
 <AuthShell

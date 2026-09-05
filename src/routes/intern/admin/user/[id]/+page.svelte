@@ -10,6 +10,27 @@
 
     type Session = PageData["sessions"][number];
 
+    /**
+     * Die Zuweisungen kommen als flache Liste (Rolle + optionale Gruppe).
+     * Fuer die Anzeige wird daraus je Rolle "stammesweit ja/nein" und die
+     * Menge der Gruppen.
+     */
+    const orgWide = $derived(
+        new Set(
+            data.user.roleAssignments
+                .filter((entry) => entry.groupId === null)
+                .map((entry) => entry.roleId)
+        )
+    );
+
+    function groupsOf(roleId: string): Set<string> {
+        return new Set(
+            data.user.roleAssignments
+                .filter((entry) => entry.roleId === roleId && entry.groupId !== null)
+                .map((entry) => entry.groupId as string)
+        );
+    }
+
     const sessionColumns: Column<Session>[] = [
         { key: "device", label: "Gerät", value: (s) => s.device },
         { key: "ip", label: "IP-Adresse", value: (s) => s.ip },
@@ -142,28 +163,64 @@
         </form>
     </Card>
 
-    <Card title="Rollen" subtitle="Rollen bestimmen, welche Bereiche zugänglich sind.">
-        <form method="post" action="?/roles" class="space-y-4">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    <Card
+        title="Rollen"
+        subtitle="Rollen bestimmen, welche Bereiche zugänglich sind – stammesweit oder für einzelne Gruppen."
+    >
+        <form method="post" action="?/roles" class="space-y-3">
+            <div class="space-y-2">
                 {#each data.roles as role (role.id)}
-                    <label class="flex items-start gap-3 px-4 py-3 rounded-xl border border-border cursor-pointer hover:bg-surface-muted transition">
-                        <input
-                            type="checkbox"
-                            name="roles"
-                            value={role.id}
-                            checked={data.user.roleIds.includes(role.id)}
-                            disabled={!data.canEdit}
-                            class="mt-1 rounded border-border-strong"
-                        />
-                        <span class="min-w-0">
-                            <span class="block text-sm font-semibold text-fg">{role.name}</span>
-                            {#if role.description}
-                                <span class="block text-xs text-fg-subtle">{role.description}</span>
-                            {/if}
-                        </span>
-                    </label>
+                    {@const scoped = groupsOf(role.id)}
+                    <div class="px-4 py-3 rounded-xl border border-border space-y-3">
+                        <label class="flex items-start gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="roles"
+                                value={role.id}
+                                checked={orgWide.has(role.id)}
+                                disabled={!data.canEdit}
+                                class="mt-1 rounded border-border-strong"
+                            />
+                            <span class="min-w-0">
+                                <span class="block text-sm font-semibold text-fg">{role.name}</span>
+                                <span class="block text-xs text-fg-subtle">
+                                    Für den ganzen Stamm{role.description ? ` – ${role.description}` : ""}
+                                </span>
+                            </span>
+                        </label>
+
+                        {#if role.groupScopable && data.groups.length > 0}
+                            <fieldset class="pl-7 space-y-2">
+                                <legend class="text-xs font-medium text-fg-muted">
+                                    Zusätzlich nur für diese Gruppen
+                                </legend>
+                                <div class="flex flex-wrap gap-2">
+                                    {#each data.groups as group (group.id)}
+                                        <label
+                                            class="flex items-center gap-2 text-xs text-fg px-2.5 py-1.5 rounded-lg border border-border cursor-pointer hover:bg-surface-muted transition"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                name={`groups_${role.id}`}
+                                                value={group.id}
+                                                checked={scoped.has(group.id)}
+                                                disabled={!data.canEdit}
+                                                class="rounded border-border-strong"
+                                            />
+                                            {group.name}
+                                        </label>
+                                    {/each}
+                                </div>
+                            </fieldset>
+                        {/if}
+                    </div>
                 {/each}
             </div>
+
+            <p class="text-xs text-fg-subtle">
+                Rollen können auch über ein Amt entstehen: trägt ein Amt eine Rolle und hat es
+                einen Gruppenbezug, gilt sie für dessen Inhaber nur in dieser Gruppe.
+            </p>
 
             {#if data.canEdit}
                 <div class="flex justify-end">

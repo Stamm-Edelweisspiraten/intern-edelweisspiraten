@@ -9,6 +9,11 @@
     let { data, children }: { data: LayoutData; children: Snippet } = $props();
 
     const permissions = $derived(data.permissions ?? []);
+    /**
+     * Fuer die Navigation zaehlen auch gruppenbezogene Rechte -- sonst faende
+     * eine Gruppenleitung die Mitgliederverwaltung nicht im Menue.
+     */
+    const navPermissions = $derived(data.navPermissions ?? data.permissions ?? []);
     const impersonationActive = $derived(!!data.impersonator);
 
     interface NavItem {
@@ -21,27 +26,27 @@
 
     const NAV: NavItem[] = [
         { name: "Dashboard", href: "/intern/dashboard", icon: "speedometer2", perms: ["dashboard.view"] },
-        { name: "Termine", href: "/intern/termine", icon: "calendar-event", perms: ["termine.view"] },
-        { name: "Downloads", href: "/intern/downloads", icon: "cloud-download", perms: ["downloads.view"] },
+        { name: "Termine", href: "/intern/termine", icon: "calendar-event", perms: ["events.view"] },
+        { name: "Dateien", href: "/intern/dateien", icon: "folder2-open", perms: ["files.view"] },
         { name: "Kämmerer", href: "/intern/kaemmerer", icon: "piggy-bank", perms: ["kaemmerer.access"] },
         {
             name: "Mitgliedverwaltung",
             href: "/intern/members",
             icon: "people",
-            perms: ["members.view", "groupleader.members.view"]
+            perms: ["members.view"]
         },
         {
             name: "Gruppen",
             href: "/intern/groups",
             icon: "diagram-3",
-            perms: ["groups.view", "groupleader.groups.view"]
+            perms: ["groups.view"]
         },
         { name: "Kasse", href: "/intern/finance", icon: "wallet2", perms: ["finance.view"] },
         { name: "Adminbereich", href: "/intern/admin", icon: "gear-fill", perms: ["admin.view"] }
     ];
 
     const visibleNav = $derived(
-        NAV.filter((item) => !item.perms || canAny(permissions, item.perms))
+        NAV.filter((item) => !item.perms || canAny(navPermissions, item.perms))
     );
 
     let mobileOpen = $state(false);
@@ -74,6 +79,16 @@
         };
     });
 
+    /** Kuerzel fuer die eingeklappte Seitenleiste, aus dem Namen abgeleitet. */
+    const initials = $derived(
+        (data.organization.shortName || data.organization.name)
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((word) => word[0]?.toUpperCase() ?? "")
+            .join("") || "IP"
+    );
+
     const navLinkClass = (href: string) =>
         `flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
             isActive(href)
@@ -83,7 +98,7 @@
 </script>
 
 <svelte:head>
-    <title>Intern - Stamm Edelweisspiraten</title>
+    <title>Intern &ndash; {data.organization.shortName || data.organization.name}</title>
 </svelte:head>
 
 <SkipLink />
@@ -112,7 +127,7 @@
                 <form method="post" action="/intern/impersonate/stop" class="w-full sm:w-auto">
                     <button
                         type="submit"
-                        class="inline-flex items-center gap-2 px-4 py-2 w-full sm:w-auto justify-center bg-warning text-white rounded-lg font-semibold shadow-sm hover:brightness-95 transition"
+                        class="inline-flex items-center gap-2 px-4 py-2 w-full sm:w-auto justify-center bg-warning text-primary-fg rounded-lg font-semibold shadow-sm hover:brightness-95 transition"
                     >
                         <span class="bi bi-arrow-counterclockwise" aria-hidden="true"></span>
                         Zurück zu meinem Zugang
@@ -129,12 +144,25 @@
         >
             <div class={`px-4 py-6 border-b border-border flex items-center ${collapsed ? "justify-center" : "justify-between"} gap-2`}>
                 {#if !collapsed}
-                    <div class="min-w-0">
-                        <p class="font-bold text-primary tracking-tight text-xl truncate">Edelweisspiraten</p>
-                        <p class="text-sm text-fg-subtle mt-0.5">Interner Bereich</p>
+                    <div class="min-w-0 flex items-center gap-3">
+                        {#if data.organization.logoFileId}
+                            <img
+                                src="/intern/admin/organisation/logo"
+                                alt=""
+                                class="h-9 w-9 object-contain shrink-0"
+                            />
+                        {/if}
+                        <div class="min-w-0">
+                            <p class="font-bold text-primary tracking-tight text-xl truncate">
+                                {data.organization.shortName || data.organization.name}
+                            </p>
+                            <p class="text-sm text-fg-subtle mt-0.5">Interner Bereich</p>
+                        </div>
                     </div>
+                {:else if data.organization.logoFileId}
+                    <img src="/intern/admin/organisation/logo" alt="" class="h-8 w-8 object-contain" />
                 {:else}
-                    <p class="font-bold text-primary text-lg">EP</p>
+                    <p class="font-bold text-primary text-lg">{initials}</p>
                 {/if}
                 <button
                     type="button"
@@ -170,7 +198,7 @@
                 <form method="post" action="/logout">
                     <button
                         type="submit"
-                        class="flex items-center justify-center gap-2 w-full py-3 bg-danger text-white rounded-lg font-semibold hover:bg-danger-hover transition"
+                        class="flex items-center justify-center gap-2 w-full py-3 bg-danger text-primary-fg rounded-lg font-semibold hover:bg-danger-hover transition"
                         title={collapsed ? "Abmelden" : undefined}
                     >
                         <span class="bi bi-box-arrow-right" aria-hidden="true"></span>
@@ -261,7 +289,7 @@
                             <form method="post" action="/logout" class="flex-1">
                                 <button
                                     type="submit"
-                                    class="w-full px-4 py-3 bg-danger hover:bg-danger-hover text-white rounded-lg font-semibold transition"
+                                    class="w-full px-4 py-3 bg-danger hover:bg-danger-hover text-primary-fg rounded-lg font-semibold transition"
                                 >
                                     <span class="bi bi-box-arrow-right mr-2" aria-hidden="true"></span> Abmelden
                                 </button>

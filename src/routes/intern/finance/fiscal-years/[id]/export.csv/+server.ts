@@ -1,5 +1,4 @@
 import { error } from "@sveltejs/kit";
-import { ObjectId } from "mongodb";
 import type { RequestHandler } from "./$types";
 import { requirePermission } from "$lib/server/permissionGuard";
 import { getFiscalYear } from "$lib/server/finance/yearService";
@@ -32,15 +31,16 @@ function csvRow(cells: (string | number | null | undefined)[]): string {
 }
 
 export const GET: RequestHandler = async (event) => {
-    requirePermission(event, "finance.view");
+    // Eigene Berechtigung fuer den Export; sie war bisher deklariert, aber
+    // nirgends erzwungen -- der Export hing an finance.view.
+    requirePermission(event, "finance.export");
 
     const year = await getFiscalYear(event.params.id);
     if (!year) throw error(404, "Geschäftsjahr nicht gefunden");
 
-    const yearId = new ObjectId(year.id);
     const [transactions, invoices] = await Promise.all([
-        listTransactions(yearId),
-        listInvoices(yearId)
+        listTransactions({ fiscalYearId: year.id, limit: 10_000 }),
+        listInvoices(year.id)
     ]);
 
     const lines: string[] = [];
@@ -49,14 +49,16 @@ export const GET: RequestHandler = async (event) => {
     lines.push("");
 
     lines.push(csvRow(["Buchungen"]));
-    lines.push(csvRow(["Datum", "Richtung", "Art", "Mitglied", "Betrag", "Notiz"]));
+    lines.push(csvRow(["Datum", "Beleg", "Richtung", "Art", "Mitglied", "Konto", "Betrag", "Notiz"]));
     for (const transaction of transactions) {
         lines.push(
             csvRow([
                 formatDate(transaction.date),
+                transaction.entryNo,
                 transaction.direction === "in" ? "Einnahme" : "Ausgabe",
                 transaction.kind,
                 transaction.member,
+                transaction.bankAccountName,
                 formatEuro(transaction.amount, { withUnit: false }),
                 transaction.note
             ])
@@ -71,18 +73,19 @@ export const GET: RequestHandler = async (event) => {
         .reduce((sum, t) => sum + t.amount, 0);
 
     lines.push("");
-    lines.push(csvRow(["Einnahmen", "", "", "", formatEuro(income, { withUnit: false })]));
-    lines.push(csvRow(["Ausgaben", "", "", "", formatEuro(expense, { withUnit: false })]));
-    lines.push(csvRow(["Saldo", "", "", "", formatEuro(income - expense, { withUnit: false })]));
+    lines.push(csvRow(["Einnahmen", "", "", "", "", "", formatEuro(income, { withUnit: false })]));
+    lines.push(csvRow(["Ausgaben", "", "", "", "", "", formatEuro(expense, { withUnit: false })]));
+    lines.push(csvRow(["Saldo", "", "", "", "", "", formatEuro(income - expense, { withUnit: false })]));
 
     lines.push("");
     lines.push(csvRow(["Rechnungen"]));
     lines.push(
-        csvRow(["Datum", "Fällig", "Art", "Mitglied", "Betrag", "Bezahlt", "Offen", "Status"])
+        csvRow(["Nummer", "Datum", "Fällig", "Art", "Mitglied", "Betrag", "Bezahlt", "Offen", "Status"])
     );
     for (const invoice of invoices) {
         lines.push(
             csvRow([
+                invoice.number,
                 formatDate(invoice.date),
                 invoice.dueDate ? formatDate(invoice.dueDate) : "",
                 invoice.kind,

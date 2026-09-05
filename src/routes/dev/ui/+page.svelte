@@ -11,12 +11,78 @@
         Modal,
         PageHeader,
         SearchInput,
+        Select,
         StatTile,
         TextInput
     } from "$lib/components/ui";
     import type { Column } from "$lib/components/ui";
+    import {
+        AgingBarChart,
+        BalanceLineChart,
+        MonthlyBarChart,
+        SphereDonutChart,
+        TopExpensesChart
+    } from "$lib/components/finance/charts";
     import { formatEuro } from "$lib/money";
     import { applyTheme, type Theme } from "$lib/theme";
+
+    /**
+     * Beispieldaten der Diagramme.
+     *
+     * Bewusst mit einem Monat ohne Bewegung und einem negativen Ergebnis --
+     * beides muss die Darstellung aushalten.
+     */
+    const MONTH_NAMES = [
+        "Januar", "Februar", "März", "April", "Mai", "Juni",
+        "Juli", "August", "September", "Oktober", "November", "Dezember"
+    ];
+
+    const sampleMonths = MONTH_NAMES.map((label, index) => {
+        const income = index === 1 ? 0 : [12_000, 0, 40_000, 8_000, 15_000, 90_000,
+            22_000, 5_000, 30_000, 11_000, 7_000, 18_000][index];
+        const expense = [4_000, 0, 12_000, 60_000, 9_000, 120_000,
+            8_000, 3_000, 14_000, 6_000, 5_000, 9_000][index];
+
+        return {
+            month: `2026-${String(index + 1).padStart(2, "0")}`,
+            label,
+            income,
+            expense,
+            result: income - expense
+        };
+    });
+
+    const sampleSpheres = [
+        { sphere: "ideell", label: "Ideeller Bereich", income: 180_000 },
+        { sphere: "zweckbetrieb", label: "Zweckbetrieb", income: 95_000 },
+        { sphere: "vermoegensverwaltung", label: "Vermögensverwaltung", income: 12_000 },
+        { sphere: "wirtschaftlich", label: "Wirtschaftlicher Betrieb", income: 4_000 }
+    ];
+
+    const sampleExpenses = [
+        { accountId: "1", number: "5300", name: "Lager und Aktionen", amount: 128_000 },
+        { accountId: "2", number: "5100", name: "Gruppenstunde/Material", amount: 42_000 },
+        { accountId: "3", number: "5500", name: "Beiträge an übergeordnete Ebenen", amount: 31_000 },
+        { accountId: "4", number: "5700", name: "Verwaltung", amount: 9_500 },
+        { accountId: "5", number: "5900", name: "Sonstiges", amount: 2_300 }
+    ];
+
+    const sampleBuckets = [
+        { label: "Noch nicht fällig", fromDays: -1, amount: 45_000, count: 6 },
+        { label: "1 – 30 Tage", fromDays: 1, amount: 18_000, count: 3 },
+        { label: "31 – 60 Tage", fromDays: 31, amount: 9_000, count: 2 },
+        { label: "61 – 90 Tage", fromDays: 61, amount: 0, count: 0 },
+        { label: "Über 90 Tage", fromDays: 91, amount: 24_000, count: 1 }
+    ];
+
+    const sampleCourse = [
+        { date: "2026-01-01", balance: 250_000 },
+        { date: "2026-02-14", balance: 262_000 },
+        { date: "2026-04-02", balance: 202_000 },
+        { date: "2026-06-11", balance: 292_000 },
+        { date: "2026-06-30", balance: 172_000 },
+        { date: "2026-09-05", balance: 188_000 }
+    ];
 
     /**
      * Komponenten-Galerie zur visuellen Abnahme in Hell und Dunkel.
@@ -48,6 +114,7 @@
     let modalOpen = $state(false);
     let confirmOpen = $state(false);
     let textValue = $state("");
+    let selectValue = $state("");
     let theme = $state<Theme>("system");
 
     function setTheme(next: Theme) {
@@ -141,6 +208,51 @@
                     <SearchInput bind:value={search} class="sm:w-full" />
                 {/snippet}
             </FormField>
+            <FormField label="Auswahl" hint="Ersetzt das roh gebaute select.">
+                {#snippet children({ id, describedBy })}
+                    <Select
+                        {id}
+                        {describedBy}
+                        bind:value={selectValue}
+                        placeholder="– bitte wählen –"
+                        options={[
+                            { value: "in", label: "Einnahme" },
+                            { value: "out", label: "Ausgabe" }
+                        ]}
+                    />
+                {/snippet}
+            </FormField>
+            <FormField label="Auswahl, fehlerhaft" error="Bitte eine Buchungsart wählen.">
+                {#snippet children({ id, describedBy, invalid })}
+                    <Select
+                        {id}
+                        {describedBy}
+                        {invalid}
+                        options={[{ value: "a", label: "Jahresbeitrag" }]}
+                    />
+                {/snippet}
+            </FormField>
+        </div>
+    </Card>
+
+    <Card title="Zahlen" subtitle="Beträge stehen untereinander (tabular-figures)">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+            <div>
+                <p class="text-xs text-fg-subtle uppercase tracking-wide mb-1">Mit tabular-figures</p>
+                <ul class="tabular-figures font-semibold space-y-0.5">
+                    <li>{formatEuro(111111)}</li>
+                    <li>{formatEuro(80808)}</li>
+                    <li>{formatEuro(6500)}</li>
+                </ul>
+            </div>
+            <div>
+                <p class="text-xs text-fg-subtle uppercase tracking-wide mb-1">Ohne</p>
+                <ul class="font-semibold space-y-0.5">
+                    <li>{formatEuro(111111)}</li>
+                    <li>{formatEuro(80808)}</li>
+                    <li>{formatEuro(6500)}</li>
+                </ul>
+            </div>
         </div>
     </Card>
 
@@ -180,6 +292,49 @@
         </div>
     </Card>
 </div>
+
+<section class="space-y-6 max-w-6xl mx-auto px-4 pb-12">
+    <h2 class="text-lg font-semibold text-fg">Diagramme der Kasse</h2>
+    <p class="text-sm text-fg-muted">
+        Alle Diagramme benutzen die Design-Tokens und stimmen deshalb in hell wie dunkel. Sie
+        tragen <code>aria-hidden</code>: im Betrieb steht neben jedem eine Tabelle mit denselben
+        Zahlen.
+    </p>
+
+    <Card title="Balken, gruppiert">
+        <MonthlyBarChart months={sampleMonths} />
+    </Card>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <Card title="Ring">
+            <SphereDonutChart spheres={sampleSpheres} />
+        </Card>
+
+        <Card title="Balken, waagerecht">
+            <TopExpensesChart rows={sampleExpenses} />
+        </Card>
+
+        <Card title="Linie">
+            <BalanceLineChart entries={sampleCourse} />
+        </Card>
+
+        <Card title="Balken">
+            <AgingBarChart buckets={sampleBuckets} />
+        </Card>
+    </div>
+
+    <Card title="Leerer Zustand" subtitle="Ohne Daten steht dort ein Hinweis, kein leeres Feld.">
+        <MonthlyBarChart
+            months={MONTH_NAMES.map((label, index) => ({
+                month: `2026-${String(index + 1).padStart(2, "0")}`,
+                label,
+                income: 0,
+                expense: 0,
+                result: 0
+            }))}
+        />
+    </Card>
+</section>
 
 <Modal bind:open={modalOpen} title="Transaktion erfassen" description="Escape schließt, Tab bleibt im Dialog.">
     <FormField label="Bezeichnung">

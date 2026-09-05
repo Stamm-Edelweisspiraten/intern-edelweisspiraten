@@ -1,8 +1,7 @@
 import { error, redirect } from "@sveltejs/kit";
-import { ObjectId } from "mongodb";
 import type { RequestHandler } from "./$types";
 import { getUser } from "$lib/server/userService";
-import { resolvePermissions } from "$lib/server/permissionService";
+import { resolveGrants } from "$lib/server/permissionService";
 import { matchesAnyPermission, matchesPermission } from "$lib/permissions/match";
 import { readSession, SESSION_COOKIE, startImpersonation } from "$lib/server/auth/session";
 
@@ -31,24 +30,29 @@ export const POST: RequestHandler = async ({ request, locals, cookies }) => {
     }
 
     const target = await getUser(userId);
-    if (!target?._id) throw error(404, "Benutzer nicht gefunden");
+    if (!target) throw error(404, "Benutzer nicht gefunden");
     if (target.status !== "active") throw error(400, "Dieser Zugang ist nicht aktiv.");
 
     // Ein Zugang mit Vollrechten darf nicht uebernommen werden -- sonst waere
-    // die Rechteerweiterung ueber Impersonation trivial.
-    const { permissions } = await resolvePermissions(target.roleIds ?? []);
-    if (matchesPermission(permissions, "*")) {
+    // die Rechteerweiterung ueber Impersonation trivial. Geprueft werden alle
+    // Grants, auch die gruppenbezogenen: "*" fuer eine einzelne Gruppe ist
+    // ebenso wenig uebernehmbar.
+    const { grants } = await resolveGrants({
+        userId: target.id,
+        memberIds: target.memberIds ?? []
+    });
+    if (matchesPermission(grants.map((grant) => grant.permission), "*")) {
         throw error(403, "Zugänge mit Vollrechten können nicht übernommen werden.");
     }
 
     const session = await readSession(cookies.get(SESSION_COOKIE));
     if (!session) throw error(401, "Sitzung nicht gefunden");
-    if (session.impersonation) {
+    if (session.impersonationUserId) {
         throw error(400, "Es läuft bereits eine Übernahme. Bitte diese zuerst beenden.");
     }
 
-    await startImpersonation(session, cookies, target._id, {
-        id: new ObjectId(locals.user.id),
+    await startImpersonation(session, cookies, target.id, {
+        id: locals.user.id,
         name: locals.user.name,
         email: locals.user.email
     });

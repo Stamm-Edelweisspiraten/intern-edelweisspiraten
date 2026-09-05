@@ -6,21 +6,67 @@ on:
   pull_request:
 
 jobs:
-  # Typprüfung und Tests laufen vor dem Build. Bisher wurde ohne jede
-  # Prüfung gebaut und veröffentlicht.
+  # Typprüfung, Tests und ein Migrationslauf gegen eine echte Datenbank
+  # laufen vor dem Build. Bisher wurde ohne jede Prüfung gebaut und
+  # veröffentlicht.
   check:
     runs-on: ubuntu-latest
+
+    # Die Migrationen enthalten Trigger und Prüfbedingungen. Ein Lauf gegen
+    # eine echte PostgreSQL-Instanz ist der einzige Weg festzustellen, ob sie
+    # überhaupt anwendbar sind.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: intern
+          POSTGRES_PASSWORD: intern
+          POSTGRES_DB: intern
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U intern -d intern"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://intern:intern@localhost:5432/intern
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
       - run: npm run check
+
+      # Erst anwenden, dann ein zweites Mal: Migrationen müssen wiederholbar
+      # sein, ohne beim zweiten Lauf zu scheitern.
+      - run: npm run db:migrate
+      - run: npm run db:migrate
+      - run: npm run db:seed
+
+      # NACH den Migrationen. Ein Teil der Tests läuft gegen eine echte
+      # Datenbank und schaltet sich anhand von DATABASE_URL frei — vor dem
+      # Migrationslauf fänden sie kein Schema vor. In dieser Reihenfolge
+      # laufen sie hier wirklich mit, statt sich zu überspringen.
       - run: npm test
+
+      # Baut das Schema, das drizzle-kit aus dem Quelltext ableiten würde,
+      # gegen die vorhandenen Migrationen. Gibt es einen Unterschied, wurde
+      # eine Schemaänderung ohne zugehörige Migration eingecheckt.
+      - name: Migrationen sind vollständig
+        run: |
+          npx drizzle-kit generate --name ci-pruefung
+          if ! git diff --quiet -- drizzle; then
+            echo "Es fehlt eine Migration zu einer Schemaänderung."
+            git --no-pager diff --stat -- drizzle
+            exit 1
+          fi
 
   build:
     needs: check

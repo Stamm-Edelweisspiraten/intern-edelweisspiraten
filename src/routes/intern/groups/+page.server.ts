@@ -1,16 +1,17 @@
 import type { PageServerLoad } from "./$types";
 import { getAllGroups } from "$lib/server/groupService";
-import { hasPermission, getLeaderGroupIdsForUser } from "$lib/server/permissionService";
-import { error } from "@sveltejs/kit";
+import { requireGroupsWithPermission } from "$lib/server/permissionGuard";
 
+/**
+ * Die Uebersicht zeigt alle Gruppen des Stammes; geoeffnet werden koennen
+ * nur die, fuer die groups.view vorliegt. `allowed === null` heisst
+ * stammesweit.
+ */
 export const load: PageServerLoad = async (event) => {
-    const perms = event.locals.permissions ?? [];
-    const canAll = hasPermission(perms, "groups.view");
-    const canGroup = hasPermission(perms, "groupleader.groups.view");
-    if (!canAll && !canGroup) throw error(403, "Keine Berechtigung");
+    const allowed = requireGroupsWithPermission(event, "groups.view");
 
     const groupsAll = await getAllGroups();
-    const allowedGroups = canAll ? groupsAll.map((g) => g.id) : await getLeaderGroupIdsForUser(event.locals.user);
+    const allowedGroups = allowed === null ? groupsAll.map((g) => g.id) : allowed;
 
-    return { groups: groupsAll, allowedGroups, canAll };
+    return { groups: groupsAll, allowedGroups, canAll: allowed === null };
 };

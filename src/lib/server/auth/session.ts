@@ -1,8 +1,10 @@
 import crypto from "node:crypto";
-import { ObjectId } from "mongodb";
+import { and, desc, eq, gt, isNull, lt, ne, or } from "drizzle-orm";
 import type { Cookies } from "@sveltejs/kit";
 import { dev } from "$app/environment";
-import { sessions, type SessionDoc } from "$lib/server/db/collections";
+import { db } from "$lib/server/db";
+import { isUuid } from "$lib/server/db/ids";
+import { sessions } from "$lib/server/db/schema";
 
 /**
  * Server-seitige Sitzungen.
@@ -16,6 +18,8 @@ import { sessions, type SessionDoc } from "$lib/server/db/collections";
  * dessen sha256-Hash. Ein reiner Lesezugriff auf die Datenbank erlaubt damit
  * keine Sitzungsuebernahme.
  */
+
+export type Session = typeof sessions.$inferSelect;
 
 export const SESSION_COOKIE = "ep_session";
 
@@ -52,7 +56,7 @@ function cookieOptions(maxAge: number) {
 }
 
 export interface CreateSessionInput {
-    userId: ObjectId;
+    userId: string;
     ip?: string | null;
     userAgent?: string | null;
     /** false, solange der zweite Faktor noch aussteht. */
@@ -62,40 +66,46 @@ export interface CreateSessionInput {
 export async function createSession(
     cookies: Cookies,
     input: CreateSessionInput
-): Promise<{ token: string; session: SessionDoc }> {
+): Promise<{ token: string; session: Session }> {
     const token = newToken();
     const now = new Date();
 
-    const doc: SessionDoc = {
-        tokenHash: hashToken(token),
-        userId: input.userId,
-        createdAt: now,
-        lastSeenAt: now,
-        expiresAt: new Date(now.getTime() + SLIDING_MAX_AGE_SECONDS * 1000),
-        absoluteExpiresAt: new Date(now.getTime() + ABSOLUTE_MAX_AGE_SECONDS * 1000),
-        ip: input.ip ?? null,
-        userAgent: input.userAgent ?? null,
-        device: describeDevice(input.userAgent),
-        revokedAt: null,
-        mfaSatisfied: input.mfaSatisfied,
-        impersonation: null
-    };
+    const [session] = await db
+        .insert(sessions)
+        .values({
+            tokenHash: hashToken(token),
+            userId: input.userId,
+            createdAt: now,
+            lastSeenAt: now,
+            expiresAt: new Date(now.getTime() + SLIDING_MAX_AGE_SECONDS * 1000),
+            absoluteExpiresAt: new Date(now.getTime() + ABSOLUTE_MAX_AGE_SECONDS * 1000),
+            ip: input.ip ?? null,
+            userAgent: input.userAgent ?? null,
+            device: describeDevice(input.userAgent),
+            revokedAt: null,
+            mfaSatisfied: input.mfaSatisfied
+        })
+        .returning();
 
-    await sessions().insertOne(doc);
     cookies.set(SESSION_COOKIE, token, cookieOptions(SLIDING_MAX_AGE_SECONDS));
-
-    return { token, session: doc };
+    return { token, session };
 }
 
 /** Liest und validiert die Sitzung zum Cookie. */
-export async function readSession(token: string | undefined): Promise<SessionDoc | null> {
+export async function readSession(token: string | undefined): Promise<Session | null> {
     if (!token) return null;
 
-    const session = await sessions().findOne({
-        tokenHash: hashToken(token),
-        revokedAt: null,
-        expiresAt: { $gt: new Date() }
-    });
+    const [session] = await db
+        .select()
+        .from(sessions)
+        .where(
+            and(
+                eq(sessions.tokenHash, hashToken(token)),
+                isNull(sessions.revokedAt),
+                gt(sessions.expiresAt, new Date())
+            )
+        )
+        .limit(1);
 
     return session ?? null;
 }
@@ -104,7 +114,7 @@ export async function readSession(token: string | undefined): Promise<SessionDoc
  * Verlaengert die Sitzung gleitend -- hoechstens alle 15 Minuten und nie
  * ueber absoluteExpiresAt hinaus.
  */
-export async function touchSession(session: SessionDoc, cookies: Cookies): Promise<void> {
+export async function touchSession(session: Session, cookies: Cookies): Promise<void> {
     const now = new Date();
     if (now.getTime() - session.lastSeenAt.getTime() < TOUCH_INTERVAL_MS) return;
 
@@ -112,10 +122,10 @@ export async function touchSession(session: SessionDoc, cookies: Cookies): Promi
     const expiresAt =
         slidingEnd > session.absoluteExpiresAt ? session.absoluteExpiresAt : slidingEnd;
 
-    await sessions().updateOne(
-        { tokenHash: session.tokenHash },
-        { $set: { lastSeenAt: now, expiresAt } }
-    );
+    await db
+        .update(sessions)
+        .set({ lastSeenAt: now, expiresAt })
+        .where(eq(sessions.id, session.id));
 
     const remaining = Math.floor((expiresAt.getTime() - now.getTime()) / 1000);
     if (remaining > 0) {
@@ -129,68 +139,97 @@ export async function touchSession(session: SessionDoc, cookies: Cookies): Promi
  * Rechteaenderung aufgerufen: Passwortwechsel, 2FA-Bestaetigung, Start und
  * Ende einer Impersonation.
  */
-export async function rotateToken(session: SessionDoc, cookies: Cookies): Promise<string> {
+export async function rotateToken(session: Session, cookies: Cookies): Promise<string> {
     const token = newToken();
-    await sessions().updateOne(
-        { tokenHash: session.tokenHash },
-        { $set: { tokenHash: hashToken(token) } }
-    );
+    const tokenHash = hashToken(token);
 
-    const remaining = Math.max(
-        60,
-        Math.floor((session.expiresAt.getTime() - Date.now()) / 1000)
-    );
+    await db.update(sessions).set({ tokenHash }).where(eq(sessions.id, session.id));
+    session.tokenHash = tokenHash;
+
+    const remaining = Math.max(60, Math.floor((session.expiresAt.getTime() - Date.now()) / 1000));
     cookies.set(SESSION_COOKIE, token, cookieOptions(remaining));
     return token;
 }
 
 /** Markiert den zweiten Faktor als erledigt. */
-export async function markMfaSatisfied(session: SessionDoc, cookies: Cookies): Promise<void> {
-    await sessions().updateOne(
-        { tokenHash: session.tokenHash },
-        { $set: { mfaSatisfied: true } }
-    );
+export async function markMfaSatisfied(session: Session, cookies: Cookies): Promise<void> {
+    await db.update(sessions).set({ mfaSatisfied: true }).where(eq(sessions.id, session.id));
     session.mfaSatisfied = true;
     await rotateToken(session, cookies);
 }
 
 export async function revokeSession(token: string | undefined, cookies: Cookies): Promise<void> {
     if (token) {
-        await sessions().updateOne(
-            { tokenHash: hashToken(token) },
-            { $set: { revokedAt: new Date() } }
-        );
+        await db
+            .update(sessions)
+            .set({ revokedAt: new Date() })
+            .where(eq(sessions.tokenHash, hashToken(token)));
     }
     cookies.delete(SESSION_COOKIE, { path: "/" });
 }
 
-export async function revokeSessionById(id: string, userId: ObjectId): Promise<boolean> {
-    if (!ObjectId.isValid(id)) return false;
-    const result = await sessions().updateOne(
-        { _id: new ObjectId(id), userId, revokedAt: null },
-        { $set: { revokedAt: new Date() } }
-    );
-    return result.modifiedCount > 0;
+export async function revokeSessionById(id: string, userId: string): Promise<boolean> {
+    if (!isUuid(id) || !isUuid(userId)) return false;
+    const rows = await db
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(sessions.id, id), eq(sessions.userId, userId), isNull(sessions.revokedAt)))
+        .returning({ id: sessions.id });
+    return rows.length > 0;
 }
 
 /** "Überall abmelden" -- optional mit Ausnahme der aktuellen Sitzung. */
 export async function revokeAllForUser(
-    userId: ObjectId,
+    userId: string,
     exceptTokenHash?: string
 ): Promise<number> {
-    const filter: Record<string, unknown> = { userId, revokedAt: null };
-    if (exceptTokenHash) filter.tokenHash = { $ne: exceptTokenHash };
+    if (!isUuid(userId)) return 0;
 
-    const result = await sessions().updateMany(filter, { $set: { revokedAt: new Date() } });
-    return result.modifiedCount;
+    const condition = exceptTokenHash
+        ? and(
+              eq(sessions.userId, userId),
+              isNull(sessions.revokedAt),
+              ne(sessions.tokenHash, exceptTokenHash)
+          )
+        : and(eq(sessions.userId, userId), isNull(sessions.revokedAt));
+
+    const rows = await db
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(condition)
+        .returning({ id: sessions.id });
+    return rows.length;
 }
 
 /** Aktive Sitzungen eines Benutzers fuer die Geraeteliste im Profil. */
-export async function listSessionsForUser(userId: ObjectId) {
-    return sessions()
-        .find({ userId, revokedAt: null, expiresAt: { $gt: new Date() } })
-        .sort({ lastSeenAt: -1 })
-        .toArray();
+export async function listSessionsForUser(userId: string): Promise<Session[]> {
+    if (!isUuid(userId)) return [];
+    return db
+        .select()
+        .from(sessions)
+        .where(
+            and(
+                eq(sessions.userId, userId),
+                isNull(sessions.revokedAt),
+                gt(sessions.expiresAt, new Date())
+            )
+        )
+        .orderBy(desc(sessions.lastSeenAt));
+}
+
+/**
+ * Raeumt abgelaufene und laengst widerrufene Sitzungen weg.
+ *
+ * In MongoDB erledigte das ein TTL-Index auf expiresAt. PostgreSQL kennt so
+ * etwas nicht, deshalb laeuft das beim Start und danach stuendlich.
+ */
+export async function cleanupSessions(): Promise<number> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const rows = await db
+        .delete(sessions)
+        .where(or(lt(sessions.expiresAt, new Date()), lt(sessions.revokedAt, cutoff)))
+        .returning({ id: sessions.id });
+    return rows.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -208,55 +247,54 @@ export async function listSessionsForUser(userId: ObjectId) {
  * entfaellt dieses Problem.
  */
 export async function startImpersonation(
-    session: SessionDoc,
+    session: Session,
     cookies: Cookies,
-    target: ObjectId,
-    original: { id: ObjectId; name: string; email: string }
+    targetUserId: string,
+    original: { id: string; name: string; email: string }
 ): Promise<void> {
     const expiresAt = new Date(Date.now() + IMPERSONATION_MAX_AGE_SECONDS * 1000);
 
-    await sessions().updateOne(
-        { tokenHash: session.tokenHash },
-        {
-            $set: {
-                userId: target,
-                expiresAt,
-                impersonation: {
-                    originalUserId: original.id,
-                    originalUserName: original.name,
-                    originalUserEmail: original.email,
-                    startedAt: new Date()
-                }
-            }
-        }
-    );
+    await db
+        .update(sessions)
+        .set({
+            userId: targetUserId,
+            expiresAt,
+            impersonationUserId: original.id,
+            impersonationUserName: original.name,
+            impersonationUserEmail: original.email,
+            impersonationStartedAt: new Date()
+        })
+        .where(eq(sessions.id, session.id));
 
-    session.userId = target;
+    session.userId = targetUserId;
     session.expiresAt = expiresAt;
     await rotateToken(session, cookies);
 }
 
-export async function stopImpersonation(
-    session: SessionDoc,
-    cookies: Cookies
-): Promise<boolean> {
-    if (!session.impersonation) return false;
+export async function stopImpersonation(session: Session, cookies: Cookies): Promise<boolean> {
+    if (!session.impersonationUserId) return false;
 
     const expiresAt = new Date(Date.now() + SLIDING_MAX_AGE_SECONDS * 1000);
-    await sessions().updateOne(
-        { tokenHash: session.tokenHash },
-        {
-            $set: {
-                userId: session.impersonation.originalUserId,
-                expiresAt,
-                impersonation: null
-            }
-        }
-    );
+    const originalUserId = session.impersonationUserId;
 
-    session.userId = session.impersonation.originalUserId;
+    await db
+        .update(sessions)
+        .set({
+            userId: originalUserId,
+            expiresAt,
+            impersonationUserId: null,
+            impersonationUserName: null,
+            impersonationUserEmail: null,
+            impersonationStartedAt: null
+        })
+        .where(eq(sessions.id, session.id));
+
+    session.userId = originalUserId;
     session.expiresAt = expiresAt;
-    session.impersonation = null;
+    session.impersonationUserId = null;
+    session.impersonationUserName = null;
+    session.impersonationUserEmail = null;
+    session.impersonationStartedAt = null;
     await rotateToken(session, cookies);
     return true;
 }

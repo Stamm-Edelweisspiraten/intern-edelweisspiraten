@@ -56,19 +56,19 @@
         {#if caption}
             <caption class="sr-only">{caption}</caption>
         {/if}
-        <thead class="bg-surface-muted">
+        <thead class="bg-surface-sunken border-b border-border">
             <tr>
                 {#each tableColumns as column (column.key)}
                     <th
                         scope="col"
                         style={column.width ? `width:${column.width}` : undefined}
-                        class={`px-6 py-3 text-xs font-semibold text-fg-subtle uppercase tracking-wide ${ALIGN[column.align ?? "left"]}`}
+                        class={`px-4 py-2.5 text-xs font-semibold text-fg-muted uppercase tracking-wide ${ALIGN[column.align ?? "left"]}`}
                     >
                         {column.label}
                     </th>
                 {/each}
                 {#if actions}
-                    <th scope="col" class="px-6 py-3 text-right text-xs font-semibold text-fg-subtle uppercase tracking-wide">
+                    <th scope="col" class="px-4 py-2.5 text-right text-xs font-semibold text-fg-muted uppercase tracking-wide">
                         Aktionen
                     </th>
                 {/if}
@@ -79,7 +79,7 @@
                 <tr>
                     <td
                         colspan={tableColumns.length + (actions ? 1 : 0)}
-                        class="px-6 py-8 text-center text-sm text-fg-subtle"
+                        class="px-4 py-8 text-center text-sm text-fg-subtle"
                     >
                         {empty}
                     </td>
@@ -88,7 +88,7 @@
                 {#each rows as row (getKey(row))}
                     <tr class={`hover:bg-surface-muted transition ${rowClass?.(row) ?? ""}`}>
                         {#each tableColumns as column (column.key)}
-                            <td class={`px-6 py-4 text-sm text-fg ${ALIGN[column.align ?? "left"]}`}>
+                            <td class={`px-4 py-2.5 text-sm text-fg ${ALIGN[column.align ?? "left"]}`}>
                                 {#if column.cell}
                                     {@render column.cell(row)}
                                 {:else if rowHref?.(row) && column === tableColumns[0]}
@@ -101,7 +101,7 @@
                             </td>
                         {/each}
                         {#if actions}
-                            <td class="px-6 py-4 text-right">
+                            <td class="px-4 py-2.5 text-right">
                                 <div class="inline-flex items-center gap-2 justify-end flex-wrap">
                                     {@render actions(row)}
                                 </div>
@@ -121,7 +121,7 @@
     {:else}
         {#each rows as row (getKey(row))}
             <article
-                class={`bg-surface border border-border rounded-2xl p-4 space-y-3 ${rowClass?.(row) ?? ""}`}
+                class={`bg-surface border border-border rounded-card p-4 space-y-3 ${rowClass?.(row) ?? ""}`}
                 style="box-shadow: var(--shadow-card);"
             >
                 {#if cardTitle}
@@ -145,7 +145,7 @@
                             <dt class="text-[11px] font-semibold text-fg-subtle uppercase tracking-wide">
                                 {column.label}
                             </dt>
-                            <dd class="text-sm text-fg mt-0.5 break-words">
+                            <dd class="text-sm text-fg mt-0.5 break-words tabular-figures">
                                 {#if column.cell}
                                     {@render column.cell(row)}
                                 {:else}
