@@ -1,7 +1,16 @@
-import { redirect, type Handle } from "@sveltejs/kit";
-import { getPermissionsForUser, hasPermission } from "$lib/server/permissionService";
+import { redirect, type Handle, type ServerInit } from "@sveltejs/kit";
+import { dev } from "$app/environment";
+import { getPermissionsForUser } from "$lib/server/permissionService";
+import { matchesPermission } from "$lib/permissions/match";
 import { verifySignedSession } from "$lib/server/session";
+import { ensureIndexes } from "$lib/server/db/indexes";
+import { parseTheme, THEME_COOKIE } from "$lib/theme";
 import { db } from "$lib/server/mongo";
+
+/** Einmalig beim Start: Indizes sicherstellen. */
+export const init: ServerInit = async () => {
+    await ensureIndexes();
+};
 
 export const handle: Handle = async ({ event, resolve }) => {
     const raw = event.cookies.get("session");
@@ -16,11 +25,19 @@ export const handle: Handle = async ({ event, resolve }) => {
                 email: { $in: [session.email, normalizedEmail] }
             });
             if (userDoc?.memberIds) {
-                memberIds = (userDoc.memberIds as any[]).map((id: any) => id?.toString?.() ?? id).filter(Boolean);
+                memberIds = (userDoc.memberIds as any[])
+                    .map((id: any) => id?.toString?.() ?? id)
+                    .filter(Boolean);
             }
         }
         if (session.memberId) {
-            memberIds = Array.from(new Set([session.memberId, ...memberIds].map((id) => id?.toString?.() ?? id).filter(Boolean)));
+            memberIds = Array.from(
+                new Set(
+                    [session.memberId, ...memberIds]
+                        .map((id) => id?.toString?.() ?? id)
+                        .filter(Boolean)
+                )
+            );
         }
 
         event.locals.user = {
@@ -39,8 +56,12 @@ export const handle: Handle = async ({ event, resolve }) => {
         event.locals.impersonator = null;
     }
 
-    // Login- und Join-Routen sollen öffentlich bleiben
-    const publicPrefixes = ["/login", "/join"];
+    // Theme aus dem Cookie, damit der Server die Klasse direkt setzen kann.
+    const theme = parseTheme(event.cookies.get(THEME_COOKIE));
+    event.locals.theme = theme;
+
+    // Login- und Join-Routen bleiben oeffentlich; die UI-Galerie nur lokal.
+    const publicPrefixes = dev ? ["/login", "/join", "/dev"] : ["/login", "/join"];
     const isPublic = publicPrefixes.some((p) => event.url.pathname.startsWith(p));
 
     if (!isPublic && !event.locals.user) {
@@ -52,10 +73,18 @@ export const handle: Handle = async ({ event, resolve }) => {
         event.locals.permissions = perms;
 
         // Admin-Bereich nur mit admin.view
-        if (event.url.pathname.startsWith("/intern/admin") && !hasPermission(perms, "admin.view")) {
+        if (
+            event.url.pathname.startsWith("/intern/admin") &&
+            !matchesPermission(perms, "admin.view")
+        ) {
             throw redirect(302, "/intern/dashboard");
         }
+    } else {
+        event.locals.permissions = [];
     }
 
-    return resolve(event);
+    return resolve(event, {
+        transformPageChunk: ({ html }) =>
+            html.replace("%ep.theme%", theme === "dark" ? "dark" : "")
+    });
 };

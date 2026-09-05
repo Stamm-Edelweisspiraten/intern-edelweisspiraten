@@ -1,85 +1,215 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
-:root {
-    --bg: #f7f8fb;
-    --surface: #ffffff;
-    --border: #e5e7eb;
-    --text: #0f172a;
-    --muted: #6b7280;
-    --primary: #2563eb;
-    --primary-strong: #1d4ed8;
-    --radius: 14px;
-    --shadow: 0 20px 60px -30px rgba(15, 23, 42, 0.35);
+/*
+ * Design-Tokens des internen Portals.
+ *
+ * Grundlage ist intern-design-sheet.md: Blau als Primaerfarbe, Emerald fuer
+ * Erfolg, Amber fuer offene Posten, Rot fuer Abgang, Grau als Basis, Karten
+ * mit rounded-2xl und dezentem Schatten. Die Werte des hellen Themes
+ * entsprechen exakt dem bisherigen Erscheinungsbild.
+ *
+ * Neu ist, dass diese Werte nicht mehr als rohe Paletten-Klassen
+ * (bg-white, border-gray-200) in 47 Dateien stehen, sondern als semantische
+ * Tokens -- nur dadurch ist ein Dark Mode ueberhaupt moeglich, ohne jede
+ * Seite zweimal anzufassen.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+    --font-sans: "Manrope", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+    /* Flaechen und Text */
+    --color-surface: var(--surface);
+    --color-surface-muted: var(--surface-muted);
+    --color-surface-sunken: var(--surface-sunken);
+    --color-border: var(--border);
+    --color-border-strong: var(--border-strong);
+    --color-fg: var(--fg);
+    --color-fg-muted: var(--fg-muted);
+    --color-fg-subtle: var(--fg-subtle);
+
+    /* Farbrollen */
+    --color-primary: var(--primary);
+    --color-primary-hover: var(--primary-hover);
+    --color-primary-fg: var(--primary-fg);
+    --color-primary-soft: var(--primary-soft);
+    --color-primary-soft-fg: var(--primary-soft-fg);
+    --color-primary-soft-border: var(--primary-soft-border);
+
+    --color-success: var(--success);
+    --color-success-soft: var(--success-soft);
+    --color-success-soft-fg: var(--success-soft-fg);
+    --color-success-soft-border: var(--success-soft-border);
+
+    --color-warning: var(--warning);
+    --color-warning-soft: var(--warning-soft);
+    --color-warning-soft-fg: var(--warning-soft-fg);
+    --color-warning-soft-border: var(--warning-soft-border);
+
+    --color-danger: var(--danger);
+    --color-danger-hover: var(--danger-hover);
+    --color-danger-soft: var(--danger-soft);
+    --color-danger-soft-fg: var(--danger-soft-fg);
+    --color-danger-soft-border: var(--danger-soft-border);
+
+    --color-info: var(--info);
+    --color-info-soft: var(--info-soft);
+    --color-info-soft-fg: var(--info-soft-fg);
+    --color-info-soft-border: var(--info-soft-border);
+
+    --radius-card: 1rem;
+    --radius-control: 0.75rem;
 }
 
-* {
-    box-sizing: border-box;
+@layer base {
+    :root {
+        color-scheme: light;
+
+        --surface: #ffffff;
+        --surface-muted: #f8fafc;
+        --surface-sunken: #f1f5f9;
+        --border: #e5e7eb;
+        --border-strong: #d1d5db;
+        --fg: #111827;
+        --fg-muted: #4b5563;
+        /* Bewusst gray-500 statt des bisherigen gray-400: gray-400 liegt auf
+           Weiss bei ca. 2.8:1 und verfehlt damit die AA-Anforderung. */
+        --fg-subtle: #6b7280;
+
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --primary-fg: #ffffff;
+        --primary-soft: #eff6ff;
+        --primary-soft-fg: #1d4ed8;
+        --primary-soft-border: #bfdbfe;
+
+        --success: #059669;
+        --success-soft: #ecfdf5;
+        --success-soft-fg: #047857;
+        --success-soft-border: #a7f3d0;
+
+        --warning: #d97706;
+        --warning-soft: #fffbeb;
+        --warning-soft-fg: #b45309;
+        --warning-soft-border: #fde68a;
+
+        --danger: #dc2626;
+        --danger-hover: #b91c1c;
+        --danger-soft: #fef2f2;
+        --danger-soft-fg: #b91c1c;
+        --danger-soft-border: #fecaca;
+
+        --info: #0284c7;
+        --info-soft: #f0f9ff;
+        --info-soft-fg: #0369a1;
+        --info-soft-border: #bae6fd;
+
+        --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.06), 0 1px 3px 0 rgb(15 23 42 / 0.04);
+        --shadow-raised: 0 10px 30px -12px rgb(15 23 42 / 0.25);
+    }
+
+    .dark {
+        color-scheme: dark;
+
+        --surface: #111827;
+        --surface-muted: #0b1220;
+        --surface-sunken: #0f172a;
+        --border: #1f2937;
+        --border-strong: #374151;
+        --fg: #f1f5f9;
+        --fg-muted: #cbd5e1;
+        --fg-subtle: #94a3b8;
+
+        --primary: #3b82f6;
+        --primary-hover: #60a5fa;
+        --primary-fg: #0b1220;
+        --primary-soft: #172554;
+        --primary-soft-fg: #bfdbfe;
+        --primary-soft-border: #1e3a8a;
+
+        --success: #34d399;
+        --success-soft: #052e26;
+        --success-soft-fg: #6ee7b7;
+        --success-soft-border: #065f46;
+
+        --warning: #fbbf24;
+        --warning-soft: #2a1c05;
+        --warning-soft-fg: #fcd34d;
+        --warning-soft-border: #78350f;
+
+        --danger: #f87171;
+        --danger-hover: #fca5a5;
+        --danger-soft: #300f0f;
+        --danger-soft-fg: #fca5a5;
+        --danger-soft-border: #7f1d1d;
+
+        --info: #38bdf8;
+        --info-soft: #082f49;
+        --info-soft-fg: #7dd3fc;
+        --info-soft-border: #075985;
+
+        --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.3);
+        --shadow-raised: 0 10px 30px -12px rgb(0 0 0 / 0.6);
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font-sans);
+        background-color: var(--surface-muted);
+        color: var(--fg);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    /*
+     * Sichtbarer Fokus auf allem Interaktiven. Das Design-Sheet fordert das
+     * bereits; umgesetzt war es bisher nur auf Eingabefeldern -- kein
+     * einziger Button und kein Link hatte einen Fokus-Stil.
+     */
+    :focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+        border-radius: 4px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
 }
 
-body {
-    margin: 0;
-    font-family: 'Manrope', 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background: radial-gradient(circle at 10% 10%, rgba(37,99,235,0.08), transparent 35%),
-    radial-gradient(circle at 90% 0%, rgba(59,130,246,0.12), transparent 30%),
-    var(--bg);
-    color: var(--text);
-    min-height: 100vh;
+@layer components {
+    /* Nur fuer Inhalte, die als HTML aus dem Mail-Editor stammen. */
+    .prose-mail :where(p, ul, ol) {
+        margin: 0 0 0.75rem;
+    }
 }
 
-a {
-    color: inherit;
-    text-decoration: none;
-}
-
-.card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-}
-
-.btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    padding: 0.75rem 1.1rem;
-    border-radius: 12px;
-    font-weight: 600;
-    transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, color 120ms ease;
-    border: 1px solid transparent;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, var(--primary), var(--primary-strong));
-    color: #fff;
-    box-shadow: 0 12px 30px -14px rgba(37, 99, 235, 0.5);
-}
-
-.btn-primary:hover {
-    transform: translateY(-1px);
-}
-
-.container {
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 1.25rem;
-}
-
-/* Ensure readable text on strong brand backgrounds */
-.bg-blue-500,
-.bg-blue-600,
-.bg-blue-700,
-.bg-blue-800,
-.bg-blue-900 {
-    color: #fff !important;
-}
-
-.bg-blue-500 a,
-.bg-blue-600 a,
-.bg-blue-700 a,
-.bg-blue-800 a,
-.bg-blue-900 a {
-    color: #fff !important;
-}
+/*
+ * Z-Index-Skala, damit sich Kopfzeile, Menue, Banner, Modal und Toasts nicht
+ * mehr gegenseitig verdecken (vorher lagen Banner, Menue und Toasts alle auf
+ * z-50, sodass Toasts das Impersonation-Banner ueberdeckt haben).
+ *
+ *   Inhalt            0
+ *   Sticky-Kopfzeile 30
+ *   Menue-Overlay    40
+ *   Menue-Panel      50
+ *   Modal            60
+ *   Toasts           70
+ */
