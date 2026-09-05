@@ -1,50 +1,79 @@
+import { fail, redirect } from "@sveltejs/kit";
+import { ObjectId } from "mongodb";
 import type { Actions, PageServerLoad } from "./$types";
 import { env } from "$env/dynamic/private";
+import { requirePermission } from "$lib/server/permissionGuard";
 import { createUser } from "$lib/server/userService";
-import { redirect, error } from "@sveltejs/kit";
-import { hasPermission } from "$lib/server/permissionService";
+import { listRoles } from "$lib/server/roleService";
+import { issueToken } from "$lib/server/auth/passwordReset";
+import { sendEmail } from "$lib/server/emailService";
+import { inviteTemplate } from "$lib/server/emailTemplates/passwordReset";
 
-export const load: PageServerLoad = async ({ locals }) => {
-    if (!hasPermission(locals.permissions ?? [], "user.create")) {
-        throw error(403, "Keine Berechtigung");
-    }
+/**
+ * Neuen Zugang anlegen.
+ *
+ * Vorher wurden die Gruppen des externen Anbieters ueber dessen API geladen
+ * und der Benutzer dort mit einem zufaelligen Passwort erzeugt, das im
+ * Klartext an den Aufrufer zurueckging. Jetzt entsteht ein eingeladener
+ * Zugang ohne Passwort; die Vergabe erfolgt ueber einen Aktivierungslink.
+ */
 
-    // Authentik Gruppen laden
-    const AUTHENTIK_URL = env.AUTHENTIK_URL;
-    const AUTHENTIK_TOKEN = env.AUTHENTIK_TOKEN;
+export const load: PageServerLoad = async (event) => {
+    requirePermission(event, "user.create");
 
-    const res = await fetch(`${AUTHENTIK_URL}/api/v3/core/groups/?page_size=1000`, {
-        headers: {
-            "Authorization": `Bearer ${AUTHENTIK_TOKEN}`
-        }
-    });
-
-    const groups = await res.json();
-
+    const roles = await listRoles();
     return {
-        groups: groups.results ?? []
+        roles: roles.map((role) => ({
+            id: role._id!.toString(),
+            key: role.key,
+            name: role.name,
+            description: role.description ?? ""
+        }))
     };
 };
 
 export const actions: Actions = {
-    createUser: async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "user.create")) {
-            throw error(403, "Keine Berechtigung");
+    createUser: async (event) => {
+        requirePermission(event, "user.create");
+
+        const form = await event.request.formData();
+        const name = String(form.get("name") ?? "").trim();
+        const email = String(form.get("email") ?? "").trim();
+        const type = String(form.get("type") ?? "parent") === "child" ? "child" : "parent";
+        const roleIds = form
+            .getAll("roles")
+            .map(String)
+            .filter((id) => ObjectId.isValid(id))
+            .map((id) => new ObjectId(id));
+
+        const values = { name, email };
+
+        if (!name) return fail(400, { error: "Bitte einen Namen angeben.", ...values });
+        if (!email.includes("@")) {
+            return fail(400, { error: "Bitte eine gültige E-Mail-Adresse angeben.", ...values });
         }
 
-        const form = await request.formData();
+        const result = await createUser({ name, email, type, roleIds, status: "invited" });
 
-        const name = form.get("name") as string;
-        const email = form.get("email") as string;
+        if (!result.ok || !result.user?._id) {
+            return fail(400, { error: result.error ?? "Der Zugang konnte nicht angelegt werden.", ...values });
+        }
 
-        const groups = form.getAll("groups") as string[];
+        // Aktivierungslink verschicken; ein Fehlschlag darf die Anlage nicht
+        // rueckgaengig machen -- der Link laesst sich spaeter erneut senden.
+        try {
+            const { token } = await issueToken(result.user._id, "invite");
+            const base = env.PUBLIC_APP_URL || event.url.origin;
+            await sendEmail({
+                to: result.user.email,
+                subject: "Dein Zugang zum internen Bereich",
+                html: inviteTemplate(result.user.name, `${base}/password/reset/${token}`, 14)
+            });
+        } catch (err) {
+            console.error("Einladungsmail konnte nicht versendet werden:", err);
+            throw redirect(303, `/intern/admin/user/${result.user._id}?hinweis=mail-fehlgeschlagen`);
+        }
 
-        await createUser({
-            name,
-            email,
-            groups
-        });
-
-        throw redirect(303, "/intern/admin/user");
+        throw redirect(303, "/intern/admin/user?hinweis=eingeladen");
     }
 };

@@ -17,7 +17,7 @@
         step?: string | number;
         minlength?: number;
         maxlength?: number;
-        autocomplete?: string;
+        autocomplete?: HTMLInputElement["autocomplete"];
         inputmode?: "text" | "numeric" | "decimal" | "email" | "tel";
         class?: string;
     }

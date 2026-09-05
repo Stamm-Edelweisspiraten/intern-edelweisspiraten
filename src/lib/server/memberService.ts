@@ -314,6 +314,9 @@ export async function generateInviteCode(): Promise<string> {
     return code;
 }
 
+/** Gueltigkeitsdauer eines Einladungscodes in Tagen. */
+export const INVITE_CODE_TTL_DAYS = 60;
+
 export async function assignInviteCode(memberId: string) {
     const inviteCode = await generateInviteCode();
 
@@ -323,7 +326,10 @@ export async function assignInviteCode(memberId: string) {
             $set: {
                 inviteCode,
                 inviteCodeIssuedAt: new Date().toISOString(),
-                inviteCodeExpiresAt: null
+                // Vorher: null -- der Code lief nie ab.
+                inviteCodeExpiresAt: new Date(
+                    Date.now() + INVITE_CODE_TTL_DAYS * 24 * 60 * 60 * 1000
+                ).toISOString()
             }
         }
     );

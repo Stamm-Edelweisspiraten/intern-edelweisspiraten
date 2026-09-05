@@ -1,86 +1,143 @@
-﻿<script lang="ts">
-    export let data;
+<script lang="ts">
+    import { page } from "$app/state";
+    import { Alert, Badge, Button, Card, FormField, Modal, PageHeader, SearchInput, TextInput } from "$lib/components/ui";
+    import type { ActionData, PageData } from "./$types";
 
-    let search = "";
-    $: filteredPermissions = (data.allPermissions ?? []).filter((p: string) =>
-        p.toLowerCase().includes(search.toLowerCase())
+    let { data, form }: { data: PageData; form: ActionData } = $props();
+
+    let search = $state("");
+    let createOpen = $state(false);
+
+    /** Berechtigungen nach Modul gruppieren, damit die Matrix lesbar bleibt. */
+    const grouped = $derived.by(() => {
+        const groups = new Map<string, string[]>();
+        for (const permission of data.allPermissions) {
+            const module = permission === "*" ? "Global" : permission.split(".")[0];
+            const list = groups.get(module) ?? [];
+            list.push(permission);
+            groups.set(module, list);
+        }
+        return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b, "de"));
+    });
+
+    const filteredRoles = $derived(
+        data.roles.filter((role) => {
+            const needle = search.trim().toLowerCase();
+            if (!needle) return true;
+            return `${role.name} ${role.key} ${role.description}`.toLowerCase().includes(needle);
+        })
     );
-    let selectedGroup: string | null = null;
-    $: selectedGroupName = data.groups.find((g: any) => String(g.pk) === selectedGroup)?.name ?? "";
+
+    const saved = $derived(page.url.searchParams.get("gespeichert") === "1");
 </script>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Admin</p>
-            <h1 class="text-4xl font-bold text-gray-900">Berechtigungen</h1>
-            <p class="text-sm text-gray-600 mt-1">Rollen und Zugriffsrechte verwalten.</p>
-        </div>
-        <a
-                href="/intern/admin"
-                class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
-        >
-            <span class="bi bi-arrow-left"></span>
-            Zurück
-        </a>
-    </div>
+<svelte:head><title>Berechtigungen - Intern</title></svelte:head>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-6">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-end">
-            <div class="lg:col-span-2">
-                <label class="text-sm font-semibold text-gray-700">Gruppe auswählen</label>
-                <select
-                        bind:value={selectedGroup}
-                        class="mt-1 w-full px-4 py-3 rounded-xl text-sm border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400"
-                >
-                    <option value={null}>Bitte wählen...</option>
-                    {#each data.groups as g}
-                        <option value={String(g.pk)}>{g.name}</option>
-                    {/each}
-                </select>
-            </div>
-            <div>
-                <label class="text-sm font-semibold text-gray-700">Suche</label>
-                <div class="mt-1 relative">
-                    <span class="bi bi-search absolute left-3 top-2.5 text-gray-400"></span>
-                    <input
-                            type="text"
-                            placeholder="Permissions durchsuchen..."
-                            bind:value={search}
-                            class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 text-sm text-gray-700"
-                    />
+<div class="max-w-6xl mx-auto space-y-8">
+    <PageHeader
+        title="Berechtigungen"
+        eyebrow="Adminbereich"
+        subtitle="Lege fest, welche Rolle auf welche Bereiche zugreifen darf."
+        back={{ href: "/intern/admin" }}
+    >
+        {#snippet actions()}
+            <SearchInput bind:value={search} placeholder="Rolle suchen..." label="Rolle suchen" />
+            <Button variant="primary" icon="plus-circle" onclick={() => (createOpen = true)}>
+                Neue Rolle
+            </Button>
+        {/snippet}
+    </PageHeader>
+
+    {#if saved}
+        <Alert tone="success" message="Die Änderungen wurden gespeichert." />
+    {/if}
+    {#if form?.error}
+        <Alert tone="danger" message={form.error} />
+    {/if}
+
+    {#if filteredRoles.length === 0}
+        <Card>
+            <p class="text-sm text-fg-subtle text-center py-6">Keine passende Rolle gefunden.</p>
+        </Card>
+    {/if}
+
+    {#each filteredRoles as role (role.id)}
+        <Card>
+            {#snippet header()}
+                <div class="flex items-center gap-3 flex-wrap">
+                    <h2 class="text-lg font-semibold text-fg">{role.name}</h2>
+                    <Badge tone="neutral" size="xs" label={role.key} />
+                    {#if role.system}
+                        <Badge tone="primary" size="xs" label="Systemrolle" />
+                    {/if}
                 </div>
-            </div>
-        </div>
+                {#if role.description}
+                    <p class="text-sm text-fg-muted mt-1">{role.description}</p>
+                {/if}
+            {/snippet}
 
-        {#if selectedGroup}
-            <form method="post" action="?/save" class="space-y-4">
-                <input type="hidden" name="groupPk" value={selectedGroup} />
-                <input type="hidden" name="groupName" value={selectedGroupName} />
+            {#snippet actions()}
+                <Badge tone="info" size="xs" label={`${role.userCount} Benutzer`} />
+            {/snippet}
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {#each filteredPermissions as perm}
-                        <label class="flex items-center gap-3 p-3 border border-gray-200 rounded-lg bg-white shadow-sm hover:border-blue-200 hover:bg-blue-50 transition">
-                            <input
-                                    type="checkbox"
-                                    name="permissions"
-                                    value={perm}
-                                    checked={data.groupPermissions[selectedGroup]?.includes(perm)}
-                            />
-                            <span class="text-sm text-gray-800">{perm}</span>
-                        </label>
-                    {/each}
-                </div>
+            <form method="post" action="?/save" class="space-y-5">
+                <input type="hidden" name="roleId" value={role.id} />
 
-                <div class="flex justify-end">
-                    <button class="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm">
-                        <span class="bi bi-save"></span>
-                        Speichern
-                    </button>
+                {#each grouped as [module, permissions] (module)}
+                    <fieldset class="space-y-2">
+                        <legend class="text-xs font-semibold text-fg-subtle uppercase tracking-wide">
+                            {module}
+                        </legend>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {#each permissions as permission (permission)}
+                                <label
+                                    class="flex items-center gap-2 text-sm text-fg px-3 py-2 rounded-lg border border-border hover:bg-surface-muted transition cursor-pointer"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        name="permissions"
+                                        value={permission}
+                                        checked={role.permissions.includes(permission)}
+                                        class="rounded border-border-strong"
+                                    />
+                                    <span class="font-mono text-xs break-all">{permission}</span>
+                                </label>
+                            {/each}
+                        </div>
+                    </fieldset>
+                {/each}
+
+                <div class="flex justify-end pt-2">
+                    <Button type="submit" variant="primary" icon="check-lg">Speichern</Button>
                 </div>
             </form>
-        {:else}
-            <p class="text-sm text-gray-600">Wähle zuerst eine Gruppe, um Berechtigungen anzupassen.</p>
-        {/if}
-    </div>
+        </Card>
+    {/each}
 </div>
+
+<Modal bind:open={createOpen} title="Neue Rolle anlegen">
+    <form method="post" action="?/create" class="space-y-4" id="rolle-anlegen">
+        <FormField label="Name" required>
+            {#snippet children({ id })}
+                <TextInput {id} name="name" required placeholder="Kassenwart" />
+            {/snippet}
+        </FormField>
+        <FormField label="Schlüssel" hint="Kleinbuchstaben, Ziffern und Bindestriche." required>
+            {#snippet children({ id })}
+                <TextInput {id} name="key" required placeholder="kassenwart" />
+            {/snippet}
+        </FormField>
+        <FormField label="Beschreibung">
+            {#snippet children({ id })}
+                <TextInput {id} name="description" placeholder="Verwaltet die Kasse." />
+            {/snippet}
+        </FormField>
+    </form>
+
+    {#snippet footer()}
+        <Button variant="secondary" onclick={() => (createOpen = false)}>Abbrechen</Button>
+        <Button type="submit" variant="primary" icon="plus-circle" onclick={() => document.forms.namedItem("rolle-anlegen")?.requestSubmit()}>
+            Anlegen
+        </Button>
+    {/snippet}
+</Modal>

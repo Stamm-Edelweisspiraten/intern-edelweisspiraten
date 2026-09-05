@@ -1,126 +1,93 @@
-import { db } from "$lib/server/mongo";
-import { ALL_PERMISSIONS } from "$lib/permissions";
 import { ObjectId } from "mongodb";
+import { db } from "$lib/server/mongo";
+import { roles, type UserDoc } from "$lib/server/db/collections";
+import { ALL_PERMISSIONS } from "$lib/permissions";
+import { matchesPermission } from "$lib/permissions/match";
 
-// --- Permissions ---
-export async function getAllPermissions() {
-    return await db.collection("groupPermissions").find().toArray();
+/**
+ * Aufloesung der Berechtigungen eines Benutzers ueber seine Rollen.
+ *
+ * Vorher lief das ueber die kleingeschriebenen Gruppennamen aus dem Token
+ * gegen groupPermissions -- mit einem Gross-/Kleinschreibungsfehler, einer
+ * fest verdrahteten Sonderregel fuer "ep-admin" und einer Ausgabe der
+ * kompletten Berechtigungsliste auf die Konsole bei JEDEM Request.
+ */
+
+interface CacheEntry {
+    permissions: string[];
+    requireMfa: boolean;
+    at: number;
 }
 
-export async function createPermission(key: string, description: string) {
-    return await db.collection("groupPermissions").insertOne({ key, description });
+const CACHE_TTL_MS = 60_000;
+const cache = new Map<string, CacheEntry>();
+
+/** Wird bei jeder Rollenaenderung erhoeht und macht den Cache ungueltig. */
+let rolesVersion = 0;
+
+export function invalidatePermissionCache(): void {
+    rolesVersion += 1;
+    cache.clear();
 }
 
-export async function deletePermission(key: string) {
-    return await db.collection("groupPermissions").deleteOne({ key });
+export interface ResolvedPermissions {
+    permissions: string[];
+    /** true, wenn eine der Rollen Zwei-Faktor verlangt. */
+    requireMfa: boolean;
 }
 
-
-// --- Permission Groups ---
-export async function getPermissionGroup(authentikGroupPk: number) {
-    return await db.collection("permissionGroups").findOne({ authentikGroupPk });
-}
-
-export async function setPermissionGroup(authentikGroupPk: number, permissions: string[]) {
-    const col = db.collection("permissionGroups");
-
-    return await col.updateOne(
-        { authentikGroupPk },
-        { $set: { permissions } },
-        { upsert: true }
-    );
-}
-
-export async function getPermissionsForUser(session: any): Promise<string[]> {
-    if (!session) return [];
-
-    const userGroups = session.userinfo?.groups ?? [];
-    if (userGroups.length === 0) return [];
-
-    // GroupPermissions aus DB holen (match via authentik-group-name)
-    const groupEntries = await db.collection("groupPermissions")
-        .find({
-            $or: [
-                { groupPk: { $in: userGroups } },
-                { groupName: { $in: userGroups } }
-            ]
-        })
-        .toArray();
-
-    // flatten
-    let perms = groupEntries.flatMap(e => e.permissions ?? []);
-
-    // Fallback: ep-admin -> alles erlauben, falls keine expliziten Permissions gefunden
-    if (perms.length === 0 && userGroups.includes("ep-admin")) {
-        perms = ["*"];
+export async function resolvePermissions(roleIds: ObjectId[]): Promise<ResolvedPermissions> {
+    if (!roleIds || roleIds.length === 0) {
+        return { permissions: [], requireMfa: false };
     }
 
-    // debug
-    console.log("User Groups:", userGroups);
-    console.log("Matched groupPermissions entries:", groupEntries);
-    console.log("Flattened permissions:", perms);
-
-    return perms;
-}
-
-
-
-export function hasPermission(
-    permissions: string[],
-    required: string
-): boolean {
-    if (!permissions || permissions.length === 0) return false;
-
-    // Regel 1: Globale Wildcard
-    if (permissions.includes("*")) return true;
-
-    // Regel 2: Module-Wildcard (z.B. member.*)
-    for (const perm of permissions) {
-        if (perm.endsWith(".*")) {
-            const prefix = perm.slice(0, -2);
-
-            if (required.startsWith(prefix + ".")) {
-                return true;
-            }
-        }
+    const key = `${rolesVersion}:${roleIds.map((id) => id.toString()).sort().join(",")}`;
+    const cached = cache.get(key);
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+        return { permissions: cached.permissions, requireMfa: cached.requireMfa };
     }
 
-    // Regel 3: Exakte Matches
-    return permissions.includes(required);
+    const found = await roles().find({ _id: { $in: roleIds } }).toArray();
+    const permissions = Array.from(new Set(found.flatMap((role) => role.permissions ?? [])));
+    const requireMfa = found.some((role) => (role as { requireMfa?: boolean }).requireMfa === true);
+
+    cache.set(key, { permissions, requireMfa, at: Date.now() });
+    return { permissions, requireMfa };
 }
 
-export async function getPermissionsForGroup(groupPk: string) {
-    const entry = await db.collection("groupPermissions").findOne({ groupPk });
-    return entry?.permissions ?? [];
+export async function getPermissionsForUser(user: Pick<UserDoc, "roleIds">): Promise<string[]> {
+    const { permissions } = await resolvePermissions(user?.roleIds ?? []);
+    return permissions;
 }
 
-export async function setPermissionsForGroup(groupPk: string, permissions: string[], groupName?: string) {
-    await db.collection("groupPermissions").updateOne(
-        { groupPk },
-        { $set: { groupPk, groupName, permissions } },
-        { upsert: true }
-    );
+/** Delegiert an den gemeinsamen Matcher. */
+export function hasPermission(permissions: string[], required: string): boolean {
+    return matchesPermission(permissions, required);
 }
 
-export async function getAllDefinedPermissions() {
+export function getAllDefinedPermissions(): string[] {
     return ALL_PERMISSIONS;
 }
 
-export async function getLeaderGroupIdsForUser(user: any): Promise<string[]> {
+/**
+ * Gruppen-IDs, fuer die der Benutzer als Gruppenleiter eingetragen ist.
+ * Grundlage bleiben die Aemter vom Typ "gruppenleiter".
+ */
+export async function getLeaderGroupIdsForUser(user: {
+    memberIds?: string[];
+} | null): Promise<string[]> {
     const memberIds = user?.memberIds ?? [];
-    if (!memberIds || memberIds.length === 0) return [];
+    if (memberIds.length === 0) return [];
 
-    const positions = await db.collection("positions")
-        .find({
-            type: "gruppenleiter",
-            memberIds: { $in: memberIds }
-        })
+    const positions = await db
+        .collection("positions")
+        .find({ type: "gruppenleiter", memberIds: { $in: memberIds } })
         .toArray();
 
     const ids = positions
-        .map((p: any) => p.groupId)
+        .map((position) => position.groupId as unknown)
         .filter(Boolean)
-        .map((id: any) => id.toString());
+        .map((id) => String(id));
 
     return Array.from(new Set(ids));
 }

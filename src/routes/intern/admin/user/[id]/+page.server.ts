@@ -1,115 +1,212 @@
-import type { Actions, PageServerLoad } from "./$types";
-import { getUser, updateUser } from "$lib/server/userService";
-import { getAllMembers } from "$lib/server/memberService";
-import { fail, error } from "@sveltejs/kit";
-import { db } from "$lib/server/mongo";
+import { error, fail, redirect } from "@sveltejs/kit";
 import { ObjectId } from "mongodb";
-import { hasPermission } from "$lib/server/permissionService";
+import type { Actions, PageServerLoad } from "./$types";
 import { env } from "$env/dynamic/private";
+import { requirePermission, requireAnyPermission } from "$lib/server/permissionGuard";
+import { getUser, updateUser, deleteUser } from "$lib/server/userService";
+import { getAllMembers } from "$lib/server/memberService";
+import { listRoles } from "$lib/server/roleService";
+import { users } from "$lib/server/db/collections";
+import { listSessionsForUser, revokeAllForUser, revokeSessionById } from "$lib/server/auth/session";
+import { issueToken } from "$lib/server/auth/passwordReset";
+import { sendEmail } from "$lib/server/emailService";
+import { passwordResetTemplate } from "$lib/server/emailTemplates/passwordReset";
+import { matchesPermission } from "$lib/permissions/match";
+import { formatDateTime, fullName } from "$lib/format";
 
-export const load: PageServerLoad = async ({ params, url, locals }) => {
-    if (!hasPermission(locals.permissions ?? [], "user.view")) {
-        throw error(403, "Keine Berechtigung");
-    }
+export const load: PageServerLoad = async (event) => {
+    requirePermission(event, "user.view");
 
-    const canImpersonate = hasPermission(locals.permissions ?? [], "admin.*") ||
-        hasPermission(locals.permissions ?? [], "user.impersonate");
+    const user = await getUser(event.params.id);
+    if (!user) throw error(404, "Benutzer nicht gefunden");
 
-    const user = await getUser(params.id);
-    if (!user) throw new Error("User not found");
-
-    const members = (await getAllMembers()).map((m) => ({
-        id: m._id.toString(),
-        firstname: m.firstname,
-        lastname: m.lastname
-    }));
-
-    const akRes = await fetch(`${env.AUTHENTIK_URL}/api/v3/core/groups/?page_size=1000`, {
-        headers: { Authorization: `Bearer ${env.AUTHENTIK_TOKEN}` }
-    });
-    if (!akRes.ok) {
-        throw error(500, "Authentik Gruppen konnten nicht geladen werden");
-    }
-    const akGroups = await akRes.json();
+    const [members, roles, sessions] = await Promise.all([
+        getAllMembers(),
+        listRoles(),
+        listSessionsForUser(user._id!)
+    ]);
 
     return {
-        scope: url.searchParams.get("scope"),
-        canImpersonate,
+        canImpersonate: matchesPermission(event.locals.permissions, "user.impersonate"),
+        canEdit: matchesPermission(event.locals.permissions, "user.edit"),
+        canDelete: matchesPermission(event.locals.permissions, "user.delete"),
+        isSelf: event.locals.user?.id === user._id!.toString(),
         user: {
-            id: user._id.toString(),
+            id: user._id!.toString(),
             name: user.name,
             email: user.email,
-            memberId: user.memberId,
-            createdAt: user.createdAt,
-            memberIds: user.memberIds ?? [],
-            groups: (user.groups ?? []).map((g: any) => g?.toString?.() ?? g)
+            type: user.type,
+            status: user.status,
+            roleIds: (user.roleIds ?? []).map((id) => id.toString()),
+            memberIds: (user.memberIds ?? []).map(String),
+            mfaEnabled: user.mfa?.enabled === true,
+            lockedUntil: user.lockedUntil ? formatDateTime(user.lockedUntil) : null,
+            failedLoginAttempts: user.failedLoginAttempts ?? 0,
+            lastLoginAt: user.lastLoginAt ? formatDateTime(user.lastLoginAt) : null,
+            createdAt: formatDateTime(user.createdAt)
         },
-        members,
-        authentikGroups: akGroups.results ?? []
+        roles: roles.map((role) => ({
+            id: role._id!.toString(),
+            name: role.name,
+            key: role.key,
+            description: role.description ?? ""
+        })),
+        members: members.map((m) => ({
+            id: String(m._id),
+            name: fullName(m as { firstname?: string; lastname?: string })
+        })),
+        sessions: sessions.map((session) => ({
+            id: session._id!.toString(),
+            device: session.device ?? "Unbekanntes Gerät",
+            ip: session.ip ?? "-",
+            lastSeenAt: formatDateTime(session.lastSeenAt),
+            createdAt: formatDateTime(session.createdAt),
+            isCurrent: session._id!.toString() === event.locals.session?.id
+        }))
     };
 };
 
 export const actions: Actions = {
-    update: async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "user.edit")) {
-            throw error(403, "Keine Berechtigung");
+    update: async (event) => {
+        requirePermission(event, "user.edit");
+
+        const form = await event.request.formData();
+        const name = String(form.get("name") ?? "").trim();
+        const email = String(form.get("email") ?? "").trim();
+        const type = String(form.get("type") ?? "parent") === "child" ? "child" : "parent";
+        const status = String(form.get("status") ?? "active");
+
+        if (!name || !email.includes("@")) {
+            return fail(400, { error: "Name und eine gültige E-Mail-Adresse sind erforderlich." });
         }
 
-        const form = await request.formData();
-
-        const id = form.get("id") as string;
-        const name = form.get("name") as string;
-        const email = form.get("email") as string;
-
-        let memberId = form.get("memberId") as string | null;
-        if (!memberId || memberId.trim() === "") {
-            memberId = null;
-        }
-
-        await updateUser(id, {
+        const result = await updateUser(event.params.id, {
             name,
             email,
-            memberId
+            type,
+            status: status === "disabled" ? "disabled" : status === "invited" ? "invited" : "active"
         });
 
-        return { success: true };
+        if (!result.ok) return fail(400, { error: result.error });
+        return { success: "Die Angaben wurden gespeichert." };
     },
 
-    "update-members": async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "user.edit")) {
-            throw error(403, "Keine Berechtigung");
+    roles: async (event) => {
+        requirePermission(event, "user.edit");
+
+        const form = await event.request.formData();
+        const roleIds = form
+            .getAll("roles")
+            .map(String)
+            .filter((id) => ObjectId.isValid(id))
+            .map((id) => new ObjectId(id));
+
+        const result = await updateUser(event.params.id, { roleIds });
+        if (!result.ok) return fail(400, { error: result.error });
+
+        return { success: "Die Rollen wurden gespeichert." };
+    },
+
+    members: async (event) => {
+        requirePermission(event, "user.edit");
+
+        const form = await event.request.formData();
+        const memberIds = form.getAll("members").map(String).filter(Boolean);
+
+        const result = await updateUser(event.params.id, { memberIds });
+        if (!result.ok) return fail(400, { error: result.error });
+
+        return { success: "Die verknüpften Mitglieder wurden gespeichert." };
+    },
+
+    /** Schickt einen Link zum Setzen eines neuen Passworts. */
+    resetPassword: async (event) => {
+        requirePermission(event, "user.edit");
+
+        const user = await getUser(event.params.id);
+        if (!user?._id) return fail(404, { error: "Benutzer nicht gefunden." });
+
+        try {
+            const { token } = await issueToken(user._id, "reset");
+            const base = env.PUBLIC_APP_URL || event.url.origin;
+            await sendEmail({
+                to: user.email,
+                subject: "Passwort zurücksetzen - Edelweisspiraten Intern",
+                html: passwordResetTemplate(user.name, `${base}/password/reset/${token}`, 2)
+            });
+        } catch (err) {
+            console.error("Passwort-Mail konnte nicht versendet werden:", err);
+            return fail(500, { error: "Die E-Mail konnte nicht versendet werden." });
         }
 
-        const form = await request.formData();
+        return { success: "Ein Link zum Zurücksetzen wurde versendet." };
+    },
 
-        const userId = form.get("userId")?.toString();
-        const memberIds = JSON.parse(form.get("memberIds")?.toString() ?? "[]");
+    /** Entfernt die Zwei-Faktor-Einrichtung, z.B. bei Geräteverlust. */
+    resetMfa: async (event) => {
+        requireAnyPermission(event, ["user.edit", "user.mfa.reset"]);
 
-        if (!userId) return fail(400, { error: "User-ID fehlt" });
+        if (!ObjectId.isValid(event.params.id)) {
+            return fail(400, { error: "Ungültige Kennung." });
+        }
 
-        // 1. Alle Member von User entfernen
-        await db.collection("users").updateOne(
-            { _id: new ObjectId(userId) },
-            { $set: { memberIds: memberIds } }
+        await users().updateOne(
+            { _id: new ObjectId(event.params.id) },
+            { $set: { mfa: { enabled: false }, updatedAt: new Date() } }
         );
 
-        return { success: true };
+        return { success: "Die Zwei-Faktor-Authentifizierung wurde zurückgesetzt." };
     },
 
-    "update-groups": async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "user.edit")) {
-            throw error(403, "Keine Berechtigung");
+    /** Hebt eine Kontosperre nach zu vielen Fehlversuchen auf. */
+    unlock: async (event) => {
+        requirePermission(event, "user.edit");
+
+        if (!ObjectId.isValid(event.params.id)) {
+            return fail(400, { error: "Ungültige Kennung." });
         }
 
-        const form = await request.formData();
-        const userId = form.get("userId")?.toString();
-        const groups = form.getAll("groups").map((g) => g?.toString?.()).filter(Boolean) as string[];
+        await users().updateOne(
+            { _id: new ObjectId(event.params.id) },
+            { $set: { failedLoginAttempts: 0, lockedUntil: null } }
+        );
 
-        if (!userId) return fail(400, { error: "User-ID fehlt" });
+        return { success: "Die Sperre wurde aufgehoben." };
+    },
 
-        await updateUser(userId, { groups });
+    revokeSession: async (event) => {
+        requirePermission(event, "user.edit");
 
-        return { success: true };
+        const form = await event.request.formData();
+        const sessionId = String(form.get("sessionId") ?? "");
+
+        if (!ObjectId.isValid(event.params.id)) {
+            return fail(400, { error: "Ungültige Kennung." });
+        }
+
+        await revokeSessionById(sessionId, new ObjectId(event.params.id));
+        return { success: "Die Sitzung wurde beendet." };
+    },
+
+    revokeAllSessions: async (event) => {
+        requirePermission(event, "user.edit");
+
+        if (!ObjectId.isValid(event.params.id)) {
+            return fail(400, { error: "Ungültige Kennung." });
+        }
+
+        const count = await revokeAllForUser(new ObjectId(event.params.id));
+        return { success: `${count} Sitzungen wurden beendet.` };
+    },
+
+    delete: async (event) => {
+        requirePermission(event, "user.delete");
+
+        if (event.locals.user?.id === event.params.id) {
+            return fail(400, { error: "Der eigene Zugang kann nicht gelöscht werden." });
+        }
+
+        await deleteUser(event.params.id);
+        throw redirect(303, "/intern/admin/user?hinweis=geloescht");
     }
-
 };
