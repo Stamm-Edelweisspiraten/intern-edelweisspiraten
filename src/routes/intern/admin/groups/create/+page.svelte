@@ -1,63 +1,65 @@
 <script lang="ts">
-    let name = "";
-    let type = "meute";
-    let meeting_time = "";
-    let description = "";
+    import { Alert, Button, Card, FormField, PageHeader, TextInput } from "$lib/components/ui";
+    import type { ActionData } from "./$types";
+
+    let { form }: { form: ActionData } = $props();
 </script>
 
-<div class="max-w-3xl mx-auto mt-12">
-    <h1 class="text-4xl font-bold mb-8">Neue Gruppe anlegen</h1>
+<svelte:head><title>Gruppe anlegen - Adminbereich</title></svelte:head>
 
-    <form method="post" class="space-y-6">
+<div class="max-w-2xl mx-auto space-y-8">
+    <PageHeader
+        title="Neue Gruppe"
+        eyebrow="Adminbereich"
+        subtitle="Meute oder Sippe mit Treffzeit und Beschreibung anlegen."
+        back={{ href: "/intern/admin/groups" }}
+    />
 
-        <div>
-            <label class="font-medium">Name</label>
-            <input
-                    name="name"
-                    bind:value={name}
-                    required
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
-            />
-        </div>
+    {#if form?.error}<Alert tone="danger" message={form.error} />{/if}
 
-        <div>
-            <label class="font-medium">Typ</label>
-            <select
-                    name="type"
-                    bind:value={type}
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
-            >
-                <option value="meute">Meute</option>
-                <option value="sippe">Sippe</option>
-            </select>
-        </div>
+    <Card>
+        <form method="post" class="space-y-5">
+            <FormField label="Name" required>
+                {#snippet children({ id, describedBy })}
+                    <TextInput {id} {describedBy} name="name" placeholder="Wölflingsmeute" required />
+                {/snippet}
+            </FormField>
 
-        <div>
-            <label class="font-medium">Gruppenstunden</label>
-            <input
-                    name="meeting_time"
-                    placeholder="z. B. Monday 4:30 PM"
-                    bind:value={meeting_time}
-                    required
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
-            />
-        </div>
+            <FormField label="Typ">
+                {#snippet children({ id })}
+                    <select
+                        {id}
+                        name="type"
+                        class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
+                    >
+                        <option value="meute">Meute</option>
+                        <option value="sippe">Sippe</option>
+                    </select>
+                {/snippet}
+            </FormField>
 
-        <div>
-            <label class="font-medium">Beschreibung</label>
-            <textarea
-                    name="description"
-                    bind:value={description}
-                    rows="4"
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500"
-            ></textarea>
-        </div>
+            <FormField label="Treffzeit" hint="Zum Beispiel „Montags 17:00 – 18:30 Uhr“.">
+                {#snippet children({ id, describedBy })}
+                    <TextInput {id} {describedBy} name="meeting_time" placeholder="Montags 17:00 – 18:30 Uhr" />
+                {/snippet}
+            </FormField>
 
-        <button
-                class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow"
-        >
-            Gruppe erstellen
-        </button>
+            <FormField label="Beschreibung">
+                {#snippet children({ id, describedBy })}
+                    <TextInput {id} {describedBy} name="description" placeholder="Kurze Beschreibung der Gruppe" />
+                {/snippet}
+            </FormField>
 
-    </form>
+            <FormField label="Antwortadresse" hint="Wird bei Gruppen-E-Mails als Absender vorgeschlagen.">
+                {#snippet children({ id, describedBy })}
+                    <TextInput {id} {describedBy} name="replyTo" type="email" placeholder="woelflinge@example.org" />
+                {/snippet}
+            </FormField>
+
+            <div class="flex justify-end gap-3">
+                <Button href="/intern/admin/groups" variant="secondary">Abbrechen</Button>
+                <Button type="submit" variant="primary" icon="plus-circle">Gruppe anlegen</Button>
+            </div>
+        </form>
+    </Card>
 </div>

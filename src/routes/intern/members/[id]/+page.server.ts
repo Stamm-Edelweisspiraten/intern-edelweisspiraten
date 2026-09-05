@@ -33,7 +33,7 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
         lastname: member.lastname,
         fahrtenname: member.fahrtenname ?? "",
         birthday: member.birthday,
-        address: member.address,
+        address: member.address ?? { street: "", zip: "", city: "" },
         stand: member.stand,
         status: member.status,
         groups: member.groups ?? [],
@@ -42,10 +42,11 @@ export const load: PageServerLoad = async ({ params, url, locals }) => {
         numbers: member.numbers ?? [],
         isSecondMember: member.isSecondMember ?? false,
         contributionDues: {
-            stamm: member.contributionDues?.stamm ?? false,
-            gau: member.contributionDues?.gau ?? false,
-            landesmark: member.contributionDues?.landesmark ?? false,
-            bund: member.contributionDues?.bund ?? false
+            // Fehlender Haken bedeutet "zahlt diesen Anteil".
+            stamm: member.contributionDues?.stamm !== false,
+            gau: member.contributionDues?.gau !== false,
+            landesmark: member.contributionDues?.landesmark !== false,
+            bund: member.contributionDues?.bund !== false
         },
         userIds: member.userIds,
         mediaConsent: {
@@ -129,11 +130,18 @@ export const actions: Actions = {
         const entryDate = form.get("entryDate")?.toString() ?? "";
 
         const isSecondMember = form.get("isSecondMember") === "on";
+
+        /**
+         * Die Beitragshaken gelten fuer ALLE Mitglieder. Vorher wurden sie
+         * ausserhalb der Zweitmitgliedschaft pauschal auf false gesetzt, und
+         * die Beitragsberechnung ignorierte sie fuer regulaere Mitglieder
+         * ohnehin -- diese zahlten damit immer den vollen Beitrag.
+         */
         const contributionDues = {
-            stamm: isSecondMember ? true : false,
-            gau: isSecondMember && form.get("contributionDues_gau") === "on",
-            landesmark: isSecondMember && form.get("contributionDues_landesmark") === "on",
-            bund: isSecondMember && form.get("contributionDues_bund") === "on"
+            stamm: form.get("contributionDues_stamm") === "on",
+            gau: form.get("contributionDues_gau") === "on",
+            landesmark: form.get("contributionDues_landesmark") === "on",
+            bund: form.get("contributionDues_bund") === "on"
         };
 
         // --- Gruppen-Array ---
@@ -246,7 +254,7 @@ export const actions: Actions = {
         if (userIds && Array.isArray(userIds)) {
             await db.collection("users").updateMany(
                 { memberIds: id },
-                { $pull: { memberIds: id } }
+                { $pull: { memberIds: id } as never }
             );
             await db.collection("users").updateMany(
                 { _id: { $in: userIds.map((uid) => new ObjectId(uid)) } },
@@ -296,7 +304,7 @@ export const actions: Actions = {
 
         await db.collection("users").updateMany(
             { memberIds: memberId },
-            { $pull: { memberIds: memberId } }
+            { $pull: { memberIds: memberId } as never }
         );
 
         await db.collection("users").updateMany(

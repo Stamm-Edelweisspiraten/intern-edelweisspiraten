@@ -1,114 +1,166 @@
-# Intern UI Design Sheet (Template)
+# Design-Leitfaden – Interner Bereich
 
-Ableitung aus den Finance-Screens (`/intern/finance`, `/intern/finance/outstanding`, `/intern/finance/fiscal-years/[id]`) als Vorgabe fuer den gesamten internen Bereich.
+Verbindliche Vorgabe für alle Seiten unter `/intern`, `/login`, `/join`,
+`/password` und `/setup`.
 
-## Kernprinzipien
-- Ruhige Verwaltungs-UI: viel White-Space (`max-w-6xl`, `space-y-8`), klare Kanten (`rounded-2xl`, `border-gray-200`, `shadow-sm`).
-- Farbrollen klar trennen: Blau/Sky fuer Navigation & Primaer, Emerald fuer Erfolg, Amber fuer Warnung/Offen, Rot fuer Abgang, Grau als Basis.
-- Texte sachlich, deutsch ohne Umlaute (Uebersicht, Zurueck, Geschaeftsjahr). Zahlen/Betraege immer fett + `EUR`.
-- Tabellen- und Formular-zentriert; Icons ueber Bootstrap Icons (`bi ...`), in Buttons mit `gap-2`.
-- Mobile-first: Flex/Wrap im Kopf, `overflow-x-auto` fuer Tabellen.
+> **Wichtigste Änderung gegenüber der früheren Fassung:** Dieses Blatt
+> beschreibt keine kopierbaren Klassenstrings mehr, sondern **Komponenten**.
+> Wer eine Karte braucht, schreibt `<Card>` – nicht
+> `bg-white border border-gray-200 rounded-2xl shadow-sm`. Rohe Paletten-
+> Klassen sind ausdrücklich unerwünscht, weil sie den Dunkelmodus brechen.
 
-## Farb- und Typostil (Tailwind Tokens)
-- Basis: Hintergrund `bg-white`, Kartenrand `border-gray-200`, Kopfzeile `bg-gray-50`, Schrift `text-gray-900/700/600`.
-- Primaer: `bg-blue-600 hover:bg-blue-700 text-white`; Links/Light-CTA `text-blue-700 bg-blue-50 border-blue-200`.
-- Info/Highlight: Sky (`bg-sky-50 to-white`, Tags `bg-sky-100 border-sky-200 text-sky-800`).
-- Erfolg: Emerald (`bg-emerald-50 border-emerald-200 text-emerald-700`).
-- Warnung: Amber (`text-amber-600`), Gefahr: Rot (`text-red-500/600`).
-- Typo-Hierarchie: H1 `text-3xl-4xl font-bold`, H2 `text-xl font-semibold`, Sektionen/Meta `text-sm text-gray-600`, Table-Head `text-xs font-semibold uppercase tracking-wide`, Body `text-sm`.
+---
 
-## Layout-Skelett
-- Seite: `<div class="max-w-6xl mx-auto mt-16 space-y-8">`.
-- Kopfzeile: Linke Spalte Titel + Unterzeile, rechts CTAs / Filter; `flex items-center justify-between flex-wrap gap-4`.
-- Raster: Hero/Stats `grid grid-cols-1 lg:grid-cols-3` mit 2/1 Split; Karten `p-5/6`, `space-y-3/4`. CTA-Kachel nutzt `hover:border-amber-200 hover:shadow`.
-- Tabellen-Wrapper: `overflow-x-auto`; Tabelle `divide-y divide-gray-200`, Kopf `bg-gray-50`, Zeilenhover `hover:bg-gray-50`.
-- Badges: `text-[11px] font-semibold rounded-full border px-2 py-0.5` (z.B. aktuelles Jahr in Sky).
+## 1. Farben: nur semantische Tokens
 
-## Komponentenrezepte
-- Primaer-Button: `inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition`.
-- Neutral/Sekundaer: `bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 rounded-xl shadow-sm`.
-- Erfolg (Hat bezahlt / OK): `text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg`.
-- Warn-CTA/Offen: Zahl in `text-amber-600`; Karten mit Amber-Hover-Rand.
-- Inputs/Suche: `rounded-xl text-sm border border-gray-300 bg-white shadow-sm px-4 py-3 focus:ring-2 focus:ring-sky-200 focus:border-sky-300` (Forms auch `rounded-lg px-3 py-2`).
-- Tabellenzelle: Body `text-sm`, Zahlen fett; Zusatzinfo `text-xs text-gray-500` unter der Zeile.
-- Modals: Overlay `fixed inset-0 bg-black/50 backdrop-blur-sm flex center z-50 px-4`; Card `bg-white rounded-2xl border-gray-200 shadow-2xl max-w-lg w-full`, Header mit Titel + Close, Body `space-y-4`, Footer Buttons rechts.
-- Dropdown (custom): Button mit Border+Shadow; Liste `absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow`; Close-on-click-outside via `onMount` Listener.
-- Tags/Counter: `px-3 py-1 text-xs font-semibold rounded-full border` (z.B. `text-sky-800 bg-sky-100`).
-- Buttons/Aktionen: CTA-Block rechts im Kopf (`flex items-center gap-3 flex-wrap`), Primaer rechts aussen, Sekundaer links daneben; Zurueck-Link als neutraler Button links vor den CTAs. Karten-Footer-Buttons rechtsbuendig ausrichten.
-- Toasts: globaler Container oben rechts; Farbrollen wie Status (Success = Emerald, Error = Rot, Info = Blau); Icon + kurzer Text; Auto-Dismiss ~4s, Close-Button rechts.
+Farben stehen als CSS-Variablen in `src/routes/layout.css` und sind als
+Tailwind-Utilities verfügbar. Sie werden im Dunkelmodus neu belegt – deshalb
+funktioniert das Umschalten, ohne eine einzige Seite anzufassen.
 
-## Interaktionsmuster
-- Suche/Filter: `search.trim().toLowerCase()`; Match ueber zusammengesetzten String aus Titel/Typ/Note/Betrag; Ergebnislisten + Counts reaktiv ableiten (`filteredItems`, `filteredTransactions`).
-- Sortierung: Datum desc bei Transaktionen (`new Date(...).getTime()`), Gruppierungen (z.B. Outstanding nach Jahr).
-- Waehrung: Helper `const euro = (v:number) => `${v.toFixed(2)} EUR`;` immer 2 Nachkommastellen.
-- Statusfarben in Tabellen: aktuelles Jahr `bg-sky-50/70 ring-1 ring-sky-200`, Archiv `bg-gray-50 text-gray-500`.
-- Modals: Body-Scroll sperren und wiederherstellen (`document.body.style.overflow`).
-- Forms: klassisches `<form method="post" action="?...">`; versteckte Inputs fuer IDs; Primaer-Button rechts.
-- CTA-Positionierung: In Seitenkopf immer rechts neben dem Titelbereich; auf Mobile umbrechen, Reihenfolge beibehalten. Innerhalb von Karten stehen Aktionen oben rechts oder unten rechts, nie mittig.
-- Kopf-Leiste: Zurueck-Button (neutral) + Primaer-CTA mit Icon+Label; Abstaende `gap-2/3`, Buttons `px-4 py-3 rounded-xl`.
+| Zweck | Utility | Beispiel |
+|---|---|---|
+| Kartenfläche | `bg-surface` | Karten, Dialoge, Eingabefelder |
+| Ruhige Fläche | `bg-surface-muted` | Tabellenkopf, Seitenhintergrund |
+| Rahmen | `border-border`, `border-border-strong` | Karten bzw. Eingabefelder |
+| Text | `text-fg`, `text-fg-muted`, `text-fg-subtle` | Haupttext, Nebentext, Hinweise |
+| Primär | `bg-primary`, `text-primary`, `text-primary-fg` | Hauptaktionen, Navigation |
+| Erfolg | `text-success`, `bg-success-soft`, `text-success-soft-fg` | Einnahmen, „bezahlt“ |
+| Warnung | `text-warning`, `bg-warning-soft`, … | offene Posten, Hinweise |
+| Gefahr | `text-danger`, `bg-danger-soft`, … | Ausgaben, Löschen, Fehler |
+| Info | `text-info`, `bg-info-soft`, … | neutrale Hervorhebungen |
 
-## Responsive Leitplanken
-- Breakpoint-Policy: Tabellen erst ab `xl`; darunter Karten-/Stack-Ansicht beibehalten (`hidden xl:block` fuer Tabellen, `xl:hidden` fuer Cards), damit iPad quer + kleine Laptops nicht ueberlaufen.
-- Kopfzeilen: immer `flex-wrap gap-4`; Buttons/Suchen auf Mobile vollbreit (`w-full sm:w-auto`), Suchfelder max `w-60` nur auf grossen Screens.
-- Grids: Stats `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`; Formulare einspaltig, erst ab `md`/`lg` zweispaltig.
-- Karteninhalte: Werte in kleinen Kacheln (`grid grid-cols-2 gap-2`) statt Spalten; Aktionen rechtsbuendig, aber untereinander stapelbar.
-- Sidebar: desktop einklappbar (Content nutzt volle Breite), mobile Drawer; keine horizontale Scroll auf Content.
+**Nicht verwenden:** `bg-white`, `bg-gray-50`, `text-gray-900`,
+`border-gray-200`, `bg-blue-600`, `text-emerald-700` und alle weiteren rohen
+Paletten-Klassen. Sie sind im Dunkelmodus unlesbar.
 
-## Beispiel-Skeleton (Svelte)
+`text-fg-subtle` entspricht `gray-500`, nicht `gray-400` – letzteres verfehlte
+mit rund 2,8:1 die Kontrastanforderung.
+
+---
+
+## 2. Komponenten
+
+Alle unter `src/lib/components/ui`, gesammelt exportiert:
+
+```svelte
+import { Button, Card, DataTable, FormField } from "$lib/components/ui";
+```
+
+Eine lauffähige Übersicht aller Komponenten in hell und dunkel liegt unter
+**`/dev/ui`** (nur im Entwicklungsmodus erreichbar).
+
+| Komponente | Wofür |
+|---|---|
+| `PageHeader` | Seitenkopf: Titel, Unterzeile, Zurück-Link, Aktionen. Bestimmt den oberen Abstand – Seiten setzen **kein** eigenes `mt-16`. |
+| `Card` | Abschnitt mit Titel, Unterzeile, Meta-Angabe, Aktionen und Fußzeile |
+| `DataTable` | Aus **einer** Spaltendefinition entstehen Desktop-Tabelle *und* mobile Karten |
+| `Button` | `primary`, `secondary`, `success`, `warning`, `danger`, `ghost`; Größen `sm`/`md`; `loading`, `icon`, `href` |
+| `Badge` | Status-Kennzeichnung, Tonwerte wie oben |
+| `StatTile` | Kennzahl mit Symbol, optional verlinkt |
+| `Alert` | Rückmeldungen, insbesondere `form?.error` und `form?.success` |
+| `FormField` | Label, Feld, Hinweis und Fehler – erzeugt `id`/`for` selbst |
+| `TextInput` | Einzeiliges Eingabefeld |
+| `RichTextEditor` | Formatierter Text (Quill, lokal eingebunden) |
+| `Modal` | Dialog mit `role="dialog"`, Fokus-Falle, Escape und Scroll-Sperre |
+| `ConfirmDialog` | Rückfrage vor zerstörenden Aktionen |
+| `SearchInput` | Suchfeld mit Symbol und unsichtbarem Label |
+| `EmptyState` | Leerer Zustand, `inline` für eine Zeile innerhalb einer Tabelle |
+| `Pagination` | Seitenweise Navigation über URL-Parameter |
+| `ThemeToggle` | Hell / Dunkel / System |
+| `SkipLink` | Sprung zum Hauptinhalt |
+
+---
+
+## 3. Seitenaufbau
+
 ```svelte
 <script lang="ts">
-  export let data;
-  const euro = (v:number) => `${v.toFixed(2)} EUR`;
-  let search = "";
+    import { Button, Card, PageHeader } from "$lib/components/ui";
+    import type { ActionData, PageData } from "./$types";
+
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-  <div class="flex items-center justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="text-4xl font-bold text-gray-900">Seitentitel</h1>
-      <p class="text-sm text-gray-600 mt-1">Kurze Beschreibung.</p>
-    </div>
-    <div class="flex items-center gap-3 flex-wrap">
-      <input type="search" placeholder="Suchen..." bind:value={search}
-        class="w-60 px-4 py-3 rounded-xl text-sm border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-sky-200 focus:border-sky-300" />
-      <a href="#" class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition">
-        <span class="bi bi-plus-circle"></span>
-        Primaere Aktion
-      </a>
-    </div>
-  </div>
+<div class="space-y-8">
+    <PageHeader title="Seitentitel" eyebrow="Bereich" subtitle="Kurze Beschreibung.">
+        {#snippet actions()}
+            <Button variant="primary" icon="plus-circle">Primäre Aktion</Button>
+        {/snippet}
+    </PageHeader>
 
-  <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold text-gray-900">Sektionstitel</h2>
-      <span class="text-sm text-gray-500">Meta</span>
-    </div>
-    <!-- Tabelle/Liste/Stats hier -->
-  </div>
+    {#if form?.error}<Alert tone="danger" message={form.error} />{/if}
+    {#if form?.success}<Alert tone="success" message={form.success} />{/if}
+
+    <Card title="Abschnitt">
+        <!-- Inhalt -->
+    </Card>
 </div>
 ```
 
-## Navigation & Seitenmuster
-- Zurueck-Link als neutraler Button links vom CTA-Block im Kopf oder oben links in Karten.
-- Haupt-CTA immer rechts vom Titel; bei zwei Aktionen: Primaer rechts, Neutral links davon.
-- Stats/Meta-Blenden als kompakte Karten (Einnahmen/Ausgaben/Saldo) mit passenden Farben.
-- Empty States: einzeilige Info in grau innerhalb der Tabelle/Karte; kein separates Fullscreen-Empty.
+Breite und Außenabstand kommen aus dem Layout (`max-w-6xl`) und `PageHeader`.
 
-## Feedback & Status
-- Erfolg: Emerald-Button/Text; Fehlermeldungen als `text-red-600` unter Input oder `bg-red-50 border-red-200` Box.
-- Warnung/Offen: Amber-Zahlen oder -Icon, nicht als Vollflaeche.
-- Ladeindikator: minimal (z.B. `opacity-50 pointer-events-none` + Spinner-Icon in Button falls noetig).
+---
 
-## Barrierefreiheit & Motion
-- Fokus: immer sichtbarer Ring (`focus:ring-2 focus:ring-blue-500` bzw. Sky/Emerald je Kontext).
-- Motion sparsam: Button-`transition` fuer Farbe/Schatten; keine wilden Animations.
-- Icons nur als Zusaetze, nie allein fuer Information.
+## 4. Sprache
 
-## Checkliste fuer neue interne Screens
-- Nutze das Seiten-Skelett (`max-w-6xl`, `space-y-8`, Kopf mit CTA rechts`).
-- Wende Farbrollen strikt an: Blau = primaer, Emerald = Erfolg, Amber = offen/warnend, Grau = sekundar, Rot = Fehler/Abgang.
-- Tabellen mit Kopf, Hover-State, Empty-Zeile und `overflow-x-auto`.
-- Betrags- und Zahlenausgabe ueber `euro()`/fette Zahlen; Meta in `text-xs text-gray-500`.
-- Modals mit Body-Scroll-Lock, Buttons rechtsbuendig; Eingabefelder mit klaren Fokus-Ringen.
-- Zaehler/Badges fuer Anzahl Treffer/Items anzeigen; aktuelle Kontexte markieren (z.B. aktuelles Jahr Tag).
-- Button-Abstaende: horizontal `gap-3` in Leisten, vertikal `mt-4` unter Formulargruppen; immer Icon+Label bei Listen-Header-CTAs.
+**Korrektes Deutsch mit Umlauten.** „Zurück“, „Ämter“, „Geschäftsjahr“,
+„Größe“, „Kämmerer“. Die frühere Vorgabe, Umlaute zu vermeiden, war eine
+Notlösung gegen Zeichensatzprobleme und ist aufgehoben – `.editorconfig`
+erzwingt UTF-8.
+
+ASCII bleibt verbindlich für: URLs, Verzeichnisnamen von Routen,
+Berechtigungsschlüssel, Bezeichner im Quelltext und Feldnamen in der Datenbank.
+
+Beträge immer über `formatEuro()` aus `$lib/money` – Geld wird als ganzzahlige
+**Cents** geführt, nie als Fließkommazahl.
+
+---
+
+## 5. Barrierefreiheit
+
+- Jedes Eingabefeld über `FormField` – das verknüpft Label und Feld.
+- Symbolschaltflächen brauchen `ariaLabel`, schmückende Symbole `aria-hidden="true"`.
+- Sichtbarer Fokusrahmen ist global gesetzt und darf nicht entfernt werden.
+- Zerstörende Aktionen nur mit `ConfirmDialog`.
+- Tabellen über `DataTable` (liefert `scope="col"` und Beschriftung mit).
+- Rückmeldungen über `Alert` bzw. Toasts, nicht nur über Farbe.
+
+---
+
+## 6. Responsives Verhalten
+
+- `DataTable` schaltet bei `xl` zwischen Tabelle und Karten um – von Hand
+  gebaute Tabellen sind nicht erwünscht.
+- Kopfzeilen laufen um (`flex-wrap gap-4`), Schaltflächen auf schmalen
+  Displays über die volle Breite.
+- Raster: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`; Formulare einspaltig,
+  ab `md` zweispaltig.
+- Kein waagerechtes Scrollen des Seiteninhalts.
+- Geprüft wird bei 375, 768, 1280 und 1920 Pixeln, jeweils hell und dunkel.
+
+---
+
+## 7. Rückmeldungen
+
+- **Immer** `form?.error` und `form?.success` anzeigen. Fehlt das, wirkt ein
+  fehlgeschlagenes Formular so, als passiere nichts.
+- `use:enhance` mit `loading` an der Schaltfläche für Ladezustände.
+- Toasts (`addToast`) für Rückmeldungen nach clientseitigen Aktionen.
+- Z-Index-Ordnung: Inhalt 0, Kopfzeile 30, Menü-Overlay 40, Menü 50,
+  Dialog 60, Toasts 70.
+
+---
+
+## 8. Prüfliste für neue Seiten
+
+- [ ] Svelte-5-Runes (`$props`, `$state`, `$derived`), kein `export let`, kein `on:click`
+- [ ] `import type { ActionData, PageData } from "./$types"`
+- [ ] Kein `export const csr = false`
+- [ ] Komponenten statt kopierter Klassenstrings
+- [ ] Ausschließlich semantische Farb-Tokens
+- [ ] `form?.error` und `form?.success` sichtbar
+- [ ] Jede Server-Aktion mit `requirePermission` abgesichert
+  (ein `load`-Guard schützt Aktionen **nicht**)
+- [ ] Beträge über `formatEuro`, Datum über `formatDate`
+- [ ] Deutsch mit Umlauten
+- [ ] In hell und dunkel geprüft, Tastaturbedienung durchgespielt

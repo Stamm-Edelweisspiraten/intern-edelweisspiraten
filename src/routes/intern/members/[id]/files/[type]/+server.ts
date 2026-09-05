@@ -25,7 +25,7 @@ export async function GET({ params, locals }) {
     if (!stored) throw error(404, "Datei nicht gefunden");
 
     const headers = new Headers({
-        "Content-Type": meta.contentType ?? stored.file.contentType ?? "application/octet-stream",
+        "Content-Type": meta.contentType ?? (stored.file as { contentType?: string }).contentType ?? "application/octet-stream",
         "Content-Disposition": `inline; filename="${meta.filename}"`,
     });
 

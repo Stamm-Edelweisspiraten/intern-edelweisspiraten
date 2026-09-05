@@ -11,6 +11,7 @@ export { default as FormField } from "./FormField.svelte";
 export { default as Modal } from "./Modal.svelte";
 export { default as PageHeader } from "./PageHeader.svelte";
 export { default as Pagination } from "./Pagination.svelte";
+export { default as RichTextEditor } from "./RichTextEditor.svelte";
 export { default as SearchInput } from "./SearchInput.svelte";
 export { default as SkipLink } from "./SkipLink.svelte";
 export { default as StatTile } from "./StatTile.svelte";

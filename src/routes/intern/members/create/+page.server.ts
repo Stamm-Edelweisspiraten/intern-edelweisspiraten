@@ -36,11 +36,19 @@ export const actions: Actions = {
         const entryDate = form.get("joined")?.toString() ?? "";
 
         const isSecondMember = form.get("is_second_member") === "on";
+
+        /**
+         * Die Beitragshaken gelten fuer ALLE Mitglieder, nicht nur fuer
+         * Zweitmitglieder. Vorher wurden sie ausserhalb dieses Falls
+         * pauschal auf false gesetzt -- und die Beitragsberechnung ignorierte
+         * sie fuer regulaere Mitglieder ohnehin, sodass diese immer den
+         * vollen Beitrag zahlten.
+         */
         const contributionDues = {
-            stamm: isSecondMember ? true : false,
-            gau: isSecondMember && form.get("dues_gau") === "on",
-            landesmark: isSecondMember && form.get("dues_landesmark") === "on",
-            bund: isSecondMember && form.get("dues_bund") === "on"
+            stamm: form.get("dues_stamm") === "on",
+            gau: form.get("dues_gau") === "on",
+            landesmark: form.get("dues_landesmark") === "on",
+            bund: form.get("dues_bund") === "on"
         };
 
         const groups = JSON.parse(<string>form.get("groups") ?? "[]");

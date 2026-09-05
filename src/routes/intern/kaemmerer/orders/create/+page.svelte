@@ -1,216 +1,307 @@
 <script lang="ts">
-    export let data;
+    import {
+        Alert,
+        Badge,
+        Button,
+        Card,
+        EmptyState,
+        FormField,
+        PageHeader,
+        SearchInput,
+        TextInput
+    } from "$lib/components/ui";
+    import { formatEuro } from "$lib/money";
+    import type { ActionData, PageData } from "./$types";
 
-    const euro = (v: number) => `${(Number(v) || 0).toFixed(2)} EUR`;
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    const articles = data.articles ?? [];
-    const members = data.members ?? [];
+    type Article = PageData["articles"][number];
 
-    type Item = { articleId?: string; name: string; price: number; quantity: number; size?: string };
+    interface Line {
+        articleId: string;
+        size: string;
+        quantity: number;
+    }
 
-    const priceFor = (article: any, size?: string) => {
-        if (size && Array.isArray(article?.sizes)) {
-            const match = article.sizes.find((s: any) => s.name === size);
-            if (match) return Number(match.price) || 0;
+    function articleById(id: string): Article | undefined {
+        return data.articles.find((article) => article.id === id);
+    }
+
+    function firstSize(article: Article | undefined): string {
+        return article?.sizes[0]?.name ?? "";
+    }
+
+    /** Nur zur Vorschau -- verbindlich rechnet der Server aus dem Artikel. */
+    function unitPrice(line: Line): number {
+        const article = articleById(line.articleId);
+        if (!article) return 0;
+        if (line.size) {
+            const size = article.sizes.find((entry) => entry.name === line.size);
+            if (size) return size.price || article.price;
         }
-        return Number(article?.price) || 0;
-    };
+        return article.price;
+    }
 
-    const firstSize = (article: any) => article?.sizes?.[0]?.name ?? "";
-    const getArticle = (id?: string) => articles.find((a: any) => a.id === id);
+    function newLine(): Line {
+        const article = data.articles[0];
+        return { articleId: article?.id ?? "", size: firstSize(article), quantity: 1 };
+    }
 
-    let items: Item[] = [{
-        articleId: articles[0]?.id,
-        name: articles[0]?.name ?? "",
-        size: firstSize(articles[0]) || undefined,
-        price: priceFor(articles[0], firstSize(articles[0])),
-        quantity: 1
-    }];
-    let selectedMember = "";
-    let error = "";
+    /** Startwerte als Funktion, damit die Initialisierung data nicht einfriert. */
+    function initialLines(): Line[] {
+        return data.articles.length > 0 ? [newLine()] : [];
+    }
 
-    const addItem = () => {
-        const defaultSize = firstSize(articles[0]);
-        items = [...items, {
-            articleId: articles[0]?.id,
-            name: articles[0]?.name ?? "",
-            size: defaultSize || undefined,
-            price: priceFor(articles[0], defaultSize),
-            quantity: 1
-        }];
-    };
+    let lines = $state<Line[]>(initialLines());
+    let selectedMembers = $state<string[]>([]);
+    let memberSearch = $state("");
 
-    const removeItem = (idx: number) => {
-        items = items.filter((_, i) => i !== idx);
-    };
+    function addLine() {
+        lines = [...lines, newLine()];
+    }
 
-    const updateArticle = (idx: number, id: string) => {
-        const article = articles.find((a: any) => a.id === id);
-        const defaultSize = firstSize(article);
-        items = items.map((item, i) => i === idx ? {
-            ...item,
-            articleId: id,
-            name: article?.name ?? "",
-            size: defaultSize || undefined,
-            price: priceFor(article, defaultSize)
-        } : item);
-    };
+    function removeLine(index: number) {
+        lines = lines.filter((_, i) => i !== index);
+    }
 
-    const updateSize = (idx: number, size: string) => {
-        const article = getArticle(items[idx]?.articleId);
-        items = items.map((item, i) => i === idx ? {
-            ...item,
-            size: size || undefined,
-            price: priceFor(article, size) || item.price
-        } : item);
-    };
+    function setArticle(index: number, articleId: string) {
+        const article = articleById(articleId);
+        lines[index].articleId = articleId;
+        lines[index].size = firstSize(article);
+    }
 
-    $: normalizedItems = items.map((i) => ({
-        ...i,
-        quantity: Number(i.quantity) || 0,
-        price: Number(i.price) || 0,
-        total: (Number(i.price) || 0) * (Number(i.quantity) || 0)
-    }));
+    /** Ausgewählte bleiben sichtbar, damit die Suche keine Auswahl verdeckt. */
+    const visibleMembers = $derived(
+        data.members.filter((member) => {
+            if (selectedMembers.includes(member.id)) return true;
+            const needle = memberSearch.trim().toLowerCase();
+            if (!needle) return true;
+            return `${member.name} ${member.stand ?? ""}`.toLowerCase().includes(needle);
+        })
+    );
 
-    $: total = normalizedItems.reduce((sum, i) => sum + i.total, 0);
+    /**
+     * Was gesendet wird: ausschliesslich articleId, size und quantity. Der
+     * Preis wird bewusst NICHT mitgeschickt -- der Server loest ihn aus dem
+     * Artikel auf.
+     */
+    const payload = $derived(
+        lines
+            .filter((line) => line.articleId && Number(line.quantity) > 0)
+            .map((line) => ({
+                articleId: line.articleId,
+                size: line.size || null,
+                quantity: Number(line.quantity) || 0
+            }))
+    );
 
+    const total = $derived(
+        lines.reduce((sum, line) => sum + unitPrice(line) * (Number(line.quantity) || 0), 0)
+    );
+
+    const ready = $derived(payload.length > 0 && selectedMembers.length > 0);
+
+    /** Die Aktion leitet bei Erfolg um; success ist daher optional. */
+    const feedback = $derived(form as { error?: string; success?: string } | null | undefined);
 </script>
 
-<svelte:head>
-    <title>Bestellung anlegen - Kämmerer</title>
-</svelte:head>
+<svelte:head><title>Bestellung anlegen - Kämmerer</title></svelte:head>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Kaemmerer</p>
-            <h1 class="text-3xl font-bold text-gray-900">Bestellung anlegen</h1>
-            <p class="text-sm text-gray-600 mt-1">Artikel auswählen und Bestellung für Mitglieder erfassen.</p>
-        </div>
-        <div class="flex items-center gap-2 flex-wrap">
-            <a
-                    href="/intern/kaemmerer/orders"
-                    class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
+<div class="space-y-8">
+    <PageHeader
+        title="Bestellung anlegen"
+        eyebrow="Kämmerer"
+        subtitle="Artikel auswählen und die Bestellung für beliebige Mitglieder erfassen."
+        back={{ href: "/intern/kaemmerer/orders", label: "Zurück zur Verwaltung" }}
+    />
+
+    {#if feedback?.error}<Alert tone="danger" message={feedback.error} />{/if}
+    {#if feedback?.success}<Alert tone="success" message={feedback.success} />{/if}
+
+    {#if data.articles.length === 0}
+        <Card>
+            <EmptyState
+                icon="box"
+                title="Keine bestellbaren Artikel"
+                description="Es ist kein aktiver Artikel vorhanden. Lege zuerst einen Artikel an oder aktiviere einen bestehenden."
             >
-                <span class="bi bi-arrow-left"></span>
-                Zurueck
-            </a>
-        </div>
-    </div>
+                {#snippet action()}
+                    <Button href="/intern/kaemmerer/articles" variant="primary" icon="box">
+                        Zur Artikelverwaltung
+                    </Button>
+                {/snippet}
+            </EmptyState>
+        </Card>
+    {:else if data.members.length === 0}
+        <Card>
+            <EmptyState
+                icon="person-x"
+                title="Keine Mitglieder vorhanden"
+                description="Ohne Mitglieder kann keine Bestellung gebucht werden."
+            />
+        </Card>
+    {:else}
+        <form method="post" class="space-y-8">
+            <input type="hidden" name="items" value={JSON.stringify(payload)} />
 
-    <form method="post" class="space-y-6">
-        <input type="hidden" name="items" value={JSON.stringify(normalizedItems.map(({ total, ...rest }) => rest))} />
-        <input type="hidden" name="memberNames" value={JSON.stringify(selectedMember ? [members.find((m: any) => m.id === selectedMember)?.name ?? ""] : [])} />
+            <Card title="Artikel" meta={`${lines.length} Positionen`}>
+                {#snippet actions()}
+                    <Button variant="secondary" size="sm" icon="plus-circle" onclick={addLine}>
+                        Position hinzufügen
+                    </Button>
+                {/snippet}
 
-        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-            <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-gray-900">Artikel</h2>
-                <button type="button" class="inline-flex items-center gap-2 px-3 py-2 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg font-semibold text-gray-800"
-                        on:click={addItem}>
-                    <span class="bi bi-plus-circle"></span>
-                    Artikel hinzufuegen
-                </button>
-            </div>
-            <div class="space-y-3">
-                {#each items as item, idx}
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-center border border-gray-100 rounded-xl p-3">
-                        <div class="md:col-span-2">
-                            <label class="text-sm text-gray-700">Artikel</label>
-                            <select class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={item.articleId} on:change={(e) => updateArticle(idx, (e.target as HTMLSelectElement).value)}>
-                                {#each articles as a}
-                                    <option value={a.id}>{a.name} ({euro(a.price)})</option>
-                                {/each}
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-sm text-gray-700">Groesse</label>
-                            {#if getArticle(item.articleId)?.sizes?.length}
-                                <select
-                                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
-                                        value={item.size ?? ""}
-                                        on:change={(e) => updateSize(idx, (e.target as HTMLSelectElement).value)}
-                                >
-                                    {#each getArticle(item.articleId)?.sizes ?? [] as size}
-                                        <option value={size.name} selected={item.size === size.name}>{size.name} ({euro(size.price)})</option>
-                                    {/each}
-                                </select>
-                            {:else}
-                                <div class="w-full border border-dashed border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-500">Keine Groesse</div>
-                            {/if}
-                        </div>
-                        <div>
-                            <label class="text-sm text-gray-700">Menge</label>
-                            <input type="number" min="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={item.quantity} />
-                        </div>
-                        <div class="md:col-span-1 w-full flex items-center justify-end md:block text-right ml-auto md:ml-0 md:justify-self-end">
-                            <div>
-                                <p class="text-xs text-gray-500">Zwischensumme</p>
-                                <p class="text-sm font-semibold text-gray-900">{euro((Number(item.price) || 0) * (Number(item.quantity) || 0))}</p>
+                <div class="space-y-3">
+                    {#each lines as line, index (index)}
+                        {@const article = articleById(line.articleId)}
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-4 rounded-xl border border-border bg-surface-muted">
+                            <FormField label="Artikel" class="md:col-span-5">
+                                {#snippet children({ id })}
+                                    <select
+                                        {id}
+                                        value={line.articleId}
+                                        onchange={(event) => setArticle(index, event.currentTarget.value)}
+                                        class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
+                                    >
+                                        {#each data.articles as option (option.id)}
+                                            <option value={option.id}>
+                                                {option.name} ({formatEuro(option.price)})
+                                            </option>
+                                        {/each}
+                                    </select>
+                                {/snippet}
+                            </FormField>
+
+                            <FormField label="Größe" class="md:col-span-3">
+                                {#snippet children({ id })}
+                                    {#if article && article.sizes.length > 0}
+                                        <select
+                                            {id}
+                                            bind:value={line.size}
+                                            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
+                                        >
+                                            {#each article.sizes as size (size.name)}
+                                                <option value={size.name}>
+                                                    {size.name} ({formatEuro(size.price || article.price)})
+                                                </option>
+                                            {/each}
+                                        </select>
+                                    {:else}
+                                        <TextInput {id} value="Keine Größen" disabled readonly />
+                                    {/if}
+                                {/snippet}
+                            </FormField>
+
+                            <FormField label="Menge" class="md:col-span-2">
+                                {#snippet children({ id })}
+                                    <TextInput {id} type="number" min={1} max={100} bind:value={lines[index].quantity} />
+                                {/snippet}
+                            </FormField>
+
+                            <div class="md:col-span-2 flex items-center justify-between gap-2">
+                                <div class="min-w-0">
+                                    <p class="text-xs font-semibold text-fg-subtle uppercase tracking-wide">Summe</p>
+                                    <p class="text-sm font-semibold text-fg">
+                                        {formatEuro(unitPrice(line) * (Number(line.quantity) || 0))}
+                                    </p>
+                                </div>
+                                {#if lines.length > 1}
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        icon="trash"
+                                        ariaLabel={`Position ${index + 1} entfernen`}
+                                        onclick={() => removeLine(index)}
+                                    />
+                                {/if}
                             </div>
-                            {#if items.length > 1}
-                                <button type="button" class="text-sm text-red-500 hover:text-red-600" on:click={() => removeItem(idx)}>
-                                    Entfernen
-                                </button>
-                            {/if}
                         </div>
-                    </div>
-                {/each}
-            </div>
-        </div>
-
-        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-            <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-gray-900">Mitglieder</h2>
-                <span class="text-sm text-gray-500">{selectedMember ? 1 : 0} ausgewaehlt</span>
-            </div>
-            {#if members.length === 0}
-                <p class="text-sm text-gray-500">Keine verknuepften Mitglieder gefunden.</p>
-            {:else}
-                <select
-                        name="memberIds"
-                        bind:value={selectedMember}
-                        class="w-full border border-gray-300 rounded-xl px-3 py-3 text-sm bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400"
-                >
-                    <option value="">Mitglied waehlen</option>
-                    {#each members as member}
-                        <option value={member.id}>{member.name}{member.stand ? ` - ${member.stand}` : ""}</option>
+                    {:else}
+                        <p class="text-sm text-fg-subtle py-6 text-center">
+                            Noch keine Position ausgewählt.
+                        </p>
                     {/each}
-                </select>
-            {/if}
-        </div>
+                </div>
+            </Card>
 
-        <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-3">
-            <div class="flex items-center justify-between">
-                <h2 class="text-lg font-semibold text-gray-900">Uebersicht</h2>
-                <span class="text-sm text-gray-500">{items.length} Artikel</span>
-            </div>
-            <div class="divide-y divide-gray-100 text-sm">
-                {#each normalizedItems as item}
-                    <div class="flex items-center justify-between py-2">
-                        <div>
-                            <p class="font-semibold text-gray-900">{item.name || "Artikel"}</p>
-                            <p class="text-xs text-gray-500">{item.quantity} x {euro(item.price)} {item.size ? `(${item.size})` : ""}</p>
-                        </div>
-                        <p class="font-semibold text-gray-900">{euro(item.total)}</p>
-                    </div>
-                {/each}
-            </div>
-            <div class="flex items-center justify-between pt-2 border-t border-gray-200">
-                <span class="text-sm font-semibold text-gray-700">Gesamt</span>
-                <span class="text-2xl font-bold text-amber-600">{euro(total)}</span>
-            </div>
-        </div>
+            <Card
+                title="Mitglieder"
+                subtitle="Die Bestellung wird auf die ausgewählten Mitglieder gebucht."
+                meta={`${selectedMembers.length} ausgewählt`}
+            >
+                {#snippet actions()}
+                    <SearchInput
+                        bind:value={memberSearch}
+                        placeholder="Mitglied suchen..."
+                        label="Mitglieder durchsuchen"
+                        count={visibleMembers.length}
+                    />
+                {/snippet}
 
-        {#if error}
-            <p class="text-sm text-red-600">{error}</p>
-        {/if}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {#each visibleMembers as member (member.id)}
+                        <label
+                            class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-border bg-surface hover:bg-surface-muted transition cursor-pointer"
+                        >
+                            <span class="min-w-0">
+                                <span class="block text-sm font-semibold text-fg">{member.name}</span>
+                                {#if member.stand}
+                                    <span class="block text-xs text-fg-subtle">{member.stand}</span>
+                                {/if}
+                            </span>
+                            <input
+                                type="checkbox"
+                                name="memberIds"
+                                value={member.id}
+                                bind:group={selectedMembers}
+                                class="h-5 w-5 rounded border-border-strong"
+                            />
+                        </label>
+                    {:else}
+                        <p class="text-sm text-fg-subtle py-6 text-center md:col-span-2">
+                            Kein Mitglied gefunden.
+                        </p>
+                    {/each}
+                </div>
+            </Card>
 
-        <div class="flex items-center justify-end gap-3">
-            <a href="/intern/kaemmerer/orders" class="px-4 py-3 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50">Abbrechen</a>
-            <button type="submit" class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm">
-                <span class="bi bi-bag-check"></span>
-                Bestellung anlegen
-            </button>
-        </div>
-    </form>
+            <Card title="Übersicht" meta={`${payload.length} Positionen`}>
+                <ul class="divide-y divide-border">
+                    {#each lines as line}
+                        {@const article = articleById(line.articleId)}
+                        <li class="flex items-center justify-between gap-3 py-2">
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-fg">{article?.name ?? "Artikel"}</p>
+                                <p class="text-xs text-fg-subtle">
+                                    {Number(line.quantity) || 0} × {formatEuro(unitPrice(line))}
+                                    {#if line.size}<span> · Größe {line.size}</span>{/if}
+                                </p>
+                            </div>
+                            <p class="text-sm font-semibold text-fg">
+                                {formatEuro(unitPrice(line) * (Number(line.quantity) || 0))}
+                            </p>
+                        </li>
+                    {/each}
+                </ul>
+
+                <div class="flex items-center justify-between pt-4 mt-2 border-t border-border">
+                    <span class="text-sm font-semibold text-fg-muted">Gesamt</span>
+                    <span class="text-2xl font-bold text-primary">{formatEuro(total)}</span>
+                </div>
+
+                {#if !ready}
+                    <p class="mt-3">
+                        <Badge tone="warning" icon="exclamation-triangle" label="Bitte Position und Mitglied wählen" />
+                    </p>
+                {/if}
+            </Card>
+
+            <div class="flex items-center justify-end gap-3 flex-wrap">
+                <Button href="/intern/kaemmerer/orders" variant="secondary">Abbrechen</Button>
+                <Button type="submit" variant="primary" icon="bag-check" disabled={!ready}>
+                    Bestellung anlegen
+                </Button>
+            </div>
+        </form>
+    {/if}
 </div>

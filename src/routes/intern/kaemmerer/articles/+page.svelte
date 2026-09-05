@@ -1,284 +1,408 @@
-﻿<script lang="ts">
-    export let data;
-    const articles = data.articles ?? [];
-    const euro = (v: number) => `${(Number(v) || 0).toFixed(2)} EUR`;
-    let newSizes: { name: string; price: number; stock?: number; orderUrl?: string }[] = [];
-    const addSizeRow = () => {
-        newSizes = [...newSizes, { name: "", price: 0, stock: 0 }];
-    };
-    const removeSizeRow = (idx: number) => {
-        newSizes = newSizes.filter((_, i) => i !== idx);
-    };
-    $: normalizedSizes = newSizes
-        .filter((s) => s.name.trim())
-        .map((s) => ({ ...s, stock: Number(s.stock) || 0, price: Number(s.price) || 0 }));
-    const formatSizeList = (sizes: { name?: string; price?: number; stock?: number; orderUrl?: string }[] = []) =>
-        sizes
-            .map((s) => `${s.name ?? ""}=${Number(s.price) || 0}|${Number(s.stock) || 0}${s.orderUrl ? `|${s.orderUrl}` : ""}`)
-            .filter(Boolean)
-            .join(", ");
+<script lang="ts">
+    import {
+        Alert,
+        Badge,
+        Button,
+        Card,
+        DataTable,
+        FormField,
+        Modal,
+        PageHeader,
+        SearchInput,
+        StatTile,
+        TextInput
+    } from "$lib/components/ui";
+    import type { Column } from "$lib/components/ui";
+    import { formatEuro } from "$lib/money";
+    import type { ActionData, PageData } from "./$types";
+
+    let { data, form }: { data: PageData; form: ActionData } = $props();
+
+    type Article = PageData["articles"][number];
+
+    interface SizeRow {
+        name: string;
+        /** Euro-Schreibweise für das Formular; der Server rechnet in Cents um. */
+        price: string;
+        stock: number;
+        minStock: number;
+        orderUrl: string;
+    }
+
+    const asInput = (cents: number) => (cents / 100).toFixed(2).replace(".", ",");
+
+    function sizesPayload(rows: SizeRow[]) {
+        return rows
+            .filter((row) => row.name.trim().length > 0)
+            .map((row) => ({
+                name: row.name.trim(),
+                price: row.price,
+                stock: Number(row.stock) || 0,
+                minStock: Number(row.minStock) || 0,
+                orderUrl: row.orderUrl
+            }));
+    }
+
+    function emptySize(): SizeRow {
+        return { name: "", price: "0,00", stock: 0, minStock: 0, orderUrl: "" };
+    }
+
+    let search = $state("");
+
+    const filtered = $derived(
+        data.articles.filter((article) => {
+            const needle = search.trim().toLowerCase();
+            if (!needle) return true;
+            return `${article.name} ${article.description}`.toLowerCase().includes(needle);
+        })
+    );
+
+    const stats = $derived({
+        total: data.articles.length,
+        active: data.articles.filter((article) => article.active).length,
+        inactive: data.articles.filter((article) => !article.active).length
+    });
+
+    // Anlegen --------------------------------------------------------------
+    let createSizes = $state<SizeRow[]>([]);
+
+    // Bearbeiten -----------------------------------------------------------
+    let editing = $state<Article | null>(null);
+    let editOpen = $state(false);
+    let editSizes = $state<SizeRow[]>([]);
+
+    function openEdit(article: Article) {
+        editing = article;
+        // Die Größen MÜSSEN mitgesendet werden -- ein leeres Feld würde sie
+        // serverseitig löschen und den abgeleiteten Bestand auf 0 setzen.
+        editSizes = article.sizes.map((size) => ({
+            name: size.name,
+            price: asInput(size.price),
+            stock: size.stock ?? 0,
+            minStock: size.minStock ?? 0,
+            orderUrl: size.orderUrl ?? ""
+        }));
+        editOpen = true;
+    }
 </script>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Kaemmerer</p>
-            <h1 class="text-3xl font-bold text-gray-900">Artikel verwalten</h1>
-            <p class="text-sm text-gray-600 mt-1">Anlegen, Bearbeiten, Archivieren.</p>
-        </div>
-        <a href="/intern/kaemmerer" class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition">
-            <span class="bi bi-arrow-left"></span>
-            Zurueck
+<svelte:head><title>Artikel - Kämmerer</title></svelte:head>
+
+{#snippet sizeEditor(rows: SizeRow[], add: () => void, remove: (index: number) => void)}
+    <fieldset class="space-y-3">
+        <legend class="text-sm font-semibold text-fg-muted">Größen (optional)</legend>
+
+        {#each rows as row, index (index)}
+            <div class="grid grid-cols-2 lg:grid-cols-6 gap-2 items-end p-3 rounded-xl border border-border">
+                <FormField label="Größe">
+                    {#snippet children({ id })}
+                        <TextInput {id} bind:value={rows[index].name} placeholder="z.B. S" />
+                    {/snippet}
+                </FormField>
+                <FormField label="Preis">
+                    {#snippet children({ id })}
+                        <TextInput {id} bind:value={rows[index].price} inputmode="decimal" placeholder="12,50" />
+                    {/snippet}
+                </FormField>
+                <FormField label="Bestand">
+                    {#snippet children({ id })}
+                        <TextInput {id} type="number" min={0} bind:value={rows[index].stock} />
+                    {/snippet}
+                </FormField>
+                <FormField label="Mindestbestand">
+                    {#snippet children({ id })}
+                        <TextInput {id} type="number" min={0} bind:value={rows[index].minStock} />
+                    {/snippet}
+                </FormField>
+                <FormField label="Bestell-URL">
+                    {#snippet children({ id })}
+                        <TextInput {id} bind:value={rows[index].orderUrl} placeholder="https://..." />
+                    {/snippet}
+                </FormField>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    icon="trash"
+                    ariaLabel={`Größe ${index + 1} entfernen`}
+                    onclick={() => remove(index)}
+                >
+                    Entfernen
+                </Button>
+            </div>
+        {:else}
+            <p class="text-sm text-fg-subtle">Keine Größen hinterlegt — es gilt der Grundpreis.</p>
+        {/each}
+
+        <Button variant="secondary" size="sm" icon="plus-lg" onclick={add}>Größe hinzufügen</Button>
+    </fieldset>
+{/snippet}
+
+{#snippet nameCell(article: Article)}
+    <div class="space-y-1">
+        <a
+            href={`/intern/kaemmerer/articles/${article.id}`}
+            class="font-semibold text-fg hover:text-primary transition"
+        >
+            {article.name}
         </a>
+        {#if article.description}
+            <p class="text-xs text-fg-subtle">{article.description}</p>
+        {/if}
+        {#if article.orderUrl}
+            <a
+                href={article.orderUrl}
+                target="_blank"
+                rel="noreferrer"
+                class="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+            >
+                <span class="bi bi-link-45deg" aria-hidden="true"></span>
+                Bestell-Link
+            </a>
+        {/if}
+        {#if article.hasSizes}
+            <div class="flex flex-wrap gap-1.5 pt-1">
+                {#each article.sizes as size (size.name)}
+                    <Badge tone="info" size="xs" label={`${size.name} · ${formatEuro(size.price || article.price)}`} />
+                {/each}
+            </div>
+        {/if}
+    </div>
+{/snippet}
+
+{#snippet stockCell(article: Article)}
+    <div class="space-y-0.5">
+        <span class="font-semibold text-fg">{article.stock}</span>
+        {#if article.hasSizes}
+            <p class="text-xs text-fg-subtle">Summe der Größen</p>
+        {/if}
+    </div>
+{/snippet}
+
+{#snippet minStockCell(article: Article)}
+    {#if article.hasSizes}
+        <div class="flex flex-wrap gap-1.5">
+            {#each article.sizes as size (size.name)}
+                <Badge tone="neutral" size="xs" label={`${size.name}: ${size.minStock ?? 0}`} />
+            {:else}
+                <span class="text-fg-subtle">–</span>
+            {/each}
+        </div>
+    {:else}
+        <span class="text-fg-muted">{article.minStock}</span>
+    {/if}
+{/snippet}
+
+{#snippet statusCell(article: Article)}
+    {#if article.active}
+        <Badge tone="success" size="xs" label="Bestellbar" />
+    {:else}
+        <Badge tone="neutral" size="xs" label="Deaktiviert" />
+    {/if}
+{/snippet}
+
+<div class="space-y-8">
+    <PageHeader
+        title="Artikel"
+        eyebrow="Kämmerer"
+        subtitle="Artikel anlegen, bearbeiten und deaktivieren."
+        back={{ href: "/intern/kaemmerer" }}
+    >
+        {#snippet actions()}
+            <SearchInput bind:value={search} placeholder="Artikel suchen..." label="Artikel durchsuchen" />
+            <Button href="#artikel-anlegen" variant="primary" icon="plus-circle">Neuer Artikel</Button>
+        {/snippet}
+    </PageHeader>
+
+    {#if form?.error}<Alert tone="danger" message={form.error} />{/if}
+    {#if form?.success}<Alert tone="success" message={form.success} />{/if}
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatTile label="Artikel gesamt" value={stats.total} icon="box" />
+        <StatTile label="Bestellbar" value={stats.active} tone="success" icon="check-circle" />
+        <StatTile label="Deaktiviert" value={stats.inactive} tone="neutral" icon="slash-circle" />
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-        <h2 class="text-lg font-semibold text-gray-900">Neuer Artikel</h2>
-        <form method="post" action="?/create" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label class="text-sm text-gray-700 flex flex-col gap-1">
-                Name
-                <input name="name" type="text" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" required />
-            </label>
-            <label class="text-sm text-gray-700 flex flex-col gap-1">
-                Preis
-                <input name="price" type="number" step="0.01" min="0" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
-            </label>
-            <label class="text-sm text-gray-700 flex flex-col gap-1">
-                Beschreibung
-                <input name="description" type="text" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
-            </label>
-            <label class="text-sm text-gray-700 flex flex-col gap-1">
-                Bestell-URL (gesamt)
-                <input name="orderUrl" type="url" placeholder="https://..." class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
-            </label>
-            <div class="grid grid-cols-2 gap-3">
-                <label class="text-sm text-gray-700 flex flex-col gap-1">
-                    Bestand
-                    <input name="stock" type="number" step="1" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
-                </label>
-                <label class="text-sm text-gray-700 flex flex-col gap-1">
-                    Mindestbestand
-                    <input name="minStock" type="number" step="1" class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500" />
-                </label>
-            </div>
-            <div class="md:col-span-2 space-y-2">
-                <div class="flex items-center justify-between gap-2">
-                    <span class="text-sm font-semibold text-gray-700">Groessen (optional)</span>
-                    <button type="button" class="text-sm px-3 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50" on:click={addSizeRow}>
-                        <span class="bi bi-plus-circle"></span> Groesse hinzufuegen
-                    </button>
+    <section id="artikel-anlegen">
+        <Card
+            title="Neuer Artikel"
+            subtitle="Grunddaten erfassen. Größen können jederzeit ergänzt werden."
+        >
+            <form method="post" action="?/create" class="space-y-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField label="Name" required>
+                        {#snippet children({ id })}
+                            <TextInput {id} name="name" required placeholder="Halstuch" />
+                        {/snippet}
+                    </FormField>
+
+                    <FormField label="Grundpreis" hint="Gilt, wenn eine Größe keinen eigenen Preis hat.">
+                        {#snippet children({ id })}
+                            <TextInput {id} name="price" inputmode="decimal" value="0,00" placeholder="12,50" />
+                        {/snippet}
+                    </FormField>
                 </div>
-                {#if newSizes.length === 0}
-                    <p class="text-sm text-gray-500 border border-dashed border-gray-200 rounded-lg px-3 py-2">Keine Groessen hinterlegt.</p>
-                {:else}
-                    <div class="space-y-2">
-                        {#each newSizes as size, idx}
-                            <div class="grid grid-cols-1 sm:grid-cols-6 gap-2 items-center">
-                                <input name={`size-name-${idx}`} placeholder="z.B. S" class="sm:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={size.name} />
-                                <input name={`size-price-${idx}`} type="number" step="0.01" class="sm:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={size.price} />
-                                <input name={`size-stock-${idx}`} type="number" step="1" class="sm:col-span-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={size.stock} placeholder="Bestand" />
-                                <input name={`size-url-${idx}`} type="url" placeholder="Bestell-URL" class="sm:col-span-3 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" bind:value={size.orderUrl} />
-                                <button type="button" class="text-sm text-red-500 hover:text-red-600" on:click={() => removeSizeRow(idx)}>Entfernen</button>
-                            </div>
-                        {/each}
-                    </div>
-                {/if}
-                <input type="hidden" name="sizes" value={JSON.stringify(normalizedSizes)} />
-                <p class="text-xs text-gray-500">Format: Name, Preis, Bestand und optionale Bestell-URL pro Groesse. Preise koennen pro Groesse variieren.</p>
+
+                <FormField label="Beschreibung">
+                    {#snippet children({ id })}
+                        <TextInput {id} name="description" placeholder="Kurze Beschreibung" />
+                    {/snippet}
+                </FormField>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField label="Bestand" hint="Wird bei Artikeln mit Größen aus den Größen berechnet.">
+                        {#snippet children({ id })}
+                            <TextInput {id} name="stock" type="number" min={0} value="0" />
+                        {/snippet}
+                    </FormField>
+
+                    <FormField label="Mindestbestand" hint="Bei Größen zählt der Mindestbestand je Größe.">
+                        {#snippet children({ id })}
+                            <TextInput {id} name="minStock" type="number" min={0} value="0" />
+                        {/snippet}
+                    </FormField>
+                </div>
+
+                <FormField label="Bestell-URL">
+                    {#snippet children({ id })}
+                        <TextInput {id} name="orderUrl" placeholder="https://..." />
+                    {/snippet}
+                </FormField>
+
+                {@render sizeEditor(
+                    createSizes,
+                    () => (createSizes = [...createSizes, emptySize()]),
+                    (index) => (createSizes = createSizes.filter((_, i) => i !== index))
+                )}
+
+                <input type="hidden" name="sizes" value={JSON.stringify(sizesPayload(createSizes))} />
+
+                <div class="flex justify-end gap-3 flex-wrap pt-2 border-t border-border">
+                    <Button type="submit" variant="primary" icon="check-lg">Artikel anlegen</Button>
+                </div>
+            </form>
+        </Card>
+    </section>
+
+    <Card title="Alle Artikel" meta={`${filtered.length} Einträge`} padding="none">
+        <DataTable
+            columns={[
+                { key: "name", label: "Artikel", cell: nameCell },
+                { key: "price", label: "Grundpreis", align: "right", value: (a) => formatEuro(a.price) },
+                { key: "stock", label: "Bestand", align: "right", cell: stockCell },
+                { key: "minStock", label: "Mindestbestand", cell: minStockCell },
+                { key: "status", label: "Status", cell: statusCell }
+            ] satisfies Column<Article>[]}
+            rows={filtered}
+            getKey={(a) => a.id}
+            cardTitle={(a) => a.name}
+            cardSubtitle={(a) => a.description || undefined}
+            rowClass={(a) => (a.active ? "" : "opacity-60")}
+            empty={search ? "Kein passender Artikel gefunden." : "Noch keine Artikel angelegt."}
+        >
+            {#snippet actions(article)}
+                <Button variant="secondary" size="sm" icon="pencil" onclick={() => openEdit(article)}>
+                    Bearbeiten
+                </Button>
+                <Button
+                    href={`/intern/kaemmerer/articles/${article.id}`}
+                    variant="ghost"
+                    size="sm"
+                    icon="box"
+                >
+                    Details
+                </Button>
+                <form method="post" action="?/toggle">
+                    <input type="hidden" name="id" value={article.id} />
+                    <input type="hidden" name="active" value={article.active ? "false" : "true"} />
+                    <Button
+                        type="submit"
+                        variant={article.active ? "ghost" : "success"}
+                        size="sm"
+                        icon={article.active ? "slash-circle" : "check-circle"}
+                    >
+                        {article.active ? "Deaktivieren" : "Aktivieren"}
+                    </Button>
+                </form>
+            {/snippet}
+        </DataTable>
+    </Card>
+</div>
+
+
+<Modal
+    bind:open={editOpen}
+    title={editing ? `${editing.name} bearbeiten` : "Artikel bearbeiten"}
+    description="Der Bestand wird nicht hier, sondern im Lager gepflegt."
+    size="lg"
+>
+    {#if editing}
+        <form method="post" action="?/update" class="space-y-5">
+            <input type="hidden" name="id" value={editing?.id ?? ""} />
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Name" required>
+                    {#snippet children({ id })}
+                        <TextInput {id} name="name" value={editing?.name ?? ""} required />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="Grundpreis" hint="Gilt, wenn eine Größe keinen eigenen Preis hat.">
+                    {#snippet children({ id })}
+                        <TextInput {id} name="price" inputmode="decimal" value={asInput(editing?.price ?? 0)} />
+                    {/snippet}
+                </FormField>
             </div>
-            <div class="md:col-span-2 flex justify-end">
-                <button type="submit" class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm">
-                    <span class="bi bi-save"></span>
-                    Speichern
-                </button>
+
+            <FormField label="Beschreibung">
+                {#snippet children({ id })}
+                    <TextInput {id} name="description" value={editing?.description ?? ""} />
+                {/snippet}
+            </FormField>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                    label="Mindestbestand"
+                    hint={editing?.hasSizes
+                        ? "Bei Größen zählt der Mindestbestand je Größe."
+                        : "Unterschreitung erscheint in der Nachbestellliste."}
+                >
+                    {#snippet children({ id })}
+                        <TextInput
+                            {id}
+                            name="minStock"
+                            type="number"
+                            min={0}
+                            value={String(editing?.minStock ?? 0)}
+                        />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="Bestell-URL">
+                    {#snippet children({ id })}
+                        <TextInput {id} name="orderUrl" value={editing?.orderUrl ?? ""} placeholder="https://..." />
+                    {/snippet}
+                </FormField>
+            </div>
+
+            {@render sizeEditor(
+                editSizes,
+                () => (editSizes = [...editSizes, emptySize()]),
+                (index) => (editSizes = editSizes.filter((_, i) => i !== index))
+            )}
+
+            <input type="hidden" name="sizes" value={JSON.stringify(sizesPayload(editSizes))} />
+
+            <p class="text-sm text-fg-muted">
+                Aktueller Bestand: <strong class="text-fg">{editing?.stock ?? 0}</strong>
+                {#if editing?.hasSizes}
+                    <span class="text-xs text-fg-subtle">(Summe der Größen)</span>
+                {/if}
+            </p>
+
+            <div class="flex justify-end gap-3 flex-wrap pt-2 border-t border-border">
+                <Button variant="secondary" onclick={() => (editOpen = false)}>Abbrechen</Button>
+                <Button type="submit" variant="primary" icon="check-lg">Speichern</Button>
             </div>
         </form>
-    </div>
-
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-        <div class="px-6 py-4 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-gray-900">Artikel</h2>
-            <span class="text-sm text-gray-500">{articles.length} Eintraege</span>
-        </div>
-        <div class="hidden xl:block overflow-x-auto">
-            <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Preis</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Bestand</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Aktionen</th>
-                </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                {#if articles.length === 0}
-                    <tr>
-                        <td colspan="5" class="px-6 py-6 text-center text-sm text-gray-500">Keine Artikel vorhanden.</td>
-                    </tr>
-                {:else}
-                    {#each articles as article}
-                        <tr class="hover:bg-gray-50 transition">
-                            <td class="px-6 py-4 text-gray-900 font-semibold">
-                                {article.name}
-                                <div class="text-xs text-gray-500">{article.description}</div>
-                                {#if article.orderUrl}
-                                    <div class="text-xs mt-1">
-                                        <a class="inline-flex items-center gap-1 text-blue-700 hover:text-blue-800" href={article.orderUrl} target="_blank" rel="noreferrer">
-                                            <span class="bi bi-link-45deg"></span> Gesamt-Bestelllink
-                                        </a>
-                                    </div>
-                                {/if}
-                                {#if article.sizes?.length}
-                                    <div class="flex flex-wrap gap-2 mt-2">
-                                        {#each article.sizes as size}
-                                            <span class="px-2 py-1 text-[11px] rounded-full border border-sky-200 bg-sky-50 text-sky-800 font-semibold inline-flex items-center gap-2">
-                                                {size.name} ({euro(size.price)})
-                                                {#if size.orderUrl}
-                                                    <a href={size.orderUrl} target="_blank" rel="noreferrer" class="text-blue-700 hover:text-blue-800">
-                                                        <span class="bi bi-box-arrow-up-right"></span>
-                                                    </a>
-                                                {/if}
-                                            </span>
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </td>
-                            <td class="px-6 py-4 text-gray-900 font-semibold">{euro(article.price)}</td>
-                            <td class="px-6 py-4 text-gray-700">{article.stock ?? 0}</td>
-                            <td class="px-6 py-4">
-                                {#if article.active !== false}
-                                    <span class="px-3 py-1 text-xs font-semibold rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">Aktiv</span>
-                                {:else}
-                                    <span class="px-3 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-gray-50 text-gray-600">Inaktiv</span>
-                                {/if}
-                            </td>
-                            <td class="px-6 py-4 space-y-2">
-                                <div class="flex flex-wrap gap-2">
-                                    <a href={`/intern/kaemmerer/articles/${article.id}`} class="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-blue-200 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100">
-                                        <span class="bi bi-box"></span>
-                                        Details
-                                    </a>
-                                </div>
-                                <form method="post" action="?/update" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-                                    <input type="hidden" name="id" value={article.id} />
-                                    <input type="text" name="name" value={article.name} class="border border-gray-300 rounded-lg px-2 py-1 lg:col-span-2" />
-                                    <input type="number" step="0.01" name="price" value={article.price} class="border border-gray-300 rounded-lg px-2 py-1" />
-                                    <input type="number" name="minStock" value={article.minStock ?? 0} class="border border-gray-300 rounded-lg px-2 py-1" />
-                                    <input type="text" name="sizes" value={formatSizeList(article.sizes)} placeholder="S=0|5|https://..." class="border border-gray-300 rounded-lg px-2 py-1 lg:col-span-2 sm:col-span-2" />
-                                    <input type="text" name="orderUrl" value={article.orderUrl ?? ""} placeholder="Gesamt-Bestell-URL" class="border border-gray-300 rounded-lg px-2 py-1 lg:col-span-2 sm:col-span-2" />
-                                    <input type="text" name="description" value={article.description} class="border border-gray-300 rounded-lg px-2 py-1 lg:col-span-4 sm:col-span-2" />
-                                    <button type="submit" class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold lg:col-span-1 sm:col-span-2">Update</button>
-                                </form>
-                                <div class="flex items-center gap-2 text-xs">
-                                    <form method="post" action="?/toggle">
-                                        <input type="hidden" name="id" value={article.id} />
-                                        <input type="hidden" name="active" value={article.active === false ? "true" : "false"} />
-                                        <button type="submit" class="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 font-semibold">
-                                            {article.active === false ? "Aktivieren" : "Deaktivieren"}
-                                        </button>
-                                    </form>
-                                    <form method="post" action="?/stock" class="flex items-center gap-1">
-                                        <input type="hidden" name="id" value={article.id} />
-                                        <input type="number" name="delta" step="1" class="w-20 border border-gray-300 rounded-lg px-2 py-1" placeholder="+/-" />
-                                        <button type="submit" class="px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 font-semibold">Bestand anpassen</button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                    {/each}
-                {/if}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="xl:hidden px-4 pb-6 space-y-4">
-            {#if articles.length === 0}
-                <p class="text-sm text-gray-500 px-2 pb-2">Keine Artikel vorhanden.</p>
-            {:else}
-                {#each articles as article}
-                    <div class="border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3">
-                        <div class="flex items-start justify-between gap-3">
-                            <div class="space-y-1">
-                                <p class="text-lg font-semibold text-gray-900">{article.name}</p>
-                                {#if article.description}
-                                    <p class="text-sm text-gray-600">{article.description}</p>
-                                {/if}
-                                {#if article.orderUrl}
-                                    <a class="inline-flex items-center gap-1 text-sm text-blue-700 hover:text-blue-800" href={article.orderUrl} target="_blank" rel="noreferrer">
-                                        <span class="bi bi-link-45deg"></span> Gesamt-Bestelllink
-                                    </a>
-                                {/if}
-                            </div>
-                            {#if article.active !== false}
-                                <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">Aktiv</span>
-                            {:else}
-                                <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-gray-200 bg-gray-50 text-gray-600">Inaktiv</span>
-                            {/if}
-                        </div>
-
-                        <div class="flex items-center flex-wrap gap-3 text-sm text-gray-700">
-                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-200 bg-gray-50">
-                                <span class="bi bi-cash-coin text-gray-500"></span> {euro(article.price)}
-                            </span>
-                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-200 bg-gray-50">
-                                <span class="bi bi-box-seam text-gray-500"></span> Bestand: {article.stock ?? 0}
-                            </span>
-                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-200 bg-gray-50">
-                                <span class="bi bi-exclamation-diamond text-gray-500"></span> Min: {article.minStock ?? 0}
-                            </span>
-                        </div>
-
-                        {#if article.sizes?.length}
-                            <div class="flex flex-wrap gap-2">
-                                {#each article.sizes as size}
-                                    <span class="px-2 py-1 text-[11px] rounded-full border border-sky-200 bg-sky-50 text-sky-800 font-semibold inline-flex items-center gap-2">
-                                        {size.name} ({euro(size.price)})
-                                        {#if size.orderUrl}
-                                            <a href={size.orderUrl} target="_blank" rel="noreferrer" class="text-blue-700 hover:text-blue-800">
-                                                <span class="bi bi-box-arrow-up-right"></span>
-                                            </a>
-                                        {/if}
-                                    </span>
-                                {/each}
-                            </div>
-                        {/if}
-
-                        <div class="space-y-2">
-                            <a href={`/intern/kaemmerer/articles/${article.id}`} class="w-full inline-flex justify-center items-center gap-2 px-3 py-2 text-sm font-semibold border border-blue-200 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100">
-                                <span class="bi bi-box"></span>
-                                Details
-                            </a>
-                            <form method="post" action="?/update" class="grid grid-cols-1 gap-2 text-xs">
-                                <input type="hidden" name="id" value={article.id} />
-                                <input type="text" name="name" value={article.name} class="border border-gray-300 rounded-lg px-3 py-2" placeholder="Name" />
-                                <div class="grid grid-cols-2 gap-2">
-                                    <input type="number" step="0.01" name="price" value={article.price} class="border border-gray-300 rounded-lg px-3 py-2" placeholder="Preis" />
-                                    <input type="number" name="minStock" value={article.minStock ?? 0} class="border border-gray-300 rounded-lg px-3 py-2" placeholder="Mindestbestand" />
-                                </div>
-                                <input type="text" name="sizes" value={formatSizeList(article.sizes)} placeholder="S=0|5|https://..." class="border border-gray-300 rounded-lg px-3 py-2" />
-                                <input type="text" name="orderUrl" value={article.orderUrl ?? ""} placeholder="Gesamt-Bestell-URL" class="border border-gray-300 rounded-lg px-3 py-2" />
-                                <input type="text" name="description" value={article.description} class="border border-gray-300 rounded-lg px-3 py-2" placeholder="Beschreibung" />
-                                <button type="submit" class="px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-semibold">Update</button>
-                            </form>
-                            <div class="flex flex-col gap-2 text-xs">
-                                <form method="post" action="?/toggle" class="flex items-center gap-2">
-                                    <input type="hidden" name="id" value={article.id} />
-                                    <input type="hidden" name="active" value={article.active === false ? "true" : "false"} />
-                                    <button type="submit" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 font-semibold">
-                                        {article.active === false ? "Aktivieren" : "Deaktivieren"}
-                                    </button>
-                                </form>
-                                <form method="post" action="?/stock" class="flex items-center gap-2">
-                                    <input type="hidden" name="id" value={article.id} />
-                                    <input type="number" name="delta" step="1" class="w-24 border border-gray-300 rounded-lg px-3 py-2" placeholder="+/-" />
-                                    <button type="submit" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 font-semibold">Bestand anpassen</button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                {/each}
-            {/if}
-        </div>
-    </div>
-</div>
+    {/if}
+</Modal>

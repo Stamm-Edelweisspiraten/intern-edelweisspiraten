@@ -1,61 +1,100 @@
 <script lang="ts">
-    export let data;
+    import { Badge, Card, EmptyState, PageHeader } from "$lib/components/ui";
+    import { formatDateTime } from "$lib/format";
+    import type { PageData } from "./$types";
 
-    const formatDate = (iso: string) => new Date(iso).toLocaleString("de-DE");
+    let { data }: { data: PageData } = $props();
+
+    const ACTION_TONES = {
+        create: "success",
+        update: "info",
+        delete: "danger"
+    } as const;
+
+    const ACTION_LABELS = {
+        create: "Angelegt",
+        update: "Geändert",
+        delete: "Gelöscht"
+    } as const;
+
+    /** Werte lesbar darstellen statt roher JSON-Ausgabe. */
+    function display(value: unknown): string {
+        if (value === null || value === undefined || value === "") return "—";
+        if (Array.isArray(value)) {
+            return value.length === 0 ? "—" : value.map(display).join(", ");
+        }
+        if (typeof value === "object") return JSON.stringify(value);
+        if (typeof value === "boolean") return value ? "ja" : "nein";
+        return String(value);
+    }
 </script>
 
-<div class="max-w-3xl mx-auto mt-12 space-y-6">
-    <div class="flex items-start justify-between gap-3">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-900">Änderungslog</h1>
-            <p class="text-gray-600">
-                Mitglied: {data.member.firstname} {data.member.lastname}
-                {#if data.member.fahrtenname} ({data.member.fahrtenname}){/if}
-            </p>
-            {#if data.member.updatedAt}
-                <p class="text-xs text-gray-500 mt-1">
-                    Zuletzt geändert {formatDate(data.member.updatedAt)}
-                    {#if data.member.updatedBy} von {data.member.updatedBy}{/if}
-                </p>
-            {/if}
-        </div>
-        <a href={`/intern/members/${data.member.id}`} class="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow">
-            Zurück zum Mitglied
-        </a>
-    </div>
+<svelte:head><title>Änderungen - {data.member.firstname} {data.member.lastname}</title></svelte:head>
+
+<div class="max-w-3xl mx-auto space-y-8">
+    <PageHeader
+        title="Änderungsprotokoll"
+        eyebrow="Mitglied"
+        subtitle={`${data.member.firstname} ${data.member.lastname}${data.member.fahrtenname ? ` („${data.member.fahrtenname}“)` : ""}`}
+        back={{ href: `/intern/members/${data.member.id}`, label: "Zum Mitglied" }}
+    />
+
+    {#if data.member.updatedAt}
+        <p class="text-sm text-fg-subtle">
+            Zuletzt geändert {formatDateTime(data.member.updatedAt)}
+            {#if data.member.updatedBy}von {data.member.updatedBy}{/if}
+        </p>
+    {/if}
 
     {#if (data.logs ?? []).length === 0}
-        <div class="p-4 rounded-xl border border-gray-200 bg-white text-gray-600 text-sm">
-            Keine Änderungen protokolliert.
-        </div>
+        <Card>
+            <EmptyState
+                icon="clock-history"
+                title="Keine Änderungen protokolliert"
+                description="Sobald Daten dieses Mitglieds geändert werden, erscheinen sie hier."
+            />
+        </Card>
     {:else}
         <div class="space-y-3">
-            {#each data.logs as log}
-                <div class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
+            {#each data.logs as log (log.createdAt + log.action)}
+                <Card padding="sm">
                     <div class="flex items-center justify-between flex-wrap gap-2">
-                        <div class="text-sm text-gray-700">
-                            {formatDate(log.createdAt)} · {log.user}
-                        </div>
-                        <span class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800 uppercase tracking-wide">
-                            {log.action}
-                        </span>
+                        <p class="text-sm text-fg-muted">
+                            {formatDateTime(log.createdAt)} · {log.user}
+                        </p>
+                        <Badge
+                            tone={ACTION_TONES[log.action as keyof typeof ACTION_TONES] ?? "neutral"}
+                            size="xs"
+                            label={ACTION_LABELS[log.action as keyof typeof ACTION_LABELS] ?? log.action}
+                        />
                     </div>
+
                     {#if log.changes && log.changes.length > 0}
-                        <table class="mt-3 w-full text-sm">
-                            <tbody class="divide-y divide-gray-100">
-                            {#each log.changes as c}
-                                <tr>
-                                    <td class="py-1 pr-2 font-semibold text-gray-800 align-top w-1/4">{c.field}</td>
-                                    <td class="py-1 pr-2 text-gray-600 font-mono text-xs break-all align-top">{JSON.stringify(c.before) ?? "—"}</td>
-                                    <td class="py-1 text-gray-900 font-mono text-xs break-all align-top">→ {JSON.stringify(c.after) ?? "—"}</td>
-                                </tr>
-                            {/each}
-                            </tbody>
-                        </table>
+                        <div class="mt-3 overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <caption class="sr-only">Geänderte Felder</caption>
+                                <thead>
+                                    <tr>
+                                        <th scope="col" class="text-left text-xs font-semibold text-fg-subtle uppercase tracking-wide pb-1">Feld</th>
+                                        <th scope="col" class="text-left text-xs font-semibold text-fg-subtle uppercase tracking-wide pb-1">Vorher</th>
+                                        <th scope="col" class="text-left text-xs font-semibold text-fg-subtle uppercase tracking-wide pb-1">Nachher</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border">
+                                    {#each log.changes as change (change.field)}
+                                        <tr>
+                                            <td class="py-1.5 pr-3 font-semibold text-fg align-top">{change.field}</td>
+                                            <td class="py-1.5 pr-3 text-fg-muted align-top break-words">{display(change.before)}</td>
+                                            <td class="py-1.5 text-fg align-top break-words">{display(change.after)}</td>
+                                        </tr>
+                                    {/each}
+                                </tbody>
+                            </table>
+                        </div>
                     {:else}
-                        <p class="mt-2 text-sm text-gray-600">Keine Felddetails vorhanden.</p>
+                        <p class="mt-2 text-sm text-fg-subtle">Keine Felddetails vorhanden.</p>
                     {/if}
-                </div>
+                </Card>
             {/each}
         </div>
     {/if}

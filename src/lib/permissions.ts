@@ -19,6 +19,12 @@ export const ALL_PERMISSIONS = [
     "dashboard.view",
 
     // -----------------------
+    // Termine / Downloads
+    // -----------------------
+    "termine.view",
+    "downloads.view",
+
+    // -----------------------
     // Groups
     // -----------------------
     "groups.view",

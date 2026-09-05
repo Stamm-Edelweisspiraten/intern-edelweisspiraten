@@ -29,7 +29,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
     const enriched = positions.map((p) => ({
         ...p,
-        members: (p.memberIds ?? []).map((id) => memberMap.get(id)).filter(Boolean)
+        members: (p.memberIds ?? []).map((id: string) => memberMap.get(id)).filter(Boolean)
     }));
 
     const memberOptions = members.map((m: any) => ({

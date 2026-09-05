@@ -1,107 +1,164 @@
-﻿<script lang="ts">
-    import { enhance } from "$app/forms";
-    import type { SubmitFunction } from "@sveltejs/kit";
-    import { addToast } from "$lib/toastStore";
+<script lang="ts">
+    import { Alert, Button, Card, FormField, PageHeader, StatTile, TextInput } from "$lib/components/ui";
+    import { formatEuro } from "$lib/money";
+    import type { ActionData, PageData } from "./$types";
 
-    export let data;
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    const canUpdate = data.canUpdate;
+    type LevelKey = keyof PageData["finance"]["contributions"];
 
-    let contributions = { ...data.finance.contributions };
-    let successMsg = "";
-    let errorMsg = "";
-    let saving = false;
-    const levels = [
-        { key: "stamm", label: "Stamm (Edelweisspiraten)" },
+    /**
+     * Das Formular ging bisher an die Standard-Aktion (die es nicht gibt) und
+     * benannte die Felder „stamm“ statt „contrib_stamm“ — Speichern war damit
+     * wirkungslos.
+     *
+     * Beträge werden wie überall in Euro eingegeben und serverseitig in ganze
+     * Cents umgerechnet.
+     */
+    const LEVELS: { key: LevelKey; label: string }[] = [
+        { key: "stamm", label: "Stamm (Edelweißpiraten)" },
         { key: "gau", label: "Gau (Bremen)" },
         { key: "landesmark", label: "Landesmark (Achtern Diek)" },
         { key: "bund", label: "Bund (Christliche Pfadfinderschaft Deutschlands e.V.)" }
     ];
 
-    const formatEuro = (val: number) =>
-        val.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const asEuroInput = (cents: number) => (cents / 100).toFixed(2).replace(".", ",");
 
-    $: total = levels.reduce((sum, lvl) => sum + (Number((contributions as any)[lvl.key]) || 0), 0);
+    let contributions = $state<Record<string, string>>(
+        Object.fromEntries(LEVELS.map((l) => [l.key, asEuroInput(data.finance.contributions[l.key])]))
+    );
 
-    const onSubmit: SubmitFunction = ({ update }) => {
-        saving = true;
-        successMsg = "";
-        errorMsg = "";
-        return async ({ result }) => {
-            if (result.type === "success") {
-                successMsg = "Einstellungen gespeichert.";
-                addToast(successMsg, "success");
-                if (result.data?.finance?.contributions) {
-                    contributions = { ...result.data.finance.contributions };
-                }
-            } else if (result.type === "failure") {
-                errorMsg = result.data?.error ?? "Speichern fehlgeschlagen.";
-                addToast(errorMsg, "error");
-            } else if (result.type === "error") {
-                errorMsg = result.error?.message ?? "Speichern fehlgeschlagen.";
-                addToast(errorMsg, "error");
-            }
-            saving = false;
-        };
-    };
+    const total = $derived(
+        LEVELS.reduce((sum, level) => {
+            const parsed = Number(String(contributions[level.key]).replace(",", "."));
+            return sum + (Number.isFinite(parsed) ? Math.round(parsed * 100) : 0);
+        }, 0)
+    );
 </script>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Admin</p>
-            <h1 class="text-4xl font-bold text-gray-900">Einstellungen</h1>
-            <p class="text-sm text-gray-600 mt-1">Stammdaten und Beiträge verwalten.</p>
-        </div>
-        <a
-                href="/intern/admin"
-                class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
-        >
-            <span class="bi bi-arrow-left"></span>
-            Zurück
-        </a>
+<svelte:head><title>Einstellungen - Adminbereich</title></svelte:head>
+
+<div class="space-y-8">
+    <PageHeader
+        title="Einstellungen"
+        eyebrow="Adminbereich"
+        subtitle="Beitragssätze und Bankverbindung der Kasse."
+        back={{ href: "/intern/admin" }}
+    />
+
+    {#if form?.error}<Alert tone="danger" message={form.error} />{/if}
+    {#if form?.success}<Alert tone="success" message={form.success} />{/if}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <StatTile label="Jahresbeitrag gesamt" value={formatEuro(total)} tone="primary" icon="cash-coin" />
+        <StatTile
+            label="Zuletzt geändert"
+            value={data.finance.updatedAt
+                ? new Date(data.finance.updatedAt).toLocaleDateString("de-DE")
+                : "–"}
+            hint={data.finance.updatedBy ?? undefined}
+            tone="neutral"
+            icon="clock-history"
+        />
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-6">
-        <div class="flex items-center justify-between flex-wrap gap-3">
-            <h2 class="text-xl font-semibold text-gray-900">Beitragssätze</h2>
-            <div class="text-sm text-gray-600">Gesamt: <span class="font-semibold text-gray-900">{formatEuro(total)} EUR</span></div>
-        </div>
-
-        <form method="post" use:enhance={onSubmit} class="space-y-4">
+    <form method="post" action="?/updateFinance" class="space-y-8">
+        <Card
+            title="Beitragssätze"
+            subtitle="Gelten als Vorgabe für neu angelegte Geschäftsjahre."
+        >
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {#each levels as lvl}
-                    <label class="text-sm font-semibold text-gray-700 flex flex-col gap-2 border border-gray-200 rounded-xl p-4 bg-gray-50">
-                        {lvl.label}
-                        <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                class="w-full px-4 py-3 rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 text-sm"
-                                bind:value={(contributions as any)[lvl.key]}
-                                name={lvl.key}
-                                disabled={!canUpdate}
-                        />
-                    </label>
+                {#each LEVELS as level (level.key)}
+                    <FormField label={level.label}>
+                        {#snippet children({ id, describedBy })}
+                            <TextInput
+                                {id}
+                                {describedBy}
+                                name={`contrib_${level.key}`}
+                                inputmode="decimal"
+                                placeholder="0,00"
+                                bind:value={contributions[level.key]}
+                                disabled={!data.canUpdate}
+                            />
+                        {/snippet}
+                    </FormField>
                 {/each}
             </div>
+        </Card>
 
-            {#if canUpdate}
-                <div class="flex items-center justify-end gap-3 flex-wrap">
-                    {#if errorMsg}<span class="text-sm text-red-600">{errorMsg}</span>{/if}
-                    {#if successMsg}<span class="text-sm text-emerald-700">{successMsg}</span>{/if}
-                    <button
-                            type="submit"
-                            class="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition disabled:opacity-60"
-                            disabled={saving}
-                    >
-                        <span class="bi bi-save"></span>
-                        {saving ? "Speichern..." : "Speichern"}
-                    </button>
-                </div>
-            {:else}
-                <p class="text-sm text-gray-500">Du hast keine Berechtigung zum Aktualisieren.</p>
-            {/if}
-        </form>
-    </div>
+        <Card
+            title="Bankverbindung"
+            subtitle="Wird auf Beitragsbescheiden und Zahlungsaufforderungen ausgewiesen."
+        >
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Kontoinhaber" class="md:col-span-2">
+                    {#snippet children({ id, describedBy })}
+                        <TextInput
+                            {id}
+                            {describedBy}
+                            name="bank_accountHolder"
+                            value={data.finance.bank.accountHolder}
+                            placeholder="Stamm Edelweißpiraten Bremen"
+                            disabled={!data.canUpdate}
+                        />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="IBAN" hint="Wird beim Speichern auf Gültigkeit geprüft.">
+                    {#snippet children({ id, describedBy })}
+                        <TextInput
+                            {id}
+                            {describedBy}
+                            name="bank_iban"
+                            value={data.finance.bank.iban}
+                            placeholder="DE00 0000 0000 0000 0000 00"
+                            disabled={!data.canUpdate}
+                        />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="BIC">
+                    {#snippet children({ id, describedBy })}
+                        <TextInput
+                            {id}
+                            {describedBy}
+                            name="bank_bic"
+                            value={data.finance.bank.bic}
+                            disabled={!data.canUpdate}
+                        />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="Kreditinstitut">
+                    {#snippet children({ id, describedBy })}
+                        <TextInput
+                            {id}
+                            {describedBy}
+                            name="bank_bankName"
+                            value={data.finance.bank.bankName}
+                            disabled={!data.canUpdate}
+                        />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="Gläubiger-Identifikationsnummer" hint="Optional, für SEPA-Lastschriften.">
+                    {#snippet children({ id, describedBy })}
+                        <TextInput
+                            {id}
+                            {describedBy}
+                            name="bank_creditorId"
+                            value={data.finance.bank.creditorId}
+                            disabled={!data.canUpdate}
+                        />
+                    {/snippet}
+                </FormField>
+            </div>
+        </Card>
+
+        {#if data.canUpdate}
+            <div class="flex justify-end">
+                <Button type="submit" variant="primary" icon="check-lg">Speichern</Button>
+            </div>
+        {/if}
+    </form>
 </div>

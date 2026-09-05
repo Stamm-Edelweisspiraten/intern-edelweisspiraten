@@ -133,6 +133,11 @@
                     angezeigten Code ein.
                 </p>
                 <div class="flex flex-col sm:flex-row items-center gap-6">
+                    <!--
+                        Der weiße Grund bleibt bewusst auch im dunklen Design:
+                        ein QR-Code auf dunklem Untergrund ist von vielen
+                        Kamera-Apps nicht lesbar.
+                    -->
                     <img
                         src={form.enrolment.qrDataUrl}
                         alt="QR-Code zur Einrichtung der Zwei-Faktor-Authentifizierung"

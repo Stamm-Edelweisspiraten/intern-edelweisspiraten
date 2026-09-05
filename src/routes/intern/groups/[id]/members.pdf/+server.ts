@@ -24,14 +24,14 @@ export async function GET({ params, locals }) {
         }
     }
 
-    const members = await getMembersByGroup(params.id);
+    const members = (await getMembersByGroup(params.id)) as unknown as Parameters<typeof createGroupMembersPdf>[0]["members"];
 
     const pdfBuffer = await createGroupMembersPdf({
         group,
         members
     });
 
-    return new Response(pdfBuffer, {
+    return new Response(new Uint8Array(pdfBuffer), {
         headers: {
             "Content-Type": "application/pdf",
             "Content-Disposition": `inline; filename="gruppe-${group.name}-mitglieder.pdf"`

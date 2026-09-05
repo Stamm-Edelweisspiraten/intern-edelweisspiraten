@@ -22,12 +22,10 @@ export async function GET({ params, locals }) {
         if (!allowedMatch) throw error(403, "Keine Berechtigung");
     }
 
-    const pdfBuffer = await createInvitePdf({
-        ...member,
-        id: memberId
-    });
+    // createInvitePdf nutzt member._id; ein zusaetzliches id-Feld ist unnoetig.
+    const pdfBuffer = await createInvitePdf(member as Parameters<typeof createInvitePdf>[0]);
 
-    return new Response(pdfBuffer, {
+    return new Response(new Uint8Array(pdfBuffer), {
         headers: {
             "Content-Type": "application/pdf",
             "Content-Disposition": `inline; filename="invite-${memberId}.pdf"`

@@ -1,48 +1,188 @@
 <script lang="ts">
-    export let data;
+    import { Badge, Button, Card, DataTable, EmptyState, PageHeader, StatTile } from "$lib/components/ui";
+    import type { Column } from "$lib/components/ui";
+    import { formatDate } from "$lib/format";
+    import { formatEuro } from "$lib/money";
+    import {
+        orderStatusLabel,
+        orderStatusTone,
+        paymentStatusLabel,
+        paymentStatusTone
+    } from "$lib/kaemmerer/orderStatus";
+    import type { PageData } from "./$types";
 
-    const birthdays = (data.birthdays ?? []).slice(0, 3);
+    let { data }: { data: PageData } = $props();
+
+    type Invoice = PageData["invoices"][number];
+    type Order = PageData["orders"][number];
+
+    /**
+     * Statt der frueheren "Coming Soon"-Flaeche zeigt das Dashboard jetzt die
+     * Daten, die den angemeldeten Benutzer wirklich betreffen: eigene offene
+     * Posten, eigene offene Bestellungen und die naechsten Geburtstage.
+     */
+    const invoiceColumns: Column<Invoice>[] = [
+        { key: "member", label: "Mitglied", value: (i) => i.member },
+        { key: "kind", label: "Art", value: (i) => i.kind },
+        { key: "dueDate", label: "Fällig", cell: dueCell },
+        { key: "outstanding", label: "Offen", align: "right", value: (i) => formatEuro(i.outstanding) }
+    ];
+
+    const orderColumns: Column<Order>[] = [
+        { key: "number", label: "Nummer", value: (o) => o.number },
+        { key: "createdAt", label: "Bestellt am", value: (o) => formatDate(o.createdAt) },
+        { key: "status", label: "Status", cell: orderStatusCell },
+        { key: "total", label: "Summe", align: "right", value: (o) => formatEuro(o.total) }
+    ];
 </script>
 
-<div class="max-w-6xl mx-auto mt-10 space-y-6">
-    <div class="bg-white border border-gray-200 rounded-2xl shadow p-6">
-        <h1 class="text-3xl font-bold text-gray-900">Willkommen, {data.userName}!</h1>
-        <p class="text-gray-600 mt-2">Hier findest du einen schnellen Überblick und die nächsten Geburtstage.</p>
+{#snippet dueCell(invoice: Invoice)}
+    {#if invoice.dueDate}
+        <span class={invoice.overdue ? "font-semibold text-danger" : "text-fg"}>
+            {formatDate(invoice.dueDate)}
+        </span>
+        {#if invoice.overdue}
+            <span class="block text-xs text-danger">überfällig</span>
+        {/if}
+    {:else}
+        <span class="text-fg-subtle">–</span>
+    {/if}
+{/snippet}
+
+{#snippet orderStatusCell(order: Order)}
+    <div class="flex flex-wrap gap-1.5">
+        <Badge tone={orderStatusTone(order.status)} size="xs" label={orderStatusLabel(order.status)} />
+        <Badge
+            tone={paymentStatusTone(order.paymentStatus)}
+            size="xs"
+            label={paymentStatusLabel(order.paymentStatus)}
+        />
+    </div>
+{/snippet}
+
+<svelte:head><title>Dashboard - Intern</title></svelte:head>
+
+<div class="space-y-8">
+    <PageHeader
+        title={`Willkommen, ${data.userName}!`}
+        eyebrow="Übersicht"
+        subtitle="Deine offenen Posten, Bestellungen und die nächsten Geburtstage."
+    />
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatTile
+            label="Offene Posten"
+            value={formatEuro(data.outstandingTotal)}
+            tone={data.outstandingTotal > 0 ? "warning" : "success"}
+            icon="hourglass-split"
+            hint={`${data.outstandingCount} Rechnung${data.outstandingCount === 1 ? "" : "en"}`}
+        />
+        <StatTile
+            label="Überfällig"
+            value={data.overdueCount}
+            tone={data.overdueCount > 0 ? "danger" : "neutral"}
+            icon="exclamation-circle"
+            hint={data.overdueCount > 0 ? "Bitte zeitnah begleichen" : "Alles im Zeitplan"}
+        />
+        <StatTile
+            label="Offene Bestellungen"
+            value={data.openOrderCount}
+            tone={data.openOrderCount > 0 ? "primary" : "neutral"}
+            icon="bag"
+            href="/intern/kaemmerer/order"
+        />
+        <StatTile
+            label="Nächster Geburtstag"
+            value={data.birthdays[0] ? `in ${data.birthdays[0].inDays} Tagen` : "–"}
+            tone="primary"
+            icon="gift"
+            hint={data.birthdays[0]?.firstname ?? "Kein Eintrag"}
+        />
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div class="lg:col-span-2">
-            <div class="bg-gray-100 border border-gray-200 rounded-2xl p-6 text-gray-500">
-                <h2 class="text-2xl font-semibold text-gray-700 mb-2">Coming Soon</h2>
-                <p class="text-sm">Weitere Widgets und Kennzahlen folgen.</p>
-            </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div class="lg:col-span-2 space-y-6">
+            <Card title="Meine offenen Posten" meta={`${data.outstandingCount} offen`} padding="none">
+                {#if !data.hasLinkedMembers}
+                    <EmptyState
+                        icon="person-badge"
+                        title="Kein Mitglied verknüpft"
+                        description="Deinem Zugang ist noch kein Mitglied zugeordnet. Wende dich an einen Administrator, damit hier deine Beiträge erscheinen."
+                    />
+                {:else}
+                    <DataTable
+                        columns={invoiceColumns}
+                        rows={data.invoices}
+                        getKey={(i) => i.id}
+                        cardTitle={(i) => i.member}
+                        cardSubtitle={(i) => i.kind}
+                        empty="Aktuell sind keine Posten offen."
+                        caption="Offene Rechnungen der verknüpften Mitglieder"
+                    />
+                    {#if data.outstandingCount > data.invoices.length}
+                        <p class="px-6 py-3 text-xs text-fg-subtle border-t border-border">
+                            {data.outstandingCount - data.invoices.length} weitere offene Posten.
+                        </p>
+                    {/if}
+                {/if}
+            </Card>
+
+            <Card title="Meine offenen Bestellungen" meta={`${data.openOrderCount} offen`} padding="none">
+                {#snippet actions()}
+                    <Button href="/intern/kaemmerer/order" variant="secondary" size="sm" icon="bag">
+                        Alle Bestellungen
+                    </Button>
+                {/snippet}
+
+                <DataTable
+                    columns={orderColumns}
+                    rows={data.orders}
+                    getKey={(o) => o.id}
+                    cardTitle={(o) => o.number}
+                    cardSubtitle={(o) => `${o.itemCount} Position${o.itemCount === 1 ? "" : "en"}`}
+                    rowHref={(o) => `/intern/kaemmerer/order/${o.id}`}
+                    empty="Keine offenen Bestellungen."
+                    caption="Offene Bestellungen der verknüpften Mitglieder"
+                >
+                    {#snippet actions(order)}
+                        <Button
+                            href={`/intern/kaemmerer/order/${order.id}`}
+                            variant="secondary"
+                            size="sm"
+                            icon="eye"
+                        >
+                            Details
+                        </Button>
+                    {/snippet}
+                </DataTable>
+            </Card>
         </div>
 
-        <div class="bg-white border border-gray-200 rounded-2xl shadow p-6 lg:col-span-1">
-            <div class="flex items-center justify-between mb-4">
-                <div>
-                    <h2 class="text-xl font-semibold text-gray-900">Nächste Geburtstage</h2>
-                    <p class="text-gray-600 text-sm">Top 3 demnächst.</p>
-                </div>
-            </div>
-
-            {#if birthdays.length > 0}
-                <div class="space-y-3">
-                    {#each birthdays as b}
-                        <div class="border border-gray-100 rounded-xl p-3 bg-gray-50">
-                            <div class="flex justify-between items-center mb-1">
-                                <div class="text-sm text-gray-500">in {b.inDays} Tag{b.inDays === 1 ? "" : "en"}</div>
-                                <div class="text-sm font-semibold text-gray-700">{b.dateLabel}</div>
-                            </div>
-                            <div class="text-lg font-semibold text-gray-900">{b.firstname ?? "-"}</div>
-                            <div class="text-sm text-gray-600">{b.group ?? "-"}</div>
-                            <div class="text-sm text-gray-500">wird {b.age} Jahre alt.</div>
-                        </div>
-                    {/each}
-                </div>
+        <Card title="Nächste Geburtstage" subtitle="Die drei nächsten Termine.">
+            {#if data.birthdays.length === 0}
+                <EmptyState inline title="Keine Geburtstage gefunden." />
             {:else}
-                <p class="text-gray-600">Keine Geburtstage gefunden.</p>
+                <ul class="space-y-3">
+                    {#each data.birthdays as birthday (birthday.id)}
+                        <li class="rounded-xl border border-border bg-surface-muted p-4">
+                            <div class="flex items-center justify-between gap-2 flex-wrap">
+                                <Badge
+                                    tone={birthday.inDays === 0 ? "success" : "neutral"}
+                                    size="xs"
+                                    icon="gift"
+                                    label={birthday.inDays === 0
+                                        ? "Heute"
+                                        : `in ${birthday.inDays} Tag${birthday.inDays === 1 ? "" : "en"}`}
+                                />
+                                <span class="text-xs font-semibold text-fg-muted">{birthday.dateLabel}</span>
+                            </div>
+                            <p class="mt-2 text-lg font-semibold text-fg">{birthday.firstname || "–"}</p>
+                            <p class="text-sm text-fg-muted">{birthday.group}</p>
+                            <p class="text-sm text-fg-subtle">wird {birthday.age} Jahre alt.</p>
+                        </li>
+                    {/each}
+                </ul>
             {/if}
-        </div>
+        </Card>
     </div>
 </div>

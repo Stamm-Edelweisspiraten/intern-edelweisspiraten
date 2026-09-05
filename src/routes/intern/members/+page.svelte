@@ -1,517 +1,256 @@
-﻿<script lang="ts">
-    export let data;
-    export const csr = false;
+<script lang="ts">
+    import {
+        Alert, Badge, Button, Card, ConfirmDialog, DataTable,
+        PageHeader, SearchInput, StatTile
+    } from "$lib/components/ui";
+    import type { Column } from "$lib/components/ui";
+    import { calculateAge, formatDate } from "$lib/format";
+    import { can, canAny } from "$lib/can";
+    import type { ActionData, PageData } from "./$types";
 
-    import { addToast } from "$lib/toastStore";
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    let search = "";
-    const permissions: string[] = data.permissions ?? [];
-    const hasPerm = (p: string) => permissions.includes("*") || permissions.includes(p);
+    type Member = PageData["members"][number];
 
-    const canCreate = hasPerm("members.create");
-    const canEdit = hasPerm("members.edit") || hasPerm("groupleader.members.edit");
-    const groupMap = new Map((data.groupNames ?? data.groups ?? []).map((g) => [g.id, g.name]));
-    let selected = new Set<string>();
-    let allSelected = false;
+    /**
+     * Diese Seite trug bis zuletzt `export const csr = false` -- Suche,
+     * Filter, Mehrfachauswahl und Hinweise waren damit im Betrieb komplett
+     * funktionslos. Mit den Runes hydriert die Seite wieder.
+     */
 
-    let filterOpen = false;
-    let filterGroups: Set<string> = new Set();
-    let filterStands: Set<string> = new Set();
-    let filterStatuses: Set<string> = new Set();
-    let filterMinAge: number | null = null;
-    let filterMaxAge: number | null = null;
-    let groupMenuOpen = false;
-    let standMenuOpen = false;
-    let statusMenuOpen = false;
+    let search = $state("");
+    let groupFilter = $state("");
+    let statusFilter = $state("");
+    let deleteTarget = $state<Member | null>(null);
+    let deleteOpen = $state(false);
+    let deleteForm = $state<HTMLFormElement | null>(null);
 
-    function toggleRow(id: string) {
-        const next = new Set(selected);
-        if (next.has(id)) next.delete(id); else next.add(id);
-        selected = next;
-    }
+    const permissions = $derived(data.permissions ?? []);
+    const canCreate = $derived(can(permissions, "members.create"));
+    const canEdit = $derived(canAny(permissions, ["members.edit", "groupleader.members.edit"]));
+    const canDelete = $derived(canAny(permissions, ["members.delete", "groupleader.members.delete"]));
+    const canInvite = $derived(canAny(permissions, ["members.view", "groupleader.members.invitepdf"]));
 
-    const includesInArray = (arr: any[], field: string, q: string) =>
-        arr?.some((item) => item[field]?.toLowerCase().includes(q));
+    const groupNameById = $derived(
+        new Map(data.groupNames.map((group) => [group.id, group.name]))
+    );
 
-    function getAge(birthday?: string) {
-        if (!birthday) return null;
-        const birthDate = new Date(birthday);
-        if (isNaN(birthDate.getTime())) return null;
-        const today = new Date();
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const m = today.getMonth() - birthDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-        }
-        return age;
-    }
+    const statuses = $derived(
+        Array.from(new Set(data.members.map((m) => m.status).filter(Boolean))).sort()
+    );
 
-    const baseMembers = [...data.members].sort((a, b) => a.lastname.localeCompare(b.lastname));
+    const filtered = $derived(
+        data.members.filter((member) => {
+            if (groupFilter && !member.groups.includes(groupFilter)) return false;
+            if (statusFilter && member.status !== statusFilter) return false;
 
-    $: filteredMembers = baseMembers.filter((member) => {
-        filterGroups;
-        filterStands;
-        filterStatuses;
-        filterMinAge;
-        filterMaxAge;
+            const needle = search.trim().toLowerCase();
+            if (!needle) return true;
 
-        const q = search.toLowerCase();
-        const matchesSearch = (
-            member.firstname.toLowerCase().includes(q) ||
-            member.lastname.toLowerCase().includes(q) ||
-            (member.fahrtenname ?? "").toLowerCase().includes(q) ||
-            member.id.toLowerCase().includes(q) ||
-            (member.status ?? "").toLowerCase().includes(q) ||
-            includesInArray(member.emails, "email", q) ||
-            includesInArray(member.numbers, "number", q) ||
-            (member.groups ?? []).some((gid: string) =>
-                (groupMap.get(gid) ?? gid).toLowerCase().includes(q)
-            )
-        );
+            const haystack = [
+                member.firstname,
+                member.lastname,
+                member.fahrtenname,
+                member.stand,
+                member.status,
+                ...(member.emails ?? []).map((e: { email: string }) => e.email),
+                ...member.groups.map((id: string) => groupNameById.get(id) ?? "")
+            ]
+                .join(" ")
+                .toLowerCase();
 
-        if (!matchesSearch) return false;
+            return haystack.includes(needle);
+        })
+    );
 
-        if (filterGroups.size > 0 && !(member.groups ?? []).some((g: string) => filterGroups.has(g))) return false;
-        if (filterStands.size > 0 && (member.stand ? !filterStands.has(member.stand) : true)) return false;
-        if (filterStatuses.size > 0 && !filterStatuses.has(member.status)) return false;
-
-        const age = getAge(member.birthday);
-        if (filterMinAge !== null && (age === null || age < filterMinAge)) return false;
-        if (filterMaxAge !== null && (age === null || age > filterMaxAge)) return false;
-
-        return true;
+    const stats = $derived({
+        total: data.members.length,
+        active: data.members.filter((m) => m.status === "aktiv").length,
+        minors: data.members.filter((m) => {
+            const age = calculateAge(m.birthday);
+            return age !== null && age < 18;
+        }).length
     });
 
-    $: {
-        const visibleIds = filteredMembers.map((m) => m.id);
-        const hasAll = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id));
-        allSelected = hasAll;
+    function askDelete(member: Member) {
+        deleteTarget = member;
+        deleteOpen = true;
     }
 
-    const statusTone = (status?: string) => {
-        if (status === "active") return "bg-emerald-50 border-emerald-200 text-emerald-800";
-        if (status === "trial") return "bg-amber-50 border-amber-200 text-amber-800";
-        if (status === "inactive") return "bg-red-50 border-red-200 text-red-700";
-        return "bg-gray-100 border-gray-200 text-gray-700";
+    const STATUS_TONES: Record<string, "success" | "warning" | "neutral"> = {
+        aktiv: "success",
+        passiv: "warning"
     };
-
-    $: activeFilters = (() => {
-        const items: { label: string; onRemove: () => void }[] = [];
-        filterGroups.forEach((gid) => {
-            items.push({
-                label: `Gruppe: ${groupMap.get(gid) ?? gid}`,
-                onRemove: () => {
-                    const next = new Set(filterGroups);
-                    next.delete(gid);
-                    filterGroups = next;
-                }
-            });
-        });
-        filterStands.forEach((st) => {
-            items.push({
-                label: `Stand: ${st}`,
-                onRemove: () => {
-                    const next = new Set(filterStands);
-                    next.delete(st);
-                    filterStands = next;
-                }
-            });
-        });
-        filterStatuses.forEach((st) => {
-            items.push({
-                label: `Status: ${st}`,
-                onRemove: () => {
-                    const next = new Set(filterStatuses);
-                    next.delete(st);
-                    filterStatuses = next;
-                }
-            });
-        });
-        if (filterMinAge !== null) {
-            items.push({
-                label: `Alter ab ${filterMinAge}`,
-                onRemove: () => {
-                    filterMinAge = null;
-                }
-            });
-        }
-        if (filterMaxAge !== null) {
-            items.push({
-                label: `Alter bis ${filterMaxAge}`,
-                onRemove: () => {
-                    filterMaxAge = null;
-                }
-            });
-        }
-        return items;
-    })();
 </script>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Mitglieder</p>
-            <h1 class="text-4xl font-bold text-gray-900">Mitgliederverwaltung</h1>
-            <p class="text-sm text-gray-600 mt-1">Mitglieder suchen, filtern, anlegen.</p>
+<svelte:head><title>Mitglieder - Intern</title></svelte:head>
+
+{#snippet nameCell(member: Member)}
+    <a href={`/intern/members/${member.id}`} class="font-semibold text-fg hover:text-primary transition">
+        {member.firstname} {member.lastname}
+    </a>
+    {#if member.fahrtenname}
+        <span class="block text-xs text-fg-subtle">„{member.fahrtenname}“</span>
+    {/if}
+{/snippet}
+
+{#snippet groupsCell(member: Member)}
+    {#if member.groups.length === 0}
+        <span class="text-fg-subtle">–</span>
+    {:else}
+        <div class="flex flex-wrap gap-1">
+            {#each member.groups as groupId (groupId)}
+                <Badge tone="neutral" size="xs" label={groupNameById.get(groupId) ?? "Unbekannt"} />
+            {/each}
         </div>
-        <div class="flex items-center gap-2 flex-wrap">
-            <a
-                    href="/intern/dashboard"
-                    class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
-            >
-                <span class="bi bi-arrow-left"></span>
-                Zurück
-            </a>
+    {/if}
+{/snippet}
+
+{#snippet statusCell(member: Member)}
+    <Badge tone={STATUS_TONES[member.status] ?? "neutral"} size="xs" label={member.status || "–"} />
+{/snippet}
+
+{#snippet ageCell(member: Member)}
+    {@const age = calculateAge(member.birthday)}
+    <span class="text-sm">{age !== null ? `${age} Jahre` : "–"}</span>
+    <span class="block text-xs text-fg-subtle">{formatDate(member.birthday)}</span>
+{/snippet}
+
+<div class="space-y-8">
+    <PageHeader
+        title="Mitgliedverwaltung"
+        eyebrow="Intern"
+        subtitle="Alle Mitglieder des Stammes mit Gruppen, Stand und Kontaktdaten."
+    >
+        {#snippet actions()}
+            <SearchInput bind:value={search} placeholder="Name, Gruppe, E-Mail..." label="Mitglieder durchsuchen" />
             {#if canCreate}
-                <a
-                        href="/intern/members/create"
-                        class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
-                >
-                    <span class="bi bi-person-plus"></span>
-                    Neues Mitglied
-                </a>
+                <Button href="/intern/members/create" variant="primary" icon="person-plus">
+                    Mitglied anlegen
+                </Button>
             {/if}
-            <a
-                    class={`inline-flex items-center gap-2 px-4 py-3 rounded-xl font-semibold shadow-sm transition ${selected.size > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100" : "bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed"}`}
-                    aria-disabled={selected.size === 0}
-                    href={selected.size > 0 ? `/intern/email?members=${Array.from(selected).join(",")}` : undefined}
-                    on:click={(e) => { if (selected.size === 0) { e.preventDefault(); addToast("Bitte zuerst Mitglieder auswählen.", "info"); } }}
-            >
-                <span class="bi bi-envelope"></span>
-                E-Mail an Auswahl ({selected.size})
-            </a>
-        </div>
+        {/snippet}
+    </PageHeader>
+
+    {#if form?.error}<Alert tone="danger" message={form.error} />{/if}
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatTile label="Mitglieder" value={stats.total} tone="primary" icon="people" />
+        <StatTile label="Aktiv" value={stats.active} tone="success" icon="person-check" />
+        <StatTile label="Unter 18" value={stats.minors} tone="neutral" icon="person-hearts" />
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
-        <div class="flex flex-col md:flex-row md:items-center gap-3">
-            <div class="flex-1">
-                <label class="text-sm font-semibold text-gray-700">Suchen</label>
-                <div class="mt-1 relative">
-                    <span class="bi bi-search absolute left-3 top-2.5 text-gray-400"></span>
-                    <input
-                            type="text"
-                            placeholder="Name, Gruppe, Status, E-Mail, Telefon..."
-                            bind:value={search}
-                            class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 text-sm text-gray-700"
-                    />
-                </div>
-            </div>
-            <button
-                    type="button"
-                    class="inline-flex items-center gap-2 px-4 py-3 rounded-xl border border-gray-200 bg-white shadow-sm hover:bg-blue-50 text-blue-700"
-                    on:click={() => filterOpen = !filterOpen}
-            >
-                <span class="bi bi-funnel"></span>
-                Filter {filterOpen ? "schließen" : "Öffnen"}
-            </button>
-        </div>
+    <Card padding="none">
+        {#snippet header()}
+            <div class="flex flex-wrap gap-3 items-end">
+                <label class="text-xs text-fg-subtle">
+                    Gruppe
+                    <select
+                        bind:value={groupFilter}
+                        class="mt-1 block px-3 py-2 rounded-lg text-sm bg-surface text-fg border border-border-strong"
+                    >
+                        <option value="">Alle Gruppen</option>
+                        {#each data.groups as group (group.id)}
+                            <option value={group.id}>{group.name}</option>
+                        {/each}
+                    </select>
+                </label>
 
-        {#if activeFilters.length}
-            <div class="flex flex-wrap gap-2">
-                {#each activeFilters as filter}
-                    <span class="flex items-center gap-2 bg-blue-50 text-blue-800 border border-blue-200 px-3 py-1 rounded-full text-sm">
-                        {filter.label}
-                        <button type="button" class="text-blue-800 hover:text-blue-900" on:click={filter.onRemove} aria-label="Filter entfernen">
-                            <span class="bi bi-x-lg"></span>
-                        </button>
-                    </span>
-                {/each}
-                <button
-                        type="button"
-                        class="text-sm text-gray-600 underline"
-                        on:click={() => {
-                            filterGroups = new Set();
-                            filterStands = new Set();
-                            filterStatuses = new Set();
-                            filterMinAge = null;
-                            filterMaxAge = null;
-                        }}>
-                    Alle Filter löschen
-                </button>
-            </div>
-        {/if}
+                <label class="text-xs text-fg-subtle">
+                    Status
+                    <select
+                        bind:value={statusFilter}
+                        class="mt-1 block px-3 py-2 rounded-lg text-sm bg-surface text-fg border border-border-strong"
+                    >
+                        <option value="">Alle</option>
+                        {#each statuses as status (status)}
+                            <option value={status}>{status}</option>
+                        {/each}
+                    </select>
+                </label>
 
-        {#if filterOpen}
-            <div class="border border-gray-200 rounded-xl p-4 bg-gray-50 space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div class="relative">
-                        <label class="text-sm text-gray-700">Gruppe</label>
-                        <button type="button"
-                                class="w-full border rounded-lg px-3 py-2 bg-white text-left shadow-sm"
-                                on:click={() => {
-                                    groupMenuOpen = !groupMenuOpen;
-                                    standMenuOpen = false;
-                                    statusMenuOpen = false;
-                                }}>
-                            Gruppe wählen ({filterGroups.size || "alle"})
-                        </button>
-                        {#if groupMenuOpen}
-                            <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
-                                {#each data.groups as g}
-                                    <button type="button"
-                                            class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
-                                            on:click={() => {
-                                                const next = new Set(filterGroups);
-                                                next.has(g.id) ? next.delete(g.id) : next.add(g.id);
-                                                filterGroups = next;
-                                            }}>
-                                        <span>{g.name} ({g.type})</span>
-                                        {#if filterGroups.has(g.id)}<span aria-hidden="true">&#10003;</span>{/if}
-                                    </button>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
-
-                    <div class="relative">
-                        <label class="text-sm text-gray-700">Stand</label>
-                        <button type="button"
-                                class="w-full border rounded-lg px-3 py-2 bg-white text-left shadow-sm"
-                                on:click={() => {
-                                    standMenuOpen = !standMenuOpen;
-                                    groupMenuOpen = false;
-                                    statusMenuOpen = false;
-                                }}>
-                            Stand wählen ({filterStands.size || "alle"})
-                        </button>
-                        {#if standMenuOpen}
-                            <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
-                                {#each ["Wildling-Woelfling","Woelfling","Jungpfadfinder","Knappe","Wildling-Pfadfinder","Pfadfinder","Spaeher","Kreuzpfadfinder"] as st}
-                                    <button type="button"
-                                            class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
-                                            on:click={() => {
-                                                const next = new Set(filterStands);
-                                                next.has(st) ? next.delete(st) : next.add(st);
-                                                filterStands = next;
-                                            }}>
-                                        <span>{st}</span>
-                                        {#if filterStands.has(st)}<span aria-hidden="true">&#10003;</span>{/if}
-                                    </button>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
-
-                    <div class="relative">
-                        <label class="text-sm text-gray-700">Status</label>
-                        <button type="button"
-                                class="w-full border rounded-lg px-3 py-2 bg-white text-left shadow-sm"
-                                on:click={() => {
-                                    statusMenuOpen = !statusMenuOpen;
-                                    groupMenuOpen = false;
-                                    standMenuOpen = false;
-                                }}>
-                            Status wählen ({filterStatuses.size || "alle"})
-                        </button>
-                        {#if statusMenuOpen}
-                            <div class="absolute z-30 mt-1 w-full border rounded-lg bg-white shadow max-h-48 overflow-auto">
-                                {#each ["active","trial","alumni","inactive"] as st}
-                                    <button type="button"
-                                            class="w-full text-left text-sm px-3 py-2 hover:bg-blue-50 flex justify-between"
-                                            on:click={() => {
-                                                const next = new Set(filterStatuses);
-                                                next.has(st) ? next.delete(st) : next.add(st);
-                                                filterStatuses = next;
-                                            }}>
-                                        <span>{st}</span>
-                                        {#if filterStatuses.has(st)}<span aria-hidden="true">&#10003;</span>{/if}
-                                    </button>
-                                {/each}
-                            </div>
-                        {/if}
-                    </div>
-
-                    <div class="space-y-2">
-                        <label class="text-sm text-gray-700">Alter</label>
-                        <div class="grid grid-cols-2 gap-2">
-                            <input type="number" min="0" placeholder="von" bind:value={filterMinAge} class="border rounded-lg px-3 py-2 text-sm" />
-                            <input type="number" min="0" placeholder="bis" bind:value={filterMaxAge} class="border rounded-lg px-3 py-2 text-sm" />
-                        </div>
-                    </div>
-                </div>
-            </div>
-        {/if}
-    </div>
-
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-6 py-4 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-gray-900">Mitglieder</h2>
-            <span class="text-sm text-gray-500">{filteredMembers.length} Einträge</span>
-        </div>
-        <div class="overflow-x-auto hidden xl:block">
-            <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        <label class="inline-flex items-center gap-2">
-                            <input type="checkbox" checked={allSelected} on:change={(e) => {
-                                const checked = (e.currentTarget as HTMLInputElement).checked;
-                                const next = new Set(selected);
-                                if (checked) {
-                                    filteredMembers.forEach((m) => next.add(m.id));
-                                } else {
-                                    filteredMembers.forEach((m) => next.delete(m.id));
-                                }
-                                selected = next;
-                            }} />
-                            Alle
-                        </label>
-                    </th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Gruppe</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Alter</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Kontakt</th>
-                    <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Aktionen</th>
-                </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                {#if filteredMembers.length === 0}
-                    <tr>
-                        <td colspan="7" class="px-6 py-6 text-center text-sm text-gray-500">Keine Mitglieder gefunden.</td>
-                    </tr>
-                {:else}
-                    {#each filteredMembers as member}
-                        {#if member}
-                            <tr class="hover:bg-gray-50 transition">
-                                <td class="px-6 py-4">
-                                    <input type="checkbox" checked={selected.has(member.id)} on:change={() => toggleRow(member.id)} />
-                                </td>
-                                <td class="px-6 py-4 font-semibold text-gray-900">
-                                    <div>{member.firstname} {member.lastname}</div>
-                                    {#if member.fahrtenname}<div class="text-xs text-gray-500">{member.fahrtenname}</div>{/if}
-                                </td>
-                                <td class="px-6 py-4 text-gray-700">
-                                    <div class="flex flex-wrap gap-2">
-                                        {#each member.groups ?? [] as gid}
-                                            <span class="px-2 py-1 text-[11px] rounded-full border border-sky-200 bg-sky-50 text-sky-800 font-semibold">{groupMap.get(gid) ?? gid}</span>
-                                        {/each}
-                                        {#if (member.groups ?? []).length === 0}
-                                            <span class="text-xs text-gray-500">Keine Gruppe</span>
-                                        {/if}
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 text-gray-700">
-                                    <span class={`px-2.5 py-1 text-xs font-semibold rounded-full border ${statusTone(member.status)}`}>
-                                        {member.status ?? "-"}
-                                    </span>
-                                </td>
-                                <td class="px-6 py-4 text-gray-700">
-                                    {#if getAge(member.birthday) !== null}
-                                        {getAge(member.birthday)} Jahre
-                                    {:else}
-                                        <span class="text-xs text-gray-500">-</span>
-                                    {/if}
-                                </td>
-                                <td class="px-6 py-4 text-gray-700">
-                                    <div class="space-y-1 text-xs">
-                                        {#if member.emails?.length}
-                                            <div class="text-gray-700">{member.emails[0].email}</div>
-                                        {/if}
-                                        {#if member.numbers?.length}
-                                            <div class="text-gray-600">{member.numbers[0].number}</div>
-                                        {/if}
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4">
-                                    <div class="flex justify-end gap-2 text-xs">
-                                        <a
-                                                href={`/intern/members/${member.id}`}
-                                                class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
-                                        >
-                                            <span class="bi bi-eye"></span> Öffnen
-                                        </a>
-                                        <a
-                                                href={`/intern/members/${member.id}/invite.pdf`}
-                                                target="_blank"
-                                                class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-800 shadow-sm"
-                                        >
-                                            <span class="bi bi-filetype-pdf"></span> Einladung
-                                        </a>
-                                        {#if canEdit}
-                                            <a
-                                                    href={`/intern/members/${member.id}?scope=edit`}
-                                                    class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
-                                            >
-                                                <span class="bi bi-pencil"></span> Bearbeiten
-                                            </a>
-                                        {/if}
-                                    </div>
-                                </td>
-                            </tr>
-                        {/if}
-                    {/each}
+                {#if groupFilter || statusFilter || search}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="x-lg"
+                        onclick={() => {
+                            groupFilter = "";
+                            statusFilter = "";
+                            search = "";
+                        }}
+                    >
+                        Filter zurücksetzen
+                    </Button>
                 {/if}
-                </tbody>
-            </table>
-        </div>
+            </div>
+        {/snippet}
 
-        <div class="xl:hidden divide-y divide-gray-200">
-            {#if filteredMembers.length === 0}
-                <div class="px-4 py-4 text-sm text-gray-500 text-center">Keine Mitglieder gefunden.</div>
-            {:else}
-                {#each filteredMembers as member}
-                    {#if member}
-                        <div class="p-4 space-y-3">
-                            <div class="flex items-start justify-between gap-3">
-                                <div>
-                                    <div class="text-lg font-semibold text-gray-900">{member.firstname} {member.lastname}</div>
-                                    {#if member.fahrtenname}<div class="text-xs text-gray-500">{member.fahrtenname}</div>{/if}
-                                    <div class="mt-2 flex flex-wrap gap-2">
-                                        {#each member.groups ?? [] as gid}
-                                            <span class="px-2 py-1 text-[11px] rounded-full border border-sky-200 bg-sky-50 text-sky-800 font-semibold">{groupMap.get(gid) ?? gid}</span>
-                                        {/each}
-                                        {#if (member.groups ?? []).length === 0}
-                                            <span class="text-xs text-gray-500">Keine Gruppe</span>
-                                        {/if}
-                                    </div>
-                                </div>
-                                <div class="flex flex-col items-end gap-2">
-                                    <input type="checkbox" checked={selected.has(member.id)} on:change={() => toggleRow(member.id)} />
-                                    <span class={`px-2 py-1 text-[11px] font-semibold rounded-full border ${statusTone(member.status)}`}>
-                                        {member.status ?? "-"}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-3 text-sm text-gray-700 flex-wrap">
-                                {#if getAge(member.birthday) !== null}
-                                    <span class="px-2 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs">{getAge(member.birthday)} Jahre</span>
-                                {/if}
-                                {#if member.emails?.length}
-                                    <span class="text-xs">{member.emails[0].email}</span>
-                                {/if}
-                                {#if member.numbers?.length}
-                                    <span class="text-xs text-gray-600">{member.numbers[0].number}</span>
-                                {/if}
-                            </div>
-                            <div class="flex justify-end gap-2 text-xs">
-                                <a
-                                        href={`/intern/members/${member.id}`}
-                                        class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 shadow-sm"
-                                >
-                                    <span class="bi bi-eye"></span> Öffnen
-                                </a>
-                                <a
-                                        href={`/intern/members/${member.id}/invite.pdf`}
-                                        target="_blank"
-                                        class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-800 shadow-sm"
-                                >
-                                    <span class="bi bi-filetype-pdf"></span> Einladung
-                                </a>
-                                {#if canEdit}
-                                    <a
-                                            href={`/intern/members/${member.id}?scope=edit`}
-                                            class="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-sm"
-                                    >
-                                        <span class="bi bi-pencil"></span> Bearbeiten
-                                    </a>
-                                {/if}
-                            </div>
-                        </div>
-                    {/if}
-                {/each}
-            {/if}
-        </div>
-    </div>
+        {#snippet actions()}
+            <Badge tone="info" size="xs" label={`${filtered.length} von ${data.members.length}`} />
+        {/snippet}
+
+        <DataTable
+            columns={[
+                { key: "name", label: "Name", cell: nameCell },
+                { key: "stand", label: "Stand", value: (m) => m.stand || "–" },
+                { key: "groups", label: "Gruppen", cell: groupsCell },
+                { key: "age", label: "Alter", cell: ageCell },
+                { key: "status", label: "Status", cell: statusCell }
+            ] satisfies Column<Member>[]}
+            rows={filtered}
+            getKey={(m) => m.id}
+            cardTitle={(m) => `${m.firstname} ${m.lastname}`}
+            cardSubtitle={(m) => m.stand || undefined}
+            empty={search || groupFilter || statusFilter
+                ? "Keine Mitglieder passen zu den Filtern."
+                : "Noch keine Mitglieder erfasst."}
+        >
+            {#snippet actions(member)}
+                <Button
+                    href={`/intern/members/${member.id}`}
+                    variant="secondary"
+                    size="sm"
+                    icon={canEdit ? "pencil" : "eye"}
+                >
+                    {canEdit ? "Bearbeiten" : "Ansehen"}
+                </Button>
+
+                {#if canInvite}
+                    <Button
+                        href={`/intern/members/${member.id}/invite.pdf`}
+                        variant="ghost"
+                        size="sm"
+                        icon="file-earmark-pdf"
+                        ariaLabel={`Einladung für ${member.firstname} ${member.lastname} herunterladen`}
+                    />
+                {/if}
+
+                {#if canDelete}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="trash"
+                        ariaLabel={`${member.firstname} ${member.lastname} löschen`}
+                        onclick={() => askDelete(member)}
+                    />
+                {/if}
+            {/snippet}
+        </DataTable>
+    </Card>
 </div>
+
+<form method="post" action="?/delete" bind:this={deleteForm} class="hidden">
+    <input type="hidden" name="id" value={deleteTarget?.id ?? ""} />
+</form>
+
+<ConfirmDialog
+    bind:open={deleteOpen}
+    title="Mitglied löschen?"
+    message={deleteTarget
+        ? `${deleteTarget.firstname} ${deleteTarget.lastname} wird dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.`
+        : ""}
+    confirmLabel="Endgültig löschen"
+    onconfirm={() => deleteForm?.requestSubmit()}
+    oncancel={() => (deleteTarget = null)}
+/>

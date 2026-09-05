@@ -21,8 +21,8 @@
 
     const NAV: NavItem[] = [
         { name: "Dashboard", href: "/intern/dashboard", icon: "speedometer2", perms: ["dashboard.view"] },
-        { name: "Termine", href: "/intern/termine", icon: "calendar-event" },
-        { name: "Downloads", href: "/intern/downloads", icon: "cloud-download" },
+        { name: "Termine", href: "/intern/termine", icon: "calendar-event", perms: ["termine.view"] },
+        { name: "Downloads", href: "/intern/downloads", icon: "cloud-download", perms: ["downloads.view"] },
         { name: "Kämmerer", href: "/intern/kaemmerer", icon: "piggy-bank", perms: ["kaemmerer.access"] },
         {
             name: "Mitgliedverwaltung",

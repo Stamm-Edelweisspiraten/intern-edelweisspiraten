@@ -31,10 +31,10 @@ export const actions = {
         const form = await request.formData();
 
         await updateGroup(params.id, {
-            name: form.get("name"),
+            name: String(form.get("name") ?? ""),
             type: form.get("type") as "sippe" | "meute",
-            meeting_time: form.get("meeting_time"),
-            description: form.get("description"),
+            meeting_time: String(form.get("meeting_time") ?? ""),
+            description: String(form.get("description") ?? ""),
             replyTo: form.get("replyTo")?.toString() ?? ""
         });
 

@@ -1,101 +1,100 @@
-# Finance Design Sheet (intern/finance)
+# Kasse – fachliche Ergänzungen
 
-## Leitidee
-- Verwaltungs-UI mit ruhigem White-Space: `max-w-6xl`, `mt-16`, grosse `space-y`-Abstaende, Karten mit `rounded-2xl`, `border border-gray-200`, `shadow-sm`.
-- Primarer Farbkanal Blau/Sky fuer Navigation und primaere CTAs; Statusfarben: Gruen/Emerald fuer Erfolg, Rot fuer Abgang, Amber fuer offene Posten, Grautoene fuer Grundrauschen.
-- Tabellenzentrierter Inhalt, ergaenzt durch kompakte Stat-Karten und Sektionen mit klaren Ueberschriften.
-- Bootstrap Icons (`bi ...`) als Inline-Icons mit `gap-2` in Buttons oder Labels.
-- Textton sachlich/klar, deutsche Begriffe ohne Umlaute (Geschaeftsjahr, Uebersicht, Zurueck, Hat bezahlt).
+Für Gestaltung, Farben und Komponenten gilt uneingeschränkt
+[`intern-design-sheet.md`](./intern-design-sheet.md). Dieses Blatt hält nur
+fest, was für die Kasse darüber hinaus gilt.
 
-## Farb- und Typostil (Tailwind Tokens)
-- Hintergrund: `bg-white`, Karten-Rand `border-gray-200`, Tabellenkopf `bg-gray-50`, Grautext `text-gray-600/700`, Titel `text-gray-900`.
-- Primaer: `bg-blue-600 hover:bg-blue-700 text-white`; Alternative Link-CTA: `text-blue-700 bg-blue-50 border-blue-200`.
-- Info/Sekundaer: Sky fuer Highlights (`bg-sky-50 to-white`, Tags `bg-sky-100 border-sky-200 text-sky-800`).
-- Warnung: Amber (`text-amber-600`) fuer offene Betraege.
-- Erfolg: Emerald (`bg-emerald-50 border-emerald-200 text-emerald-700`).
-- Gefahr/Abgang: Rot (`text-red-500/600`).
-- Schrift-Hierarchie: H1 `text-3xl-4xl font-bold`, Sektionen `text-xl font-semibold`, Tabellenkopf `text-xs font-semibold uppercase tracking-wide`, Body `text-sm`.
+---
 
-## Layout- und Strukturmuster
-- Seitenkopf: Titel + Kurzbeschreibung links, CTA(s) rechts; `flex` mit `gap-4` und Wrap fuer Mobile.
-- Raster: `grid grid-cols-1 lg:grid-cols-3` fuer Hero/Stats, mit 2/1 Split bei Hauptkarte + CTA-Kachel.
-- Karten: `p-5/6` innen, `space-y-4`; alternative weiche Flaeche via `bg-gradient-to-br from-sky-50 to-white` fuer Hero.
-- Tabellen: `overflow-x-auto` Container; Tabelle mit `divide-y divide-gray-200`, Kopf `bg-gray-50`, Zeilen Hover `hover:bg-gray-50`; leere Zustaende als einzelne Zeile mit grauem Text.
-- Badges/Pills: kleine Caps `text-[11px] font-semibold`, runde Form (`rounded-full`) mit Border (z.B. Aktuelles Jahr Tag `bg-sky-100 border-sky-200 text-sky-800`).
-- Abstaende: `gap-3/4/6`, Buttons `px-4 py-3` (gross) oder `px-3 py-2` (kompakt), Inputs `px-3/4 py-2/3` mit `rounded-lg/xl`.
+## 1. Geld ist ganzzahlig
 
-## Komponentenrezepturen
-- Primaer-Button: `inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition`.
-- Sekundaer/Neutral: `bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 rounded-xl shadow-sm`.
-- Erfolg ("Hat bezahlt"): `text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg`.
-- Warnung/CTA-Kachel: Zahl in `text-amber-600`, Kachel mit `hover:border-amber-200 hover:shadow`.
-- Sucheingabe: `w-60 px-4 py-3 rounded-xl text-sm border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-sky-200 focus:border-sky-300`.
-- Tabellenzellen: Text `text-sm`, Zahlen fett; Zusatzinfos in `text-xs text-gray-500` unter Hauptzeile.
-- Modals: Overlay `fixed inset-0 bg-black/50 backdrop-blur-sm flex center z-50 px-4`; Card `bg-white rounded-2xl border-gray-200 shadow-2xl max-w-lg w-full`, Header mit Titel + Close, Body `space-y-4`, Footer Buttons rechts.
-- Formfelder: `border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500` (oder Emerald in Zahlungsmodals); Labels `text-sm font-semibold text-gray-700`.
-- Dropdown (custom): Button mit Border + Shadow; Liste `absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow`; Close-on-click-outside via Svelte `onMount` listener.
-- Tags fuer Counters: `px-3 py-1 text-xs font-semibold rounded-full border` (z.B. `text-sky-800 bg-sky-100`).
-- Buttons/Aktionen: CTA-Leiste rechts im Kopf (`flex items-center gap-3 flex-wrap`), Primaer rechts aussen, Sekundaer links daneben; Rueck-Link als neutraler Button links vor den CTAs. Footer-Buttons in Karten rechtsbuendig.
+Beträge werden **als Cents** geführt – in der Datenbank, in den Services und in
+den Typen. Fließkommazahlen für Geld gibt es nicht mehr.
 
-## Interaktionsmuster
-- Filter: Clientseitig via `search.trim().toLowerCase()`, Match ueber zusammengesetzten String aus Titel/Typ/Note/Betrag; Ergebnislisten und Counts aktualisieren sich reaktiv (`filteredItems`, `filteredTransactions`).
-- Sortierung: Transaktionen nach Datum desc (`new Date(...).getTime()`), Outstanding nach Jahr gruppiert.
-- Waehrungsformat: helper `const euro = (value:number) => `${value.toFixed(2)} EUR`; immer 2 Nachkommastellen.
-- Statusfarben in Tabellenzeilen: aktuelles Jahr mit `bg-sky-50/70 ring-1 ring-sky-200`, archivierte in `bg-gray-50 text-gray-500`.
-- Scroll-Lock bei Modals: Body-Overflow sichern und beim Schliessen wiederherstellen (`document.body.style.overflow`).
-- Form-Submit: klassische `<form method="post" action="?...">` Buttons, versteckte Inputs fuer IDs.
-- CTA-Positionierung: Actions stehen im Kopf immer rechts vom Titelblock; auf Mobile umbrechen, Reihenfolge beibehalten. In Karten liegen Aktionen oben rechts oder unten rechts, nie mittig.
+```ts
+import { formatEuro, parseEuro, splitEvenly, sumCents } from "$lib/money";
 
-## Textbausteine
-- CTA-Texte: "Neues Geschaeftsjahr", "Transaktion", "Hat bezahlt", "Offene Rechnung".
-- Hilfetexte kurz halten: "Offene Positionen aus allen aktiven Geschaeftsjahren." / "Keine offenen Einnahmen hinterlegt." / "Keine passenden Transaktionen gefunden.".
-- Nummern immer fett, Einheiten in EUR ausschreiben.
-
-## Svelte-Grundgeruest fuer neue Finance-Seiten
-```svelte
-<script lang="ts">
-  export let data;
-  const euro = (v:number) => `${v.toFixed(2)} EUR`;
-  let search = "";
-</script>
-
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-  <div class="flex items-center justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="text-4xl font-bold text-gray-900">Seitentitel</h1>
-      <p class="text-sm text-gray-600 mt-1">Kurze Beschreibung.</p>
-    </div>
-    <div class="flex items-center gap-3 flex-wrap">
-      <input type="search" placeholder="Suchen..." bind:value={search}
-        class="w-60 px-4 py-3 rounded-xl text-sm border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-sky-200 focus:border-sky-300" />
-      <a href="#" class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition">
-        <span class="bi bi-plus-circle"></span>
-        Primaere Aktion
-      </a>
-    </div>
-  </div>
-
-  <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold text-gray-900">Sektionstitel</h2>
-      <span class="text-sm text-gray-500">Meta</span>
-    </div>
-    <!-- Tabelle/Liste/Stats hier -->
-  </div>
-</div>
+formatEuro(1234);        // "12,34 EUR"
+parseEuro("1.234,56");   // 123456  (null bei ungültiger Eingabe)
+splitEvenly(1000, 3);    // [334, 333, 333]  – Summe bleibt 1000
 ```
 
-## Wann welches Farbschema
-- Geld-Eingaenge/OK-Aktionen: Gruen/Emerald (Buttons, Icons).
-- Offene/warnende Infos: Amber-Ton fuer Zahlen oder Icons.
-- Navigation/Standard-CTA: Blau/Sky.
-- Archiv/sekundaer: Grautoene, keine intensiven Hintergruende.
+- Eingabefelder zeigen `(cents / 100).toFixed(2).replace(".", ",")`.
+- `parseEuro` liefert bei ungültiger Eingabe `null`; das ist ein Formularfehler
+  und darf **nicht** stillschweigend als 0 verbucht werden.
+- Aufteilungen laufen über `splitEvenly`, damit keine Cents verschwinden.
 
-## Checkliste bei neuen Screens
-- Nutze `max-w-6xl` + `space-y-8` fuer vertikale Rhythmik.
-- Primaere Aktion rechts im Kopf; Rueck-Link als neutraler Button oder Link.
-- Tabellen immer mit Kopfzeile, Hover-State und Empty-State-Zeile.
-- Betragsfelder/Anzeigen immer ueber `euro()` formatieren.
-- Bei Modals Body-Scroll sperren, Buttons rechtsbuendig, Inputs mit Fokus-Ring.
-- Zaehler/Badges fuer Anzahl Eintraege oder Filterergebnisse anzeigen.
-- Button-Abstaende: horizontal `gap-3` in CTA-Leisten, vertikal `mt-4` unter Formulargruppen; Listen-Header-CTAs immer Icon+Label (Bootstrap Icon + Text).
+---
+
+## 2. Farbrollen der Kasse
+
+| Sachverhalt | Ton |
+|---|---|
+| Einnahme, bezahlt, erledigt | `success` |
+| Ausgabe, Storno, Löschen | `danger` |
+| Offener Posten, Abschluss | `warning` |
+| Teilzahlung, Hinweis | `info` |
+| Navigation, Hauptaktion | `primary` |
+| Archiv | `neutral`, zusätzlich `opacity-70` |
+
+Beträge werden fett gesetzt; Ausgaben mit vorangestelltem Minuszeichen.
+
+---
+
+## 3. Zustände einer Rechnung
+
+`open` → `partial` → `paid`, dazu `cancelled` als Sonderfall.
+
+- Der offene Rest ergibt sich aus `amount - paidAmount` und wird über
+  `computeOutstanding()` ermittelt – **an genau einer Stelle**. Frühere
+  Kopien dieser Berechnung wichen voneinander ab, sodass Übersicht und
+  Detailansicht unterschiedliche Summen zeigten.
+- `overdue` bedeutet: offen **und** `dueDate` liegt in der Vergangenheit.
+- Zahlungen laufen ausschließlich über `payInvoice()`; der Überzahlungsschutz
+  steckt in der Datenbankbedingung, nicht in der Oberfläche.
+
+## 4. Zustände einer Bestellung
+
+Lieferung und Bezahlung sind **zwei unabhängige Merkmale** und werden als zwei
+getrennte Kennzeichen dargestellt:
+
+- `status`: `ordered` → `processing` → `delivered`, dazu `cancelled`
+- `paymentStatus`: `open` → `partial` → `paid`
+
+`paid` ist bewusst **kein** Lieferstatus. Früher überschrieb eine vollständige
+Zahlung den Status `delivered` und löschte damit die Lieferinformation.
+
+---
+
+## 5. Absicherung
+
+SvelteKit führt bei Formular-Aktionen **kein** `load` aus. Eine Absicherung im
+`load` schützt die zugehörigen Aktionen deshalb nicht. Jede Aktion ruft
+`requirePermission` selbst auf:
+
+```ts
+export const actions: Actions = {
+    addTransaction: async (event) => {
+        requirePermission(event, "finance.manage");
+        // ...
+    }
+};
+```
+
+Berechtigungen: `finance.view` zum Lesen, `finance.manage` für Buchungen und
+Beiträge, `finance.export`, `finance.close`.
+
+---
+
+## 6. Textbausteine
+
+Schaltflächen: „Neues Geschäftsjahr“, „Buchung“, „Zahlung erfassen“,
+„Beiträge anlegen“, „Jahr abschließen“, „Export (CSV)“.
+
+Leere Zustände: „Alle Forderungen sind ausgeglichen.“ ·
+„Noch keine Buchungen erfasst.“ · „Keine Bestellungen in diesem Geschäftsjahr.“
+
+Buchungsarten kommen aus `TRANSACTION_KINDS` in
+`$lib/server/finance/types.ts` – nicht aus einer im Formular fest
+eingetragenen Liste. Früher gab es zwei Auswahllisten mit unterschiedlichem
+Inhalt.

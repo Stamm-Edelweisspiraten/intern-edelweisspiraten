@@ -2,6 +2,9 @@ import type { PageServerLoad } from "./$types";
 import { requirePermission } from "$lib/server/permissionGuard";
 import { getAllMembers } from "$lib/server/memberService";
 import { getAllGroups } from "$lib/server/groupService";
+import { computeOutstanding } from "$lib/server/finance/invoiceService";
+import { listOrdersForMembers } from "$lib/server/kaemmerer/orderService";
+import { sumCents } from "$lib/money";
 
 interface UpcomingBirthday {
     id: string;
@@ -18,7 +21,17 @@ export const load: PageServerLoad = async (event) => {
 
     const userName = event.locals.user?.userinfo?.name ?? event.locals.user?.userinfo?.email ?? "Willkommen";
 
-    const [members, groups] = await Promise.all([getAllMembers(), getAllGroups()]);
+    // Mitglieder, die diesem Zugang zugeordnet sind -- Grundlage fuer die
+    // persoenlichen Kacheln (offene Posten und Bestellungen).
+    const memberIds = event.locals.user?.memberIds ?? [];
+
+    const [members, groups, invoiceLists, ownOrders] = await Promise.all([
+        getAllMembers(),
+        getAllGroups(),
+        Promise.all(memberIds.map((memberId) => computeOutstanding({ memberId }))),
+        listOrdersForMembers(memberIds)
+    ]);
+
     const groupMap = new Map((groups ?? []).map((g: any) => [g.id, g]));
 
     const today = new Date();
@@ -64,8 +77,41 @@ export const load: PageServerLoad = async (event) => {
         .sort((a, b) => a!.inDays - b!.inDays)
         .slice(0, 3) as UpcomingBirthday[];
 
+    // Offene Posten der eigenen Mitglieder, nach Faelligkeit sortiert.
+    const openInvoices = invoiceLists
+        .flat()
+        .sort((a, b) => (a.dueDate ?? a.date).localeCompare(b.dueDate ?? b.date));
+
+    // Bestellungen gelten als offen, solange sie weder storniert noch
+    // gleichzeitig geliefert und bezahlt sind.
+    const openOrders = ownOrders.filter(
+        (order) => !order.cancelled && !(order.status === "delivered" && order.paymentStatus === "paid")
+    );
+
     return {
         userName,
-        birthdays: upcoming
+        birthdays: upcoming,
+        hasLinkedMembers: memberIds.length > 0,
+        outstandingTotal: sumCents(openInvoices.map((invoice) => invoice.outstanding)),
+        outstandingCount: openInvoices.length,
+        overdueCount: openInvoices.filter((invoice) => invoice.overdue).length,
+        invoices: openInvoices.slice(0, 5).map((invoice) => ({
+            id: invoice.id,
+            member: invoice.member,
+            kind: invoice.kind,
+            outstanding: invoice.outstanding,
+            dueDate: invoice.dueDate,
+            overdue: invoice.overdue
+        })),
+        openOrderCount: openOrders.length,
+        orders: openOrders.slice(0, 5).map((order) => ({
+            id: order.id,
+            number: order.number,
+            createdAt: order.createdAt,
+            total: order.total,
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+            itemCount: order.items.length
+        }))
     };
 };

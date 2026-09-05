@@ -434,9 +434,7 @@ export async function unlinkGroupFromAllMembers(groupId: string) {
     await db.collection("members").updateMany(
         { groups: groupId },
         {
-            $pull: {
-                groups: groupId
-            },
+            $pull: { groups: groupId } as never,
             $set: {
                 updatedAt: new Date().toISOString()
             }

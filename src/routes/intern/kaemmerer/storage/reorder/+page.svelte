@@ -1,107 +1,90 @@
-﻿<script lang="ts">
-    export let data;
-    const reorder = data.reorder ?? [];
+<script lang="ts">
+    import { Badge, Button, Card, DataTable, EmptyState, PageHeader, StatTile } from "$lib/components/ui";
+    import type { Column } from "$lib/components/ui";
+    import type { PageData } from "./$types";
+
+    let { data }: { data: PageData } = $props();
+
+    type Row = PageData["reorder"][number];
+
+    const stats = $derived({
+        positions: data.reorder.length,
+        units: data.reorder.reduce((sum, row) => sum + row.missing, 0),
+        articles: new Set(data.reorder.map((row) => row.articleId)).size
+    });
 </script>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Kaemmerer</p>
-            <h1 class="text-3xl font-bold text-gray-900">Bestellliste</h1>
-            <p class="text-sm text-gray-600 mt-1">Fehlmengen bis Mindestbestand, pro Artikel und Größe.</p>
-        </div>
-        <div class="flex items-center gap-3 flex-wrap">
-            <a href="/intern/kaemmerer/storage" class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition">
-                <span class="bi bi-arrow-left"></span>
-                Zurück ins Lager
-            </a>
-        </div>
+<svelte:head><title>Nachbestellliste - Kämmerer</title></svelte:head>
+
+{#snippet missingCell(row: Row)}
+    <Badge tone="warning" size="xs" label={`${row.missing} fehlen`} />
+{/snippet}
+
+{#snippet linkCell(row: Row)}
+    {#if row.orderUrl}
+        <a
+            href={row.orderUrl}
+            target="_blank"
+            rel="noreferrer"
+            class="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+        >
+            <span class="bi bi-box-arrow-up-right" aria-hidden="true"></span>
+            Bestellen
+        </a>
+    {:else}
+        <span class="text-fg-subtle">–</span>
+    {/if}
+{/snippet}
+
+<div class="space-y-8">
+    <PageHeader
+        title="Nachbestellliste"
+        eyebrow="Kämmerer"
+        subtitle="Fehlmengen bis zum Mindestbestand, je Artikel und Größe."
+        back={{ href: "/intern/kaemmerer/storage", label: "Zurück ins Lager" }}
+    />
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatTile label="Positionen" value={stats.positions} tone="warning" icon="list-check" />
+        <StatTile label="Betroffene Artikel" value={stats.articles} icon="box" />
+        <StatTile label="Fehlende Einheiten" value={stats.units} tone="danger" icon="exclamation-diamond" />
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-        <div class="px-6 py-4 flex items-center justify-between">
-            <div>
-                <h2 class="text-lg font-semibold text-gray-900">Fehlende Mengen</h2>
-                <p class="text-sm text-gray-600">Berechnet aus aktuellem Bestand vs. Mindestbestand.</p>
-            </div>
-            <span class="text-sm text-gray-500">{reorder.length} Positionen</span>
-        </div>
-        <div class="hidden xl:block overflow-x-auto">
-            <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Artikel</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Größe</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Bestand</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Mindestbestand</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fehlmenge</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Bestell-URL</th>
-                </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                {#if reorder.length === 0}
-                    <tr>
-                        <td colspan="6" class="px-6 py-6 text-center text-sm text-gray-500">Keine Fehlmengen – alle Artikel sind mindestens auf Zielbestand.</td>
-                    </tr>
-                {:else}
-                    {#each reorder as row}
-                        <tr class="hover:bg-gray-50 transition">
-                            <td class="px-6 py-4 font-semibold text-gray-900">{row.name}</td>
-                            <td class="px-6 py-4 text-gray-700">{row.size ?? "-"}</td>
-                            <td class="px-6 py-4 text-gray-700">{row.stock}</td>
-                            <td class="px-6 py-4 text-gray-700">{row.minStock}</td>
-                            <td class="px-6 py-4 font-semibold text-gray-900 text-amber-600">{row.missing}</td>
-                            <td class="px-6 py-4 text-gray-700">
-                                {#if row.orderUrl}
-                                    <a href={row.orderUrl} target="_blank" rel="noreferrer" class="inline-flex items-center gap-1 text-blue-700 hover:text-blue-800">
-                                        <span class="bi bi-box-arrow-up-right"></span>
-                                        Link
-                                    </a>
-                                {:else}
-                                    <span class="text-xs text-gray-500">-</span>
-                                {/if}
-                            </td>
-                        </tr>
-                    {/each}
-                {/if}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="xl:hidden px-4 pb-6 space-y-4">
-            {#if reorder.length === 0}
-                <p class="text-sm text-gray-500 px-2">Keine Fehlmengen – alle Artikel sind mindestens auf Zielbestand.</p>
-            {:else}
-                {#each reorder as row}
-                    <div class="border border-gray-200 rounded-2xl p-4 shadow-sm space-y-2">
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <p class="text-base font-semibold text-gray-900">{row.name}</p>
-                                <p class="text-xs text-gray-500 mt-1">Größe: {row.size ?? "-"}</p>
-                            </div>
-                            <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-amber-200 bg-amber-50 text-amber-700">
-                                -{row.missing}
-                            </span>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2 text-sm text-gray-700">
-                            <div class="flex items-center gap-2">
-                                <span class="bi bi-box text-gray-400"></span>
-                                Bestand: {row.stock}
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="bi bi-exclamation-diamond text-gray-400"></span>
-                                Mindestbestand: {row.minStock}
-                            </div>
-                        </div>
-                        {#if row.orderUrl}
-                            <a href={row.orderUrl} target="_blank" rel="noreferrer" class="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-800">
-                                <span class="bi bi-box-arrow-up-right"></span>
-                                Bestell-URL öffnen
-                            </a>
-                        {/if}
-                    </div>
-                {/each}
-            {/if}
-        </div>
-    </div>
+    <Card
+        title="Fehlende Mengen"
+        subtitle="Berechnet aus aktuellem Bestand gegen den jeweiligen Mindestbestand."
+        meta={`${data.reorder.length} Positionen`}
+        padding="none"
+    >
+        {#if data.reorder.length === 0}
+            <EmptyState
+                icon="check-circle"
+                title="Nichts nachzubestellen"
+                description="Alle aktiven Artikel liegen mindestens auf ihrem Mindestbestand."
+            >
+                {#snippet action()}
+                    <Button href="/intern/kaemmerer/storage" variant="secondary" icon="arrow-left">
+                        Zurück ins Lager
+                    </Button>
+                {/snippet}
+            </EmptyState>
+        {:else}
+            <DataTable
+                columns={[
+                    { key: "name", label: "Artikel", value: (row) => row.name },
+                    { key: "size", label: "Größe", value: (row) => row.size ?? "–" },
+                    { key: "stock", label: "Bestand", align: "right", value: (row) => row.stock },
+                    { key: "minStock", label: "Mindestbestand", align: "right", value: (row) => row.minStock },
+                    { key: "missing", label: "Fehlmenge", align: "right", cell: missingCell },
+                    { key: "orderUrl", label: "Bestell-Link", cell: linkCell }
+                ] satisfies Column<Row>[]}
+                rows={data.reorder}
+                getKey={(row) => `${row.articleId}-${row.size ?? ""}`}
+                cardTitle={(row) => row.name}
+                cardSubtitle={(row) => (row.size ? `Größe ${row.size}` : undefined)}
+                rowHref={(row) => `/intern/kaemmerer/articles/${row.articleId}`}
+                empty="Keine Fehlmengen vorhanden."
+            />
+        {/if}
+    </Card>
 </div>

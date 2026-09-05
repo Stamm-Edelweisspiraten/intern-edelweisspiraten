@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import type { Member } from "../memberService";
+import { env } from "$env/dynamic/private";
 
 export async function createInvitePdf(member: Member) {
     const doc = new PDFDocument({
@@ -15,7 +16,10 @@ export async function createInvitePdf(member: Member) {
         doc.on("end", () => resolve(Buffer.concat(chunks)))
     );
 
-    const joinUrl = `https://intern.edelweisspiraten-bremen.de/join/${member._id}`;
+    // Vorher war die Produktions-Adresse fest einkodiert -- damit zeigte
+    // der QR-Code aus einer Testumgebung immer auf die Produktion.
+    const baseUrl = env.PUBLIC_APP_URL || "https://intern.edelweisspiraten-bremen.de";
+    const joinUrl = `${baseUrl}/join/${member._id}`;
     const baseName = `${member.firstname} ${member.lastname}`;
     const displayName = `${member.firstname} ${member.lastname}${member.fahrtenname ? ` (${member.fahrtenname})` : ""}`;
 

@@ -44,10 +44,12 @@ export async function saveMemberFile(
     const buffer = Buffer.from(await file.arrayBuffer());
 
     const uploadStream = getBucket().openUploadStream(file.name || `${kind}-${Date.now()}.bin`, {
-        contentType,
         metadata: {
             memberId,
-            kind
+            kind,
+            // Der Treiber kennt contentType nicht mehr als eigene Option;
+            // er wird deshalb in den Metadaten gefuehrt.
+            contentType
         }
     });
 
