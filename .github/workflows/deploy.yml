@@ -3,9 +3,28 @@ name: Build & Deploy
 on:
   push:
     branches: ["master"]
+  pull_request:
 
 jobs:
+  # Typprüfung und Tests laufen vor dem Build. Bisher wurde ohne jede
+  # Prüfung gebaut und veröffentlicht.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
   build:
+    needs: check
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
 
     permissions:
@@ -23,8 +42,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Zusätzlich zum latest-Tag wird der Commit getaggt. Vorher überschrieb
+      # jeder Build "latest" -- ein Zurückrollen war damit unmöglich.
       - name: Build Docker image
-        run: docker build -t ghcr.io/stamm-edelweisspiraten/intern-edelweisspiraten:latest .
+        run: |
+          docker build \
+            -t ghcr.io/stamm-edelweisspiraten/intern-edelweisspiraten:latest \
+            -t ghcr.io/stamm-edelweisspiraten/intern-edelweisspiraten:${{ github.sha }} \
+            .
 
       - name: Push Docker image
-        run: docker push ghcr.io/stamm-edelweisspiraten/intern-edelweisspiraten:latest
+        run: |
+          docker push ghcr.io/stamm-edelweisspiraten/intern-edelweisspiraten:latest
+          docker push ghcr.io/stamm-edelweisspiraten/intern-edelweisspiraten:${{ github.sha }}

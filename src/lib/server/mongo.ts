@@ -1,28 +1,41 @@
 import { MongoClient, type ClientSession, type Db } from "mongodb";
 import { env } from "$env/dynamic/private";
 
+/**
+ * Datenbankverbindung.
+ *
+ * Wichtig: hier wird NICHT mehr auf den Verbindungsaufbau gewartet.
+ * Vorher stand ein `await client.connect()` auf Modulebene -- dadurch
+ * versuchte schon der Produktionsbuild eine Verbindung aufzubauen und schlug
+ * ohne erreichbare Datenbank fehl (im Docker-Build zuverlaessig).
+ *
+ * Der Treiber stellt die Verbindung selbst her und puffert Operationen bis
+ * dahin; `client.db()` darf daher sofort verwendet werden.
+ */
+
 const uri = env.MONGODB_URI;
 
 let mongoClient: MongoClient | null = null;
 let db: Db;
 
 if (uri) {
-    const client = new MongoClient(uri);
-    let clientPromise: Promise<MongoClient>;
-
     if (import.meta.env.PROD) {
-        clientPromise = client.connect();
+        mongoClient = new MongoClient(uri);
     } else {
-        // Im Dev-Modus wird das Modul bei HMR neu ausgewertet -- die Verbindung
-        // wird deshalb global zwischengespeichert.
-        if (!(globalThis as any)._mongoClientPromise) {
-            (globalThis as any)._mongoClientPromise = client.connect();
-        }
-        clientPromise = (globalThis as any)._mongoClientPromise;
+        // Im Entwicklungsmodus wird das Modul bei jedem HMR-Durchlauf neu
+        // ausgewertet -- ohne diesen Zwischenspeicher entstuende jedes Mal
+        // eine neue Verbindung.
+        const cached = (globalThis as { _mongoClient?: MongoClient })._mongoClient;
+        mongoClient = cached ?? new MongoClient(uri);
+        (globalThis as { _mongoClient?: MongoClient })._mongoClient = mongoClient;
     }
 
-    mongoClient = await clientPromise;
     db = mongoClient.db(env.MONGODB_DB || "intern-test");
+
+    // Verbindungsaufbau anstossen, aber nicht darauf warten.
+    mongoClient.connect().catch((err) => {
+        console.error("Verbindung zur Datenbank fehlgeschlagen:", err?.message ?? err);
+    });
 } else {
     console.warn("MONGODB_URI ist nicht gesetzt. Datenbankzugriff wird fehlschlagen.");
     db = new Proxy(
@@ -58,7 +71,7 @@ export async function withTransaction<T>(
     } catch (err: unknown) {
         if (isTransactionUnsupported(err)) {
             console.warn(
-                'MongoDB-Server unterstuetzt keine Transaktionen (kein Replica Set), fahre ohne fort.'
+                "MongoDB-Server unterstuetzt keine Transaktionen (kein Replica Set), fahre ohne fort."
             );
             return fn(undefined);
         }
@@ -75,11 +88,11 @@ export async function withTransaction<T>(
  */
 function isTransactionUnsupported(err: unknown): boolean {
     const code = (err as { code?: unknown })?.code;
-    const message = String((err as { message?: unknown })?.message ?? '');
+    const message = String((err as { message?: unknown })?.message ?? "");
     return (
         code === 20 ||
-        message.includes('Transaction numbers are only allowed') ||
-        message.includes('Transactions are not supported') ||
-        message.includes('replica set')
+        message.includes("Transaction numbers are only allowed") ||
+        message.includes("Transactions are not supported") ||
+        message.includes("replica set")
     );
 }
