@@ -1,0 +1,42 @@
+# Garage — S3-kompatibler Objektspeicher für die Entwicklung.
+#
+# Ein einzelner Knoten ohne Replikation. Für den Betrieb eines Stamms reicht
+# das: Garage ist genau für kleine, selbstgehostete Installationen gedacht.
+# Wer Ausfallsicherheit braucht, erhöht `replication_factor` und stellt
+# weitere Knoten daneben — dann ist aber auch eine Sicherung der Metadaten
+# Pflicht.
+#
+# Die beiden Geheimnisse stehen bewusst NICHT in dieser Datei, sondern kommen
+# als GARAGE_RPC_SECRET und GARAGE_ADMIN_TOKEN aus der Umgebung. Sonst läge
+# ein Zugangsschlüssel im Quelltextverwaltungssystem.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+
+# LMDB statt sqlite: schneller und der empfohlene Standard seit Garage 1.0.
+db_engine = "lmdb"
+
+# Ein Knoten, eine Kopie. Bei einem höheren Wert würde Garage die Aufnahme
+# von Daten verweigern, solange nicht genug Knoten da sind.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+# Der Name des Dienstes im Compose-Netz. Ein Knoten muss sich selbst unter
+# einer Adresse finden, die auch die anderen erreichen würden.
+rpc_public_addr = "garage:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+# Adressierung über den Hostnamen (bucket.s3.garage.localhost). Die Anwendung
+# benutzt sie nicht — sie spricht Garage mit Pfad-Adressierung an, weil das
+# ohne Platzhalter-DNS auskommt.
+root_domain = ".s3.garage.localhost"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.garage.localhost"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"

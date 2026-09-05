@@ -5,16 +5,23 @@ import { env } from "$env/dynamic/private";
  * Prüft die Ablage gegen einen echten Objektspeicher und eine echte
  * Datenbank.
  *
+ * Geprüft wird hier der Weg über die **Umgebungsvariablen**. Den Weg über die
+ * Einstellung im Adminbereich -- den, den ein normaler Betrieb geht -- prüft
+ * `panel.integration.test.ts`.
+ *
  * Übersprungen, wenn die Umgebung nichts davon anbietet -- der normale
  * Testlauf braucht deshalb keine laufenden Dienste. Zum Ausführen:
  *
- *   docker run -d --name ep-minio -p 9100:9000 \
- *     -e MINIO_ROOT_USER=testkey -e MINIO_ROOT_PASSWORD=testsecret123 \
- *     minio/minio server /data
+ *   docker compose up -d garage
+ *   npm run storage:setup
  *
- *   S3_ENDPOINT=http://localhost:9100 S3_BUCKET=portal-test \
- *   S3_ACCESS_KEY_ID=testkey S3_SECRET_ACCESS_KEY=testsecret123 \
- *   DATABASE_URL=postgres://... npx vitest run storage.integration
+ * Das Schlüsselpaar steht danach in der Garage-Oberfläche unter
+ * http://localhost:3909 -> Keys:
+ *
+ *   S3_ENDPOINT=http://localhost:3900 S3_BUCKET=portal S3_REGION=garage \
+ *   S3_ACCESS_KEY_ID=GK... S3_SECRET_ACCESS_KEY=... \
+ *   S3_FORCE_PATH_STYLE=true DATABASE_URL=postgres://... \
+ *   npx vitest run storage.integration
  */
 
 const ready = Boolean(env.S3_BUCKET && env.S3_ACCESS_KEY_ID && env.DATABASE_URL);

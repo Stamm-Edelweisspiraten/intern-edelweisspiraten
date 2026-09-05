@@ -69,7 +69,7 @@
     <form method="post" action="?/save" class="space-y-6">
         <Card
             title="Zugangsdaten"
-            subtitle="S3 oder ein kompatibler Speicher, etwa MinIO, Garage oder Hetzner Object Storage."
+            subtitle="S3 oder ein kompatibler Speicher. Garage liegt dem Projekt bei; MinIO, Hetzner Object Storage und AWS gehen genauso."
         >
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
@@ -169,8 +169,8 @@
                 <span>
                     Pfad-Adressierung erzwingen
                     <span class="block text-xs text-fg-muted">
-                        Nötig für MinIO und die meisten selbstgehosteten Speicher. Bei AWS S3
-                        selbst abschalten.
+                        Nötig für Garage, MinIO und die meisten selbstgehosteten
+                        Speicher. Bei AWS S3 selbst abschalten.
                     </span>
                 </span>
             </label>

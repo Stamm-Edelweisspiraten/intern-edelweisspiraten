@@ -60,10 +60,11 @@ Kalenderprogramm kann sich nicht anmelden.
 **Dateien**
 Ordner mit Unterordnern, freigegeben an Gruppen, Ämter, Rollen oder einzelne
 Personen; Unterordner erben die Freigaben ihres Elternordners. Schreibrecht je
-Freigabe. Wahlweise Ablage im **Objektspeicher** (S3 oder kompatibel, etwa
-MinIO) statt in der Datenbank — einrichtbar im Adminbereich, mit
-Verbindungstest und einem wiederholbaren Umzug der vorhandenen Dateien per
-Knopfdruck.
+Freigabe. Wahlweise Ablage im **Objektspeicher** statt in der Datenbank —
+einrichtbar im Adminbereich, mit Verbindungstest und einem wiederholbaren
+Umzug der vorhandenen Dateien per Knopfdruck. **Garage** liegt samt
+Bedienoberfläche bei und ist mit einem Befehl eingerichtet; jeder andere
+S3-kompatible Anbieter geht genauso.
 
 **Kämmerer**
 Artikel mit Größen und Preisen, Lagerbestand mit Zu- und Abgängen sowie
@@ -92,10 +93,11 @@ und Anhängen, heller und dunkler Darstellungsmodus, durchgängig responsiv.
 ## Einrichtung
 
 ```bash
-docker compose up -d postgres
-npm install
 cp .env.example .env      # anschließend ausfüllen
+docker compose up -d      # Datenbank und Objektspeicher
+npm install
 npm run db:migrate
+npm run storage:setup     # optional, siehe unten
 npm run dev
 ```
 
@@ -114,6 +116,41 @@ Die Administrationsrolle verlangt Zwei-Faktor-Authentifizierung; die
 Einrichtung erfolgt direkt nach dem Abschluss unter
 `/intern/profil/sicherheit`.
 
+### Objektspeicher (optional)
+
+Die `docker-compose.yml` bringt **Garage** mit — einen S3-kompatiblen
+Objektspeicher, der für genau diesen Fall gebaut ist: wenige Knoten, selbst
+betrieben, keine Cloud dahinter. Dazu eine Bedienoberfläche unter
+**http://localhost:3909**.
+
+Gebraucht wird er nicht. Ohne ihn liegen alle Dateien wie bisher in der
+Datenbank, und für einen Stamm reicht das. Wer ihn will:
+
+```bash
+# Beide Geheimnisse gehören in die .env, sonst startet Garage nicht.
+openssl rand -hex 32       # -> GARAGE_RPC_SECRET
+openssl rand -base64 32    # -> GARAGE_ADMIN_TOKEN
+
+docker compose up -d
+npm run storage:setup
+```
+
+`storage:setup` legt die Aufteilung des Knotens fest, erstellt den Bucket
+`portal` samt Zugangsschlüssel und hinterlegt die Zugangsdaten unter
+**`/intern/admin/speicher`** — der geheime Teil verschlüsselt mit
+`APP_ENC_KEY`. Der Lauf ist wiederholbar und legt nichts doppelt an.
+
+Danach im Adminbereich **„Verbindung prüfen“** und, wenn schon Dateien in der
+Datenbank liegen, **„Dateien umziehen“**. Neue Dateien landen ab sofort oben;
+alte bleiben lesbar, bis sie umgezogen sind.
+
+Für den Containerbetrieb (`--profile app`) gehört das Schlüsselpaar
+zusätzlich in die `.env`: im Container heißt der Dienst `garage`, nicht
+`localhost`. `npm run storage:setup` gibt die passenden Zeilen am Ende aus.
+
+Ein anderer Anbieter geht genauso — die Zugangsdaten trägt man dann direkt
+unter `/intern/admin/speicher` ein und lässt die Garage-Dienste weg.
+
 ### Falls man sich aussperrt
 
 Über die Umgebungsvariablen `BOOTSTRAP_ADMIN_EMAIL` und
@@ -123,7 +160,8 @@ repariert. Die Variablen sollten danach wieder entfernt werden.
 ### Umgebungsvariablen
 
 Siehe `.env.example`. Erforderlich sind `DATABASE_URL`, `SESSION_SECRET`,
-`MFA_ENC_KEY`, `PUBLIC_APP_URL` und die `SMTP_*`-Angaben.
+`MFA_ENC_KEY`, `PUBLIC_APP_URL` und die `SMTP_*`-Angaben. Für die
+Garage-Dienste zusätzlich `GARAGE_RPC_SECRET` und `GARAGE_ADMIN_TOKEN`.
 
 Hinter einem Reverse Proxy müssen zusätzlich `ADDRESS_HEADER=X-Forwarded-For`
 und `XFF_DEPTH` gesetzt sein – sonst sieht die Anwendung nur die Adresse des
@@ -147,6 +185,7 @@ Server-zu-Server-Aufrufe mit Token sind davon nicht betroffen.
 | `npm run db:generate` | Migration aus dem Schema erzeugen |
 | `npm run db:migrate` | Ausstehende Migrationen anwenden |
 | `npm run db:seed` | Systemrollen und Kontenrahmen anlegen |
+| `npm run storage:setup` | Objektspeicher einrichten: Bucket, Schlüssel, Eintrag im Adminbereich |
 | `npm run db:studio` | Datenbank im Browser ansehen |
 
 Nach **jeder** Änderung an `src/lib/server/db/schema/` muss
@@ -190,7 +229,8 @@ src/
     api/v1/                        REST-API
     dev/ui                         Komponentenübersicht (nur Entwicklung)
 drizzle/                           Migrationen (erzeugt, eingecheckt)
-scripts/                           Migration, Seed und Abnahme im Browser
+docker/garage.toml                 Konfiguration des Objektspeichers
+scripts/                           Migration, Seed, Objektspeicher, Abnahme
 ```
 
 **Gestaltung:** [`intern-design-sheet.md`](./intern-design-sheet.md) ist
@@ -244,18 +284,32 @@ Vererbung der Ordnerfreigaben an Unterordner, die Sichtbarkeit von Terminen,
 dass Soll und Haben in der Summen- und Saldenliste übereinstimmen, und dass
 jede PDF-Vorlage ein Dokument erzeugt, das sich öffnen lässt.
 
-Der Objektspeicher braucht zusätzlich einen laufenden MinIO:
+Für den Objektspeicher gibt es zwei Tests, weil es zwei Wege gibt, auf denen
+die Zugangsdaten hereinkommen:
+
+`storage.integration` prüft den Weg über die Umgebungsvariablen. Das
+Schlüsselpaar dafür steht in der Garage-Oberfläche unter
+http://localhost:3909 → Keys:
 
 ```bash
-docker run -d --name minio -p 9100:9000 \
-  -e MINIO_ROOT_USER=testkey -e MINIO_ROOT_PASSWORD=testsecret123 \
-  minio/minio server /data
-
-S3_ENDPOINT=http://localhost:9100 S3_BUCKET=portal-test \
-S3_ACCESS_KEY_ID=testkey S3_SECRET_ACCESS_KEY=testsecret123 \
+S3_ENDPOINT=http://localhost:3900 S3_BUCKET=portal S3_REGION=garage \
+S3_ACCESS_KEY_ID=GK… S3_SECRET_ACCESS_KEY=… S3_FORCE_PATH_STYLE=true \
 DATABASE_URL=postgres://intern:intern@localhost:5432/intern \
 npx vitest run storage.integration
 ```
+
+`panel.integration` prüft den Weg über die Einstellung im Adminbereich — den,
+den ein normaler Betrieb geht. Er braucht **keine** `S3_*`-Variablen (die
+hätten Vorrang), wohl aber denselben Verschlüsselungsschlüssel, mit dem
+`npm run storage:setup` geschrieben hat:
+
+```bash
+DATABASE_URL=postgres://intern:intern@localhost:5432/intern \
+APP_ENC_KEY=$MFA_ENC_KEY npx vitest run storage/panel.integration
+```
+
+Der zweite fängt einen Fehler, den man sonst lange nicht bemerkt: passt der
+Schlüssel nicht, fällt die Anwendung still auf die Datenbank zurück.
 
 Ein Test ist bewusst zusätzlich gesperrt: `seed/demo.integration` räumt die
 Datenbank hinterher vollständig ab und läuft deshalb nur mit
