@@ -97,7 +97,13 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://intern:intern@postgres:5432/intern}
       # Beide je 32 Byte, base64: openssl rand -base64 32
       SESSION_SECRET: ${SESSION_SECRET}
-      MFA_ENC_KEY: ${MFA_ENC_KEY}
+      # APP_ENC_KEY ist der aktuelle Name und hat Vorrang; MFA_ENC_KEY bleibt
+      # aus Gruenden der Abwaertskompatibilitaet gueltig. Beide werden
+      # durchgereicht, damit eine .env mit dem einen ODER dem anderen Namen
+      # funktioniert -- vorher kam APP_ENC_KEY im Container gar nicht an, und
+      # die Anwendung fiel stillschweigend auf "kein Schluessel" zurueck.
+      APP_ENC_KEY: ${APP_ENC_KEY:-}
+      MFA_ENC_KEY: ${MFA_ENC_KEY:-}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
       # Muss mit PUBLIC_APP_URL uebereinstimmen. Ohne diese Angabe
       # weist adapter-node jeden Formular-POST als CSRF mit 403 ab,
