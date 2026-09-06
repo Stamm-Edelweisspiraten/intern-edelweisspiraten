@@ -28,6 +28,7 @@ import {
     updatePasswordHash
 } from "$lib/server/userService";
 import { getOrganizationSettings } from "$lib/server/settingsService";
+import { hasEncryptionKey } from "$lib/server/crypto";
 import { formatDateTime } from "$lib/format";
 
 /** Eigene Sicherheitseinstellungen: Passwort, Zwei-Faktor, Geräte. */
@@ -42,6 +43,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
     return {
         minPasswordLength: MIN_PASSWORD_LENGTH,
+        /**
+         * Ohne Schluessel laesst sich kein TOTP-Geheimnis ablegen. Die Seite
+         * bietet die Einrichtung dann gar nicht erst an und erklaert warum --
+         * dieselbe Machart wie unter /intern/admin/email und /admin/speicher.
+         */
+        hasEncryptionKey: hasEncryptionKey(),
         mfaEnabled: user?.mfaEnabled === true,
         mfaRequired: locals.user.requireMfa,
         recoveryCodesLeft: user?.mfaRecoveryCodes?.length ?? 0,
@@ -95,6 +102,22 @@ export const actions: Actions = {
     /** Schritt 1 der Einrichtung: Secret erzeugen und QR-Code anzeigen. */
     startMfa: async ({ locals }) => {
         if (!locals.user) throw error(401, "Nicht angemeldet");
+
+        /*
+         * Ohne Verschluesselungsschluessel wirft `encryptSecret` -- und die
+         * Aktion endete mit einer nackten 500 "Interner Fehler", die niemandem
+         * sagt, was zu tun ist. Der Betrieb ist konfigurierbar falsch, nicht
+         * kaputt; also gehoert hier ein Satz hin und kein Absturz.
+         */
+        if (!hasEncryptionKey()) {
+            return fail(503, {
+                error:
+                    "Die Zwei-Faktor-Anmeldung ist nicht eingerichtet: dem Server fehlt der " +
+                    "Verschlüsselungsschlüssel APP_ENC_KEY. Ohne ihn lässt sich das Geheimnis " +
+                    "nicht sicher ablegen. Erzeugen mit „openssl rand -base64 32“, als " +
+                    "Umgebungsvariable setzen und die Anwendung neu starten."
+            });
+        }
 
         // Der Aussteller erscheint in der Authenticator-App und kommt aus den
         // Organisationseinstellungen -- vorher stand dort bei jedem Stamm

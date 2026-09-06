@@ -242,20 +242,40 @@ function redactPath(path: string): string {
 export const handleError: HandleServerError = ({ error: caught, event, status, message }) => {
     const id = crypto.randomUUID();
 
-    const entry = {
-        id,
-        status,
-        method: event.request.method,
-        path: redactPath(event.url.pathname),
-        userId: event.locals.user?.id ?? null,
-        apiTokenId: event.locals.apiToken?.id ?? null,
-        message
-    };
+    /*
+     * Alles hier drin laeuft in einem try/catch -- und zwar aus einem Grund,
+     * der Stunden gekostet hat: wirft `handleError` selbst, verwirft SvelteKit
+     * den urspruenglichen Fehler KOMMENTARLOS und liefert eine nackte 500
+     * "Internal Error". Im Protokoll steht dann gar nichts, und der eigentliche
+     * Fehler ist nicht mehr zu ermitteln. Ein Fehlerbehandler, der selbst
+     * ausfallen kann, ist schlimmer als keiner.
+     *
+     * Die Ausnahme wird deshalb ZUERST roh ausgegeben; alles Weitere ist Kuer.
+     */
+    try {
+        console.error(`Serverfehler [${id}]:`, caught);
+    } catch {
+        // Selbst das darf den Ablauf nicht anhalten.
+    }
 
-    if (status >= 400 && status < 500) {
-        console.warn("Abgewiesen:", JSON.stringify(entry));
-    } else {
-        console.error("Serverfehler:", JSON.stringify(entry), caught);
+    try {
+        const entry = {
+            id,
+            status,
+            method: event.request.method,
+            path: redactPath(event.url.pathname),
+            userId: event.locals.user?.id ?? null,
+            apiTokenId: event.locals.apiToken?.id ?? null,
+            message
+        };
+
+        if (status >= 400 && status < 500) {
+            console.warn("Abgewiesen:", JSON.stringify(entry));
+        } else {
+            console.error("Serverfehler:", JSON.stringify(entry));
+        }
+    } catch (err) {
+        console.error(`Protokolleintrag fehlgeschlagen [${id}]:`, err);
     }
 
     // `id` steht in App.Error (src/app.d.ts) -- die Fehlerseite zeigt sie
