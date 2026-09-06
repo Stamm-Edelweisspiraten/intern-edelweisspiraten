@@ -1,119 +1,106 @@
+import { error, fail, redirect } from "@sveltejs/kit";
+import { dev } from "$app/environment";
+import type { Actions, PageServerLoad } from "./$types";
 import { getMember } from "$lib/server/memberService";
-import { assignMemberToUser, createUser } from "$lib/server/userService";
-import { fail, redirect } from "@sveltejs/kit";
-import { ObjectId } from "mongodb";
-import { db } from "$lib/server/mongo";
-import { verifySignedSession } from "$lib/server/session";
+import { createUser, normalizeEmail } from "$lib/server/userService";
+import { verifySignedToken, INVITE_PURPOSE } from "$lib/server/signedToken";
+import { checkPasswordPolicy, MIN_PASSWORD_LENGTH } from "$lib/server/auth/password";
+import { SYSTEM_ROLE_KEYS } from "$lib/server/roleService";
+import { calculateAge } from "$lib/format";
 
-const JOIN_COOKIE_AGE = 60 * 30; // 30 Minuten
+/**
+ * Zweiter Schritt der Selbstregistrierung: Zugang anlegen.
+ *
+ * Vorher standen hier die Kennungen der Gruppen des externen Anbieters fest
+ * im Quelltext; es gab keine Pruefung auf eine bereits vergebene E-Mail-
+ * Adresse und keine serverseitige Passwortpruefung.
+ */
 
-export const load = async ({ params, cookies }) => {
-    const memberId = params.id;
+const JOIN_COOKIE_AGE = 30 * 60;
 
-    const inviteSession = verifySignedSession(cookies.get(`join_verified_${memberId}`) ?? undefined);
-    if (!inviteSession || inviteSession.type !== "invite" || inviteSession.memberId !== memberId) {
+function requireVerifiedInvite(cookies: Parameters<PageServerLoad>[0]["cookies"], memberId: string) {
+    const payload = verifySignedToken(cookies.get(`join_verified_${memberId}`), INVITE_PURPOSE);
+    if (!payload || payload.memberId !== memberId) {
         throw redirect(303, `/join/${memberId}`);
     }
+}
 
-    const member = await getMember(memberId);
-    if (!member) return fail(404, { error: "Mitglied nicht gefunden" });
+export const load: PageServerLoad = async ({ params, cookies }) => {
+    requireVerifiedInvite(cookies, params.id);
+
+    const member = await getMember(params.id);
+    if (!member) throw error(404, "Einladung nicht gefunden");
+
+    const age = calculateAge(member.birthday);
 
     return {
         member: {
             id: params.id,
             firstname: member.firstname,
-            lastname: member.lastname,
-            birthday: member.birthday ?? null
-        }
+            lastname: member.lastname
+        },
+        // Ab 18 ist nur ein eigenständiger Zugang sinnvoll.
+        isAdult: age !== null && age >= 18,
+        minPasswordLength: MIN_PASSWORD_LENGTH
     };
 };
 
-export const actions = {
+export const actions: Actions = {
     default: async ({ request, params, cookies }) => {
         const memberId = params.id;
-        const member = await getMember(memberId);
+        requireVerifiedInvite(cookies, memberId);
 
-        const inviteSession = verifySignedSession(cookies.get(`join_verified_${memberId}`) ?? undefined);
-        if (!inviteSession || inviteSession.type !== "invite" || inviteSession.memberId !== memberId) {
-            throw redirect(303, `/join/${memberId}`);
-        }
+        const member = await getMember(memberId);
+        if (!member) throw error(404, "Einladung nicht gefunden");
 
         const form = await request.formData();
+        const name = String(form.get("name") ?? "").trim();
+        const email = normalizeEmail(String(form.get("email") ?? ""));
+        const password = String(form.get("password") ?? "");
+        const passwordRepeat = String(form.get("password2") ?? "");
+        const requestedType = String(form.get("accountType") ?? "parent");
 
-        const name = form.get("name")?.toString();
-        const email = form.get("email")?.toString();
-        const password = form.get("password")?.toString();
-        const password2 = form.get("password2")?.toString();
-        const requestedType = form.get("accountType")?.toString() || "parent"; // fallback
+        const values = { name, email };
 
-        if (!name || !email || !password || !password2 || !requestedType) {
-            return fail(400, { error: "Bitte alle Felder ausfüllen." });
+        if (!name) return fail(400, { error: "Bitte einen Namen angeben.", ...values });
+        if (!email.includes("@")) {
+            return fail(400, { error: "Bitte eine gültige E-Mail-Adresse angeben.", ...values });
+        }
+        if (password !== passwordRepeat) {
+            return fail(400, { error: "Die beiden Passwörter stimmen nicht überein.", ...values });
         }
 
-        if (password !== password2) {
-            return fail(400, { error: "Passwörter stimmen nicht überein." });
+        const policy = checkPasswordPolicy(password, email);
+        if (!policy.ok) return fail(400, { error: policy.error, ...values });
+
+        const age = calculateAge(member.birthday);
+        const type = age !== null && age >= 18 ? "parent" : requestedType === "child" ? "child" : "parent";
+        const roleKey = type === "child" ? SYSTEM_ROLE_KEYS.member : SYSTEM_ROLE_KEYS.parent;
+
+        const result = await createUser({
+            name,
+            email,
+            type,
+            password,
+            roleKeys: [roleKey],
+            memberIds: [memberId],
+            status: "active"
+        });
+
+        if (!result.ok) {
+            // Deckt insbesondere die bereits vergebene E-Mail-Adresse ab,
+            // die bisher zu einem doppelten Datensatz gefuehrt hat.
+            return fail(400, { error: result.error, ...values });
         }
 
-        const isAdult = (() => {
-            if (!member?.birthday) return false;
-            const b = new Date(member.birthday);
-            if (isNaN(b.getTime())) return false;
-            const today = new Date();
-            let years = today.getFullYear() - b.getFullYear();
-            const m = today.getMonth() - b.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < b.getDate())) years--;
-            return years >= 18;
-        })();
-
-        const type = isAdult ? "parent" : requestedType;
-
-        const GROUP_MAP = {
-            child: ["6d1940af-e162-48f2-9fc1-eb4fcd59ed37"],
-            parent: ["7afc50a1-7cab-4092-b63c-32f5a03e2da9"]
-        };
-
-        const groups = GROUP_MAP[type] ?? GROUP_MAP.parent;
-
-        // -------------------------------------------------------
-        // 1) USER ANLEGEN -> MONGO + AUTHENTIK (ohne Passwort-Mail)
-        // -------------------------------------------------------
-        let created;
-        try {
-            created = await createUser({
-                name,
-                email,
-                type,
-                groups,
-                password
-            });
-        } catch (err: any) {
-            return fail(500, { error: err?.message ?? "Konto konnte nicht erstellt werden." });
-        }
-
-        const mongoUserId = created.mongoId.toString();
-
-        // -------------------------------------------------------
-        // 2) USER -> MEMBER VERKNÜPFEN
-        // -------------------------------------------------------
-        await assignMemberToUser(mongoUserId, memberId);
-
-        await db.collection("members").updateOne(
-            { _id: new ObjectId(memberId) },
-            { $addToSet: { userIds: mongoUserId } }
-        );
-
-        // Flag für Erfolg (Success-Seite)
         cookies.set("join_created_user", "1", {
             path: "/",
             httpOnly: true,
             sameSite: "lax",
-            secure: true,
+            secure: !dev,
             maxAge: JOIN_COOKIE_AGE
         });
 
-        // -------------------------------------------------------
-        // 3) Erfolgreich -> Weiterleitung
-        // -------------------------------------------------------
         throw redirect(303, `/join/${memberId}/success`);
     }
 };

@@ -1,9 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="de" class="%ep.theme%">
 	<head>
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#2563eb" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#18181b" media="(prefers-color-scheme: dark)" />
+		<meta name="description" content="Interner Bereich" />
+		<!--
+			Setzt bei der Einstellung "System" das dunkle Theme vor dem ersten
+			Paint. Eine ausdrueckliche Wahl kommt bereits serverseitig aus dem
+			Cookie, dort ist kein Skript beteiligt.
+		-->
+		<script>
+			try {
+				var m = document.cookie.match(/(?:^|;\s*)ep_theme=(\w+)/);
+				if ((!m || m[1] === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+					document.documentElement.classList.add('dark');
+				}
+			} catch (e) {}
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

@@ -1,124 +1,114 @@
 <script lang="ts">
-    export let data;
+    import { page } from "$app/state";
+    import { Alert, Badge, Button, Card, DataTable, EmptyState, PageHeader, StatTile } from "$lib/components/ui";
+    import type { Column } from "$lib/components/ui";
+    import { formatEuro } from "$lib/money";
+    import { formatDate } from "$lib/format";
+    import {
+        orderStatusLabel,
+        orderStatusTone,
+        paymentStatusLabel,
+        paymentStatusTone
+    } from "$lib/kaemmerer/orderStatus";
+    import type { PageData } from "./$types";
 
-    const euro = (v: number) => `${(Number(v) || 0).toFixed(2)} EUR`;
-    const orders = data.orders ?? [];
+    let { data }: { data: PageData } = $props();
 
-    const statusTone = (status: string) => {
-        if (status === "paid") return "bg-emerald-50 text-emerald-700 border-emerald-200";
-        if (status === "delivered") return "bg-blue-50 text-blue-700 border-blue-200";
-        if (status === "processing") return "bg-amber-50 text-amber-700 border-amber-200";
-        return "bg-gray-50 text-gray-700 border-gray-200";
-    };
+    type Order = PageData["orders"][number];
 
-    const statusLabel = (status: string) => {
-        if (status === "ordered") return "Bestellt";
-        if (status === "processing") return "In Bearbeitung";
-        if (status === "delivered") return "Zugestellt";
-        if (status === "paid") return "Bezahlt";
-        return status;
-    };
+    /** Hinweis nach dem Anlegen einer Bestellung mit Fehlbestand. */
+    const backorderHint = $derived(page.url.searchParams.get("hinweis") === "nachbestellung");
+
+    const stats = $derived({
+        total: data.orders.reduce((sum, order) => sum + order.total, 0),
+        open: data.orders.filter((order) => order.paymentStatus !== "paid" && !order.cancelled).length,
+        delivered: data.orders.filter((order) => order.status === "delivered").length
+    });
 </script>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Kaemmerer</p>
-            <h1 class="text-3xl font-bold text-gray-900">Meine Bestellungen</h1>
-            <p class="text-sm text-gray-600 mt-1">Bestellungen der verknuepften Mitglieder.</p>
-        </div>
-        <a
-                href="/intern/kaemmerer/order/create"
-                class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm"
-        >
-            <span class="bi bi-plus-circle"></span>
-            Neue Bestellung
-        </a>
+<svelte:head><title>Meine Bestellungen - Kämmerer</title></svelte:head>
+
+{#snippet membersCell(order: Order)}
+    <div class="flex flex-wrap gap-1.5">
+        {#each order.members as member (member.id)}
+            <Badge tone="neutral" size="xs" label={member.name} />
+        {:else}
+            <span class="text-fg-subtle">–</span>
+        {/each}
     </div>
+{/snippet}
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
-        <div class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-gray-900">Bestellungen</h2>
-            <span class="text-sm text-gray-500">{orders.length} Eintraege</span>
-        </div>
+{#snippet statusCell(order: Order)}
+    <Badge tone={orderStatusTone(order.status)} size="xs" label={orderStatusLabel(order.status)} />
+{/snippet}
 
-        <!-- Desktop table -->
-        <div class="hidden xl:block overflow-x-auto">
-            <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Nr</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Mitglieder</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Datum</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Gesamt</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                {#if orders.length === 0}
-                    <tr>
-                        <td colspan="5" class="px-6 py-6 text-center text-sm text-gray-500">Keine Bestellungen gefunden.</td>
-                    </tr>
-                {:else}
-                    {#each orders as order}
-                        <tr class="hover:bg-gray-50 transition">
-                            <td class="px-6 py-4 font-semibold text-gray-900">
-                                <a href={`/intern/kaemmerer/order/${order.id}`} class="text-blue-600 hover:text-blue-700 flex items-center gap-2">
-                                    <span>{order.number}</span>
-                                    <i class="bi bi-arrow-right-short text-lg"></i>
-                                </a>
-                            </td>
-                            <td class="px-6 py-4 text-gray-700">
-                                <div class="flex flex-wrap gap-2">
-                                    {#each order.members as member}
-                                        <span class="px-2 py-1 text-xs font-semibold rounded-full border border-gray-200 bg-gray-50">{member.name}</span>
-                                    {/each}
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 text-gray-700">{order.createdAt?.slice(0, 10) ?? "-"}</td>
-                            <td class="px-6 py-4 font-semibold text-gray-900">{euro(order.total)}</td>
-                            <td class="px-6 py-4">
-                                <span class={`px-3 py-1 text-xs font-semibold rounded-full border ${statusTone(order.status)}`}>{statusLabel(order.status)}</span>
-                            </td>
-                        </tr>
-                    {/each}
-                {/if}
-                </tbody>
-            </table>
-        </div>
+{#snippet paymentCell(order: Order)}
+    <Badge tone={paymentStatusTone(order.paymentStatus)} size="xs" label={paymentStatusLabel(order.paymentStatus)} />
+{/snippet}
 
-        <!-- Mobile cards -->
-        <div class="xl:hidden space-y-3">
-            {#if orders.length === 0}
-                <div class="text-sm text-gray-500 text-center py-4 border border-dashed border-gray-200 rounded-xl">Keine Bestellungen gefunden.</div>
-            {:else}
-                {#each orders as order}
-                    <div class="border border-gray-200 rounded-xl p-4 shadow-sm bg-white">
-                        <div class="flex items-center justify-between">
-                            <div class="text-sm font-semibold text-gray-900">#{order.number}</div>
-                            <span class={`px-2.5 py-1 text-[11px] font-semibold rounded-full border ${statusTone(order.status)}`}>{statusLabel(order.status)}</span>
-                        </div>
-                        <div class="mt-2 text-xs text-gray-700">
-                            <div class="font-semibold text-gray-900">Mitglieder</div>
-                            <div class="flex flex-wrap gap-1 mt-1">
-                                {#each order.members as member}
-                                    <span class="px-2 py-1 rounded-full border border-gray-200 bg-gray-50">{member.name}</span>
-                                {/each}
-                            </div>
-                        </div>
-                        <div class="mt-2 text-xs text-gray-700">
-                            <div class="font-semibold text-gray-900">Datum</div>
-                            <div>{order.createdAt?.slice(0, 10) ?? "-"}</div>
-                        </div>
-                        <div class="mt-2 text-sm font-semibold text-gray-900">Gesamt: {euro(order.total)}</div>
-                        <div class="mt-3 flex flex-wrap gap-2">
-                            <a href={`/intern/kaemmerer/order/${order.id}`} class="flex-1 text-center px-3 py-2 text-xs rounded-lg border border-gray-200 text-gray-800 hover:bg-gray-50">Oeffnen</a>
-                        </div>
-                    </div>
-                {/each}
+<div class="space-y-8">
+    <PageHeader
+        title="Meine Bestellungen"
+        eyebrow="Kämmerer"
+        subtitle="Bestellungen der mit deinem Konto verknüpften Mitglieder."
+        back={{ href: "/intern/kaemmerer" }}
+    >
+        {#snippet actions()}
+            {#if data.hasMembers}
+                <Button href="/intern/kaemmerer/order/create" variant="primary" icon="plus-circle">
+                    Neue Bestellung
+                </Button>
             {/if}
+        {/snippet}
+    </PageHeader>
+
+    {#if backorderHint}
+        <Alert
+            tone="warning"
+            title="Nachbestellung nötig"
+            message="Für einzelne Positionen reichte der Lagerbestand nicht. Sie werden nachbestellt und später ausgegeben."
+        />
+    {/if}
+
+    {#if !data.hasMembers}
+        <Card>
+            <EmptyState
+                icon="person-x"
+                title="Kein Mitglied verknüpft"
+                description="Mit deinem Konto ist bisher kein Mitglied verknüpft. Ohne verknüpftes Mitglied können keine Bestellungen angezeigt oder angelegt werden. Bitte wende dich an die Stammesführung."
+            />
+        </Card>
+    {:else}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <StatTile label="Bestellwert gesamt" value={formatEuro(stats.total)} tone="primary" icon="receipt" />
+            <StatTile label="Offene Zahlungen" value={stats.open} tone="warning" icon="hourglass-split" />
+            <StatTile label="Geliefert" value={stats.delivered} tone="success" icon="truck" />
         </div>
-    </div>
+
+        <Card title="Bestellungen" meta={`${data.orders.length} Einträge`} padding="none">
+            <DataTable
+                columns={[
+                    { key: "number", label: "Nummer", value: (o) => o.number },
+                    { key: "members", label: "Mitglieder", cell: membersCell },
+                    { key: "date", label: "Datum", value: (o) => formatDate(o.createdAt) },
+                    { key: "status", label: "Status", cell: statusCell },
+                    { key: "payment", label: "Zahlung", cell: paymentCell },
+                    { key: "total", label: "Gesamt", align: "right", value: (o) => formatEuro(o.total) }
+                ] satisfies Column<Order>[]}
+                rows={data.orders}
+                getKey={(o) => o.id}
+                cardTitle={(o) => o.number}
+                cardSubtitle={(o) => o.members.map((member) => member.name).join(", ")}
+                rowHref={(o) => `/intern/kaemmerer/order/${o.id}`}
+                rowClass={(o) => (o.cancelled ? "opacity-60" : "")}
+                empty="Noch keine Bestellungen vorhanden."
+            >
+                {#snippet actions(order)}
+                    <Button href={`/intern/kaemmerer/order/${order.id}`} variant="secondary" size="sm" icon="eye">
+                        Öffnen
+                    </Button>
+                {/snippet}
+            </DataTable>
+        </Card>
+    {/if}
 </div>
-
-

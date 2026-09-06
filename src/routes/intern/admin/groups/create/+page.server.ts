@@ -1,22 +1,31 @@
+import { fail, redirect } from "@sveltejs/kit";
+import type { Actions, PageServerLoad } from "./$types";
+import { requirePermission } from "$lib/server/permissionGuard";
 import { createGroup } from "$lib/server/groupService";
-import { error } from "@sveltejs/kit";
-import { hasPermission } from "$lib/server/permissionService";
 
-export const actions = {
-    default: async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "groups.create")) {
-            throw error(403, "Keine Berechtigung");
-        }
+export const load: PageServerLoad = async (event) => {
+    requirePermission(event, "groups.create");
+    return {};
+};
 
-        const form = await request.formData();
+export const actions: Actions = {
+    default: async (event) => {
+        requirePermission(event, "groups.create");
+
+        const form = await event.request.formData();
+        const name = String(form.get("name") ?? "").trim();
+        const type = String(form.get("type") ?? "meute") === "sippe" ? "sippe" : "meute";
+
+        if (!name) return fail(400, { error: "Bitte einen Namen für die Gruppe angeben." });
 
         await createGroup({
-            name: form.get("name") as string,
-            type: form.get("type") as "meute" | "sippe",
-            meeting_time: form.get("meeting_time") as string,
-            description: form.get("description") as string
+            name,
+            type,
+            meeting_time: String(form.get("meeting_time") ?? ""),
+            description: String(form.get("description") ?? ""),
+            replyTo: String(form.get("replyTo") ?? "")
         });
 
-        return { success: true };
+        throw redirect(303, "/intern/admin/groups?hinweis=angelegt");
     }
 };

@@ -1,26 +1,42 @@
 <script lang="ts">
     import { toasts, dismissToast } from "$lib/toastStore";
 
-    const tone = (kind: string) => {
-        if (kind === "success") return "bg-emerald-50 border-emerald-200 text-emerald-800";
-        if (kind === "error") return "bg-red-50 border-red-200 text-red-800";
-        return "bg-blue-50 border-blue-200 text-blue-800";
+    /**
+     * Ergaenzt gegenueber vorher: role/aria-live (Toasts waren fuer
+     * Screenreader stumm), eine Breitenbegrenzung fuer schmale Displays und
+     * ein hoeherer z-Index -- vorher lagen Toasts, Kopfzeile und
+     * Impersonation-Banner alle auf z-50 und haben sich gegenseitig verdeckt.
+     */
+
+    const TONES: Record<string, string> = {
+        success: "bg-success-soft border-success-soft-border text-success-soft-fg",
+        error: "bg-danger-soft border-danger-soft-border text-danger-soft-fg",
+        info: "bg-info-soft border-info-soft-border text-info-soft-fg"
     };
 
-    const icon = (kind: string) => {
-        if (kind === "success") return "check-circle";
-        if (kind === "error") return "exclamation-circle";
-        return "info-circle";
+    const ICONS: Record<string, string> = {
+        success: "check-circle",
+        error: "exclamation-circle",
+        info: "info-circle"
     };
 </script>
 
-<div class="fixed top-4 right-4 z-50 space-y-2 w-80">
+<div
+    class="fixed bottom-4 right-4 z-[70] space-y-2 w-[min(22rem,calc(100vw-2rem))]"
+    role="status"
+    aria-live="polite"
+>
     {#each $toasts as toast (toast.id)}
-        <div class={`border rounded-xl shadow-md px-4 py-3 flex items-start gap-3 ${tone(toast.kind)}`}>
-            <span class={`bi bi-${icon(toast.kind)} mt-0.5 text-lg`}></span>
-            <div class="flex-1 text-sm leading-relaxed">{toast.message}</div>
-            <button class="text-sm text-gray-500 hover:text-gray-700" aria-label="Schließen" on:click={() => dismissToast(toast.id)}>
-                <span class="bi bi-x-lg"></span>
+        <div class={`border rounded-control px-4 py-3 flex items-start gap-3 shadow-lg ${TONES[toast.kind] ?? TONES.info}`}>
+            <span class={`bi bi-${ICONS[toast.kind] ?? ICONS.info} mt-0.5 text-lg`} aria-hidden="true"></span>
+            <div class="flex-1 text-sm leading-relaxed min-w-0">{toast.message}</div>
+            <button
+                type="button"
+                class="shrink-0 opacity-70 hover:opacity-100 transition"
+                aria-label="Meldung schließen"
+                onclick={() => dismissToast(toast.id)}
+            >
+                <span class="bi bi-x-lg" aria-hidden="true"></span>
             </button>
         </div>
     {/each}

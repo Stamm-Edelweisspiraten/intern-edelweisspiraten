@@ -1,376 +1,453 @@
-﻿<script lang="ts">
-    export let data;
-    import { addToast } from "$lib/toastStore";
+<script lang="ts">
+    import {
+        Alert,
+        Badge,
+        Button,
+        Card,
+        ConfirmDialog,
+        EmptyState,
+        FormField,
+        PageHeader,
+        SearchInput,
+        TextInput
+    } from "$lib/components/ui";
+    import type { ActionData, PageData } from "./$types";
 
-    let positions = data.positions ?? [];
-    let members = data.members ?? [];
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    let name = "";
-    let email = "";
-    let description = "";
-    let memberIds: string[] = [];
-    let type: "amt" | "gruppenleiter" = "amt";
-    let groupId = "";
-    let errorMsg = "";
-    let successMsg = "";
-    let submitting = false;
-    let editingId: string | null = null;
+    type Position = PageData["positions"][number];
 
-    const appendMembers = (ids: string[]) =>
-        ids.map((id) => members.find((m: any) => m.id === id)).filter(Boolean);
+    /**
+     * Die Seite verschickte ihre Formulare bisher von Hand per fetch und
+     * verwarf dabei die Antwort der Action. Jetzt laufen alle drei Aktionen
+     * ueber normale Formulare -- damit funktionieren sie auch ohne JavaScript
+     * und die Rueckmeldung aus fail() wird endlich sichtbar.
+     */
 
-    const submit = async (event: SubmitEvent) => {
-        event.preventDefault();
-        submitting = true;
-        errorMsg = "";
-        successMsg = "";
-        try {
-            const form = new FormData();
-            form.set("name", name);
-            form.set("email", email);
-            form.set("description", description);
-            form.set("type", type);
-            form.set("groupId", groupId);
-            memberIds.forEach((id) => form.append("memberIds", id));
+    let type = $state<"amt" | "gruppenleiter">("amt");
+    let memberSearch = $state("");
+    let editingId = $state<string | null>(null);
 
-            const res = await fetch("?/create", { method: "POST", body: form });
-            const json = await res.json();
-            if (!res.ok || json.error) {
-                throw new Error(json.error || "Fehler beim Speichern");
-            }
-            const newPos = {
-                id: json.id ?? crypto.randomUUID(),
-                name,
-                email,
-                description,
-                memberIds: [...memberIds],
-                members: appendMembers(memberIds),
-                type,
-                groupId
-            };
-            positions = [...positions, newPos];
-            successMsg = "Amt angelegt.";
-            addToast("Amt wurde angelegt.", "success");
-            name = "";
-            email = "";
-            description = "";
-            memberIds = [];
-            groupId = "";
-            type = "amt";
-        } catch (err: any) {
-            errorMsg = err.message ?? "Unbekannter Fehler";
-            addToast(errorMsg, "error");
-        } finally {
-            submitting = false;
-        }
-    };
+    let deleteTarget = $state<Position | null>(null);
+    let deleteOpen = $state(false);
+    let deleteForm = $state<HTMLFormElement | null>(null);
 
-    const submitUpdate = async (event: SubmitEvent, posId: string) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget as HTMLFormElement);
-        const ids = form.getAll("memberIds").map((v) => v.toString());
-        const t = form.get("type")?.toString() as "amt" | "gruppenleiter";
-        const group = form.get("groupId")?.toString() ?? "";
-        try {
-            const res = await fetch("?/update", { method: "POST", body: form });
-            const json = await res.json();
-            if (!res.ok || json.error) {
-                throw new Error(json.error || "Fehler beim Speichern");
-            }
+    const filteredMembers = $derived(
+        data.members.filter((member) => {
+            const needle = memberSearch.trim().toLowerCase();
+            if (!needle) return true;
+            return `${member.name} ${member.email}`.toLowerCase().includes(needle);
+        })
+    );
 
-            positions = positions.map((p: any) =>
-                p.id === posId
-                    ? {
-                        ...p,
-                        name: form.get("name")?.toString() ?? p.name,
-                        email: form.get("email")?.toString() ?? "",
-                        description: form.get("description")?.toString() ?? "",
-                        memberIds: ids,
-                        members: appendMembers(ids),
-                        type: t,
-                        groupId: group
-                    }
-                    : p
-            );
-            editingId = null;
-            addToast("Amt wurde aktualisiert.", "success");
-        } catch (err: any) {
-            errorMsg = err.message ?? "Unbekannter Fehler";
-            addToast(errorMsg, "error");
-        }
-    };
+    function groupName(groupId: string | undefined | null): string {
+        if (!groupId) return "";
+        return data.groups.find((group) => group.id === groupId)?.name ?? groupId;
+    }
 
-    const deletePosition = async (id: string, posName: string) => {
-        if (!confirm(`Soll das Amt "${posName}" gelöscht werden?`)) return;
-        const form = new FormData();
-        form.set("id", id);
-        const res = await fetch("?/delete", { method: "POST", body: form });
-        if (res.ok) {
-            positions = positions.filter((p: any) => p.id !== id);
-            addToast("Amt wurde gelöscht.", "success");
-        } else {
-            const json = await res.json().catch(() => ({}));
-            errorMsg = json.error || "Löschen fehlgeschlagen";
-            addToast(errorMsg, "error");
-        }
-    };
+    function roleName(roleId: string | undefined | null): string {
+        if (!roleId) return "";
+        return data.roles.find((role) => role.id === roleId)?.name ?? "";
+    }
+
+    function askDelete(position: Position) {
+        deleteTarget = position;
+        deleteOpen = true;
+    }
 </script>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Admin</p>
-            <h1 class="text-4xl font-bold text-gray-900">Ämter verwalten</h1>
-            <p class="text-sm text-gray-600 mt-1">Ämter anlegen, zuordnen und pflegen.</p>
-        </div>
-        <a
-                href="/intern/admin"
-                class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
-        >
-            <span class="bi bi-arrow-left"></span>
-            Zurück
-        </a>
-    </div>
+<svelte:head><title>Ämter - Adminbereich</title></svelte:head>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div class="lg:col-span-1 bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-            <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold text-gray-900">Neues Amt</h2>
-                <span class="bi bi-briefcase-fill text-blue-600"></span>
-            </div>
-            <form class="space-y-4" on:submit|preventDefault={submit}>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Name *</label>
-                    <input
-                            class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                            bind:value={name}
-                            required
-                            placeholder="z.B. Kassenwart"
-                    />
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">E-Mail (optional)</label>
-                    <input
+<div class="space-y-8">
+    <PageHeader
+        title="Ämter verwalten"
+        eyebrow="Adminbereich"
+        subtitle="Ämter anlegen, Mitglieder zuordnen und pflegen."
+        back={{ href: "/intern/admin" }}
+    />
+
+    {#if form?.error}
+        <Alert tone="danger" message={form.error} />
+    {/if}
+    {#if form?.success}
+        <Alert tone="success" message="Die Änderungen wurden gespeichert." />
+    {/if}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <Card title="Neues Amt" class="lg:col-span-1">
+            <form method="post" action="?/create" class="space-y-4">
+                <FormField label="Name" required>
+                    {#snippet children({ id })}
+                        <TextInput {id} name="name" required placeholder="z.B. Kassenwart" />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="E-Mail-Adresse" hint="Optional, z.B. eine Funktionsadresse.">
+                    {#snippet children({ id, describedBy })}
+                        <TextInput
+                            {id}
+                            {describedBy}
+                            name="email"
                             type="email"
-                            class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                            bind:value={email}
-                            placeholder="amt@example.de"
-                    />
-                </div>
-                <div class="space-y-2">
-                    <label class="block text-sm font-semibold text-gray-700">Typ</label>
-                    <div class="flex items-center gap-4 text-sm text-gray-700">
-                        <label class="flex items-center gap-2">
-                            <input type="radio" name="type" value="amt" bind:group={type} />
+                            placeholder="amt@example.org"
+                        />
+                    {/snippet}
+                </FormField>
+
+                <fieldset class="space-y-2">
+                    <legend class="block text-sm font-semibold text-fg-muted">Typ</legend>
+                    <div class="flex items-center gap-4 flex-wrap">
+                        <label class="flex items-center gap-2 text-sm text-fg">
+                            <input
+                                type="radio"
+                                name="type"
+                                value="amt"
+                                bind:group={type}
+                                class="border-border-strong"
+                            />
                             Amt
                         </label>
-                        <label class="flex items-center gap-2">
-                            <input type="radio" name="type" value="gruppenleiter" bind:group={type} />
+                        <label class="flex items-center gap-2 text-sm text-fg">
+                            <input
+                                type="radio"
+                                name="type"
+                                value="gruppenleiter"
+                                bind:group={type}
+                                class="border-border-strong"
+                            />
                             Gruppenleiter
                         </label>
                     </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Gruppe (nur Gruppenleiter)</label>
-                    <select
-                            class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                            bind:value={groupId}
-                            name="groupId"
-                            disabled={type !== "gruppenleiter"}
-                    >
-                        <option value="">Keine Gruppe</option>
-                        {#each data.groups as g}
-                            <option value={g.id}>{g.name}</option>
-                        {/each}
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Mitglieder (optional)</label>
-                    <select
-                            multiple
-                            name="memberIds"
-                            class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                            bind:value={memberIds}
-                    >
-                        {#each data.members as m}
-                            <option value={m.id}>{m.name} {m.email ? `(${m.email})` : ""}</option>
-                        {/each}
-                    </select>
-                    <p class="text-xs text-gray-500 mt-1">Mehrfachauswahl möglich.</p>
-                </div>
-                <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-1">Beschreibung (optional)</label>
-                    <textarea
-                            class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                            rows="3"
-                            bind:value={description}
-                            placeholder="Aufgaben oder Hinweise"
-                    ></textarea>
-                </div>
-                <button
-                        class="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold shadow-sm hover:bg-blue-700 transition disabled:opacity-60"
-                        type="submit"
-                        disabled={submitting}
-                >
-                    <span class="bi bi-save"></span>
-                    {submitting ? "Speichern..." : "Amt anlegen"}
-                </button>
-                {#if successMsg}
-                    <p class="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">{successMsg}</p>
-                {/if}
-                {#if errorMsg}
-                    <p class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{errorMsg}</p>
-                {/if}
-            </form>
-        </div>
+                </fieldset>
 
-        <div class="lg:col-span-2 bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-3">
-            <div class="flex items-center justify-between">
-                <h2 class="text-xl font-semibold text-gray-900">Ämter</h2>
-                <span class="text-sm text-gray-500">{positions.length} Einträge</span>
-            </div>
-            <div class="divide-y divide-gray-200">
-                {#if positions.length === 0}
-                    <div class="py-6 text-gray-500 text-sm">Noch keine Ämter angelegt.</div>
-                {:else}
-                    {#each positions as p}
-                        <div class="py-4 flex flex-col gap-3">
-                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                <div class="flex-1">
+                <FormField
+                    label="Gruppe"
+                    hint="Bestimmt den Bezug: Mit Gruppe gelten die Rechte der Rolle nur dort."
+                >
+                    {#snippet children({ id, describedBy })}
+                        <select
+                            {id}
+                            aria-describedby={describedBy}
+                            name="groupId"
+                            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
+                        >
+                            <option value="">Keine Gruppe – gilt für den ganzen Stamm</option>
+                            {#each data.groups as group (group.id)}
+                                <option value={group.id}>{group.name}</option>
+                            {/each}
+                        </select>
+                    {/snippet}
+                </FormField>
+
+                <FormField
+                    label="Rolle"
+                    hint="Wer dieses Amt innehat, erhält die Rechte dieser Rolle. Ohne Rolle trägt das Amt keine Rechte."
+                >
+                    {#snippet children({ id, describedBy })}
+                        <select
+                            {id}
+                            aria-describedby={describedBy}
+                            name="roleId"
+                            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
+                        >
+                            <option value="">Keine Rolle</option>
+                            {#each data.roles as role (role.id)}
+                                <option value={role.id}>
+                                    {role.name}{role.groupScopable ? " (gruppenfähig)" : ""}
+                                </option>
+                            {/each}
+                        </select>
+                    {/snippet}
+                </FormField>
+
+                <fieldset class="space-y-2">
+                    <legend class="block text-sm font-semibold text-fg-muted">
+                        Mitglieder <span class="font-normal text-fg-subtle">(optional)</span>
+                    </legend>
+                    <SearchInput
+                        bind:value={memberSearch}
+                        placeholder="Mitglied suchen..."
+                        label="Mitglied suchen"
+                        class="sm:w-full"
+                    />
+                    <!--
+                        Statt eines <select multiple>, das auf Touch-Geraeten
+                        praktisch nicht bedienbar ist: eine scrollbare Liste
+                        mit Checkboxen. Der Feldname bleibt memberIds.
+                    -->
+                    <div
+                        class="max-h-64 overflow-y-auto space-y-1 border border-border rounded-xl p-2 bg-surface-muted"
+                    >
+                        {#each filteredMembers as member (member.id)}
+                            <label
+                                class="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface border border-border cursor-pointer hover:bg-surface-muted transition"
+                            >
+                                <input
+                                    type="checkbox"
+                                    name="memberIds"
+                                    value={member.id}
+                                    class="rounded border-border-strong"
+                                />
+                                <span class="min-w-0">
+                                    <span class="block text-sm text-fg truncate">{member.name}</span>
+                                    {#if member.email}
+                                        <span class="block text-xs text-fg-subtle truncate">{member.email}</span>
+                                    {/if}
+                                </span>
+                            </label>
+                        {:else}
+                            <p class="text-sm text-fg-subtle px-3 py-4 text-center">
+                                Kein passendes Mitglied gefunden.
+                            </p>
+                        {/each}
+                    </div>
+                </fieldset>
+
+                <FormField label="Beschreibung">
+                    {#snippet children({ id })}
+                        <textarea
+                            {id}
+                            name="description"
+                            rows="3"
+                            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm placeholder:text-fg-subtle"
+                            placeholder="Aufgaben oder Hinweise"
+                        ></textarea>
+                    {/snippet}
+                </FormField>
+
+                <Button type="submit" variant="primary" full icon="plus-circle">Amt anlegen</Button>
+            </form>
+        </Card>
+
+        <Card
+            title="Ämter"
+            meta={`${data.positions.length} Einträge`}
+            class="lg:col-span-2"
+        >
+            {#if data.positions.length === 0}
+                <EmptyState
+                    icon="briefcase"
+                    title="Noch keine Ämter angelegt"
+                    description="Lege links ein Amt an, um Zuständigkeiten im Stamm abzubilden."
+                />
+            {:else}
+                <ul class="divide-y divide-border">
+                    {#each data.positions as position (position.id)}
+                        <li class="py-4 space-y-3">
+                            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                                <div class="min-w-0 space-y-1">
                                     <div class="flex items-center gap-2 flex-wrap">
-                                        <div class="px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-200">
-                                            {p.type === "gruppenleiter" ? "Gruppenleiter" : "Amt"}
-                                        </div>
-                                        {#if p.groupId && p.type === "gruppenleiter"}
-                                            <span class="text-xs text-gray-500">Gruppe: {data.groups.find((g: any) => g.id === p.groupId)?.name || p.groupId}</span>
+                                        <Badge
+                                            tone={position.type === "gruppenleiter" ? "info" : "primary"}
+                                            size="xs"
+                                            label={position.type === "gruppenleiter" ? "Gruppenleiter" : "Amt"}
+                                        />
+                                        {#if position.groupId}
+                                            <Badge
+                                                tone="neutral"
+                                                size="xs"
+                                                label={`Gruppe: ${groupName(position.groupId)}`}
+                                            />
+                                        {/if}
+                                        {#if position.roleId}
+                                            <Badge
+                                                tone="success"
+                                                size="xs"
+                                                label={`Rolle: ${roleName(position.roleId)}`}
+                                            />
+                                        {:else}
+                                            <span class="text-xs text-fg-subtle">Ohne Rechte</span>
                                         {/if}
                                     </div>
-                                    <div class="mt-1 text-lg font-semibold text-gray-900">{p.name}</div>
-                                    {#if p.email}
-                                        <div class="text-sm text-gray-600">{p.email}</div>
+                                    <p class="text-lg font-semibold text-fg">{position.name}</p>
+                                    {#if position.email}
+                                        <p class="text-sm text-fg-muted">{position.email}</p>
                                     {/if}
-                                    {#if p.description}
-                                        <div class="text-sm text-gray-700 mt-1">{p.description}</div>
+                                    {#if position.description}
+                                        <p class="text-sm text-fg-muted">{position.description}</p>
                                     {/if}
-                                    <div class="text-sm text-gray-500 mt-1">
-                                        {#if p.members?.length > 0}
-                                            Zugeordnet: {p.members.map((m: any) => `${m.name}${m.email ? ` (${m.email})` : ""}`).join(", ")}
+                                    <p class="text-sm text-fg-subtle">
+                                        {#if position.members.length > 0}
+                                            Zugeordnet: {position.members
+                                                .map((member: { name?: string } | undefined) => member?.name)
+                                                .filter(Boolean)
+                                                .join(", ")}
                                         {:else}
                                             Kein Mitglied zugeordnet
                                         {/if}
-                                    </div>
+                                    </p>
                                 </div>
-                                <div class="flex items-center gap-2">
-                                    <button
-                                            type="button"
-                                            class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700 shadow-sm"
-                                            on:click={() => editingId = editingId === p.id ? null : p.id}
+
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        icon="pencil"
+                                        onclick={() =>
+                                            (editingId = editingId === position.id ? null : position.id)}
                                     >
-                                        <span class="bi bi-pencil"></span>
-                                        {editingId === p.id ? "Abbrechen" : "Bearbeiten"}
-                                    </button>
-                                    <button
-                                            type="button"
-                                            class="inline-flex items-center gap-2 px-4 py-2 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 text-red-700 shadow-sm"
-                                            on:click={() => deletePosition(p.id, p.name)}
+                                        {editingId === position.id ? "Abbrechen" : "Bearbeiten"}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        icon="trash"
+                                        onclick={() => askDelete(position)}
                                     >
-                                        <span class="bi bi-trash"></span>
                                         Löschen
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
 
-                            {#if editingId === p.id}
-                                <div class="pt-2">
-                                    <form method="post" action="?/update" class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 border border-gray-200 rounded-lg p-4" on:submit|preventDefault={(e) => submitUpdate(e, p.id)}>
-                                        <input type="hidden" name="id" value={p.id} />
-                                        <div class="md:col-span-2">
-                                            <label class="block text-sm font-semibold text-gray-700 mb-1">Name *</label>
-                                            <input
-                                                    class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                                    name="name"
-                                                    required
-                                                    value={p.name}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-semibold text-gray-700 mb-1">E-Mail</label>
-                                            <input
-                                                    type="email"
-                                                    class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                                    name="email"
-                                                    value={p.email}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-semibold text-gray-700 mb-1">Beschreibung</label>
-                                            <input
-                                                    class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                                    name="description"
-                                                    value={p.description}
-                                            />
-                                        </div>
-                                        <div class="md:col-span-2 flex items-center gap-4 text-sm text-gray-700">
-                                            <label class="flex items-center gap-2">
-                                                <input type="radio" name="type" value="amt" checked={p.type !== "gruppenleiter"} />
+                            {#if editingId === position.id}
+                                <form
+                                    method="post"
+                                    action="?/update"
+                                    class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-surface-muted border border-border rounded-xl p-4"
+                                >
+                                    <input type="hidden" name="id" value={position.id} />
+
+                                    <FormField label="Name" required class="md:col-span-2">
+                                        {#snippet children({ id })}
+                                            <TextInput {id} name="name" value={position.name} required />
+                                        {/snippet}
+                                    </FormField>
+
+                                    <FormField label="E-Mail-Adresse">
+                                        {#snippet children({ id })}
+                                            <TextInput {id} name="email" type="email" value={position.email ?? ""} />
+                                        {/snippet}
+                                    </FormField>
+
+                                    <FormField label="Beschreibung">
+                                        {#snippet children({ id })}
+                                            <TextInput {id} name="description" value={position.description ?? ""} />
+                                        {/snippet}
+                                    </FormField>
+
+                                    <fieldset class="md:col-span-2 space-y-2">
+                                        <legend class="block text-sm font-semibold text-fg-muted">Typ</legend>
+                                        <div class="flex items-center gap-4 flex-wrap">
+                                            <label class="flex items-center gap-2 text-sm text-fg">
+                                                <input
+                                                    type="radio"
+                                                    name="type"
+                                                    value="amt"
+                                                    checked={position.type !== "gruppenleiter"}
+                                                    class="border-border-strong"
+                                                />
                                                 Amt
                                             </label>
-                                            <label class="flex items-center gap-2">
-                                                <input type="radio" name="type" value="gruppenleiter" checked={p.type === "gruppenleiter"} />
+                                            <label class="flex items-center gap-2 text-sm text-fg">
+                                                <input
+                                                    type="radio"
+                                                    name="type"
+                                                    value="gruppenleiter"
+                                                    checked={position.type === "gruppenleiter"}
+                                                    class="border-border-strong"
+                                                />
                                                 Gruppenleiter
                                             </label>
                                         </div>
-                                        <div class="md:col-span-2">
-                                            <label class="block text-sm font-semibold text-gray-700 mb-1">Gruppe (nur Gruppenleiter)</label>
+                                    </fieldset>
+
+                                    <FormField
+                                        label="Gruppe"
+                                        hint="Mit Gruppe gelten die Rechte der Rolle nur dort."
+                                        class="md:col-span-2"
+                                    >
+                                        {#snippet children({ id, describedBy })}
                                             <select
-                                                    name="groupId"
-                                                    class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                                    disabled={p.type !== "gruppenleiter"}
-                                                >
-                                                <option value="">Keine Gruppe</option>
-                                                {#each data.groups as g}
-                                                    <option value={g.id} selected={p.groupId === g.id}>{g.name}</option>
-                                                {/each}
-                                            </select>
-                                        </div>
-                                        <div class="md:col-span-2">
-                                            <label class="block text-sm font-semibold text-gray-700 mb-1">Mitglieder</label>
-                                            <select
-                                                    multiple
-                                                    name="memberIds"
-                                                    class="w-full px-4 py-2.5 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                                {id}
+                                                aria-describedby={describedBy}
+                                                name="groupId"
+                                                class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
                                             >
-                                                {#each data.members as m}
-                                                    <option value={m.id} selected={p.memberIds?.includes(m.id)}>
-                                                        {m.name} {m.email ? `(${m.email})` : ""}
+                                                <option value="">Keine Gruppe – gilt für den ganzen Stamm</option>
+                                                {#each data.groups as group (group.id)}
+                                                    <option value={group.id} selected={position.groupId === group.id}>
+                                                        {group.name}
                                                     </option>
                                                 {/each}
                                             </select>
-                                            <p class="text-xs text-gray-500 mt-1">Mehrfachauswahl möglich.</p>
-                                        </div>
-                                        <div class="md:col-span-2 flex gap-3">
-                                            <button
-                                                    type="submit"
-                                                    class="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                                        {/snippet}
+                                    </FormField>
+
+                                    <FormField
+                                        label="Rolle"
+                                        hint="Rechte, die die Inhaber dieses Amts erhalten."
+                                        class="md:col-span-2"
+                                    >
+                                        {#snippet children({ id, describedBy })}
+                                            <select
+                                                {id}
+                                                aria-describedby={describedBy}
+                                                name="roleId"
+                                                class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
                                             >
-                                                <span class="bi bi-save"></span>
-                                                Speichern
-                                            </button>
-                                            <button
-                                                    type="button"
-                                                    class="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm"
-                                                    on:click={() => editingId = null}
-                                            >
-                                                Abbrechen
-                                            </button>
+                                                <option value="">Keine Rolle</option>
+                                                {#each data.roles as role (role.id)}
+                                                    <option value={role.id} selected={position.roleId === role.id}>
+                                                        {role.name}
+                                                    </option>
+                                                {/each}
+                                            </select>
+                                        {/snippet}
+                                    </FormField>
+
+                                    <fieldset class="md:col-span-2 space-y-2">
+                                        <legend class="block text-sm font-semibold text-fg-muted">Mitglieder</legend>
+                                        <div
+                                            class="max-h-64 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1 border border-border rounded-xl p-2 bg-surface"
+                                        >
+                                            {#each data.members as member (member.id)}
+                                                <label
+                                                    class="flex items-center gap-2 px-3 py-2 rounded-lg border border-border cursor-pointer hover:bg-surface-muted transition"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        name="memberIds"
+                                                        value={member.id}
+                                                        checked={position.memberIds?.includes(member.id) ?? false}
+                                                        class="rounded border-border-strong"
+                                                    />
+                                                    <span class="text-sm text-fg truncate">{member.name}</span>
+                                                </label>
+                                            {/each}
                                         </div>
-                                    </form>
-                                </div>
+                                    </fieldset>
+
+                                    <div class="md:col-span-2 flex justify-end gap-3 flex-wrap">
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            onclick={() => (editingId = null)}
+                                        >
+                                            Abbrechen
+                                        </Button>
+                                        <Button type="submit" variant="primary" size="sm" icon="check-lg">
+                                            Speichern
+                                        </Button>
+                                    </div>
+                                </form>
                             {/if}
-                        </div>
+                        </li>
                     {/each}
-                {/if}
-            </div>
-        </div>
+                </ul>
+            {/if}
+        </Card>
     </div>
 </div>
+
+<form method="post" action="?/delete" bind:this={deleteForm} class="hidden">
+    <input type="hidden" name="id" value={deleteTarget?.id ?? ""} />
+</form>
+
+<ConfirmDialog
+    bind:open={deleteOpen}
+    title="Amt wirklich löschen?"
+    message={`Das Amt „${deleteTarget?.name ?? ""}“ wird dauerhaft entfernt. Diese Aktion kann nicht rückgängig gemacht werden.`}
+    confirmLabel="Endgültig löschen"
+    onconfirm={() => deleteForm?.requestSubmit()}
+    oncancel={() => (deleteTarget = null)}
+/>

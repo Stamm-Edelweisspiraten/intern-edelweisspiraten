@@ -1,220 +1,241 @@
-﻿<script lang="ts">
-    export let data;
-    const articles = data.articles ?? [];
+<script lang="ts">
+    import {
+        Alert,
+        Badge,
+        Button,
+        Card,
+        DataTable,
+        FormField,
+        Modal,
+        PageHeader,
+        SearchInput,
+        StatTile,
+        TextInput
+    } from "$lib/components/ui";
+    import type { Column } from "$lib/components/ui";
+    import type { ActionData, PageData } from "./$types";
 
-    const sizeTotal = (sizes: { stock?: number }[] = []) =>
-        sizes.reduce((sum, s) => sum + (Number(s.stock) || 0), 0);
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    const articleStock = (article: any) => article?.sizes?.length ? sizeTotal(article.sizes) : Number(article?.stock) || 0;
-    const lowStock = (article: any) => (article?.minStock ?? 0) > 0 && articleStock(article) < (article?.minStock ?? 0);
-    const negativeStock = (article: any) => articleStock(article) < 0;
+    type Article = PageData["articles"][number];
 
-    const totalArticles = articles.length;
-    const lowCount = articles.filter((a: any) => lowStock(a)).length;
-    const totalUnits = articles.reduce((sum: number, a: any) => sum + articleStock(a), 0);
+    /**
+     * Bei Artikeln MIT Größen zählt der Mindestbestand JE GRÖSSE, nicht der
+     * artikelweite Wert. Der artikelweite Mindestbestand gilt nur für Artikel
+     * ohne Größen.
+     */
+    function isLow(article: Article): boolean {
+        if (article.hasSizes) {
+            return article.sizes.some((size) => (size.minStock ?? 0) > 0 && (size.stock ?? 0) < (size.minStock ?? 0));
+        }
+        return article.minStock > 0 && article.stock < article.minStock;
+    }
+
+    function sizeTone(size: Article["sizes"][number]): "neutral" | "success" | "warning" {
+        const stock = size.stock ?? 0;
+        const min = size.minStock ?? 0;
+        if (min > 0 && stock < min) return "warning";
+        return stock > 0 ? "success" : "neutral";
+    }
+
+    let search = $state("");
+
+    const filtered = $derived(
+        data.articles.filter((article) => {
+            const needle = search.trim().toLowerCase();
+            if (!needle) return true;
+            return article.name.toLowerCase().includes(needle);
+        })
+    );
+
+    const stats = $derived({
+        count: data.articles.length,
+        low: data.articles.filter(isLow).length,
+        units: data.articles.reduce((sum, article) => sum + article.stock, 0)
+    });
+
+    // Bestandsdialog -------------------------------------------------------
+    let target = $state<Article | null>(null);
+    let stockOpen = $state(false);
+    let size = $state("");
+    let delta = $state<string | number>(1);
+    let correction = $state<string | number>(0);
+
+    function openStock(article: Article) {
+        target = article;
+        size = article.hasSizes ? (article.sizes[0]?.name ?? "") : "";
+        delta = 1;
+        correction = article.hasSizes ? (article.sizes[0]?.stock ?? 0) : article.stock;
+        stockOpen = true;
+    }
 </script>
 
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <div>
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Kaemmerer</p>
-            <h1 class="text-3xl font-bold text-gray-900">Lager</h1>
-            <p class="text-sm text-gray-600 mt-1">Bestaende und Warnstufen im Blick.</p>
-        </div>
-        <div class="flex items-center gap-3 flex-wrap">
-            <a href="/intern/kaemmerer/storage/reorder" class="inline-flex items-center gap-2 px-4 py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-semibold border border-blue-200 shadow-sm transition">
-                <span class="bi bi-list-check"></span>
-                Bestellliste
-            </a>
-            <a href="/intern/kaemmerer" class="inline-flex items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition">
-                <span class="bi bi-arrow-left"></span>
-                Zurueck
-            </a>
-        </div>
-    </div>
+<svelte:head><title>Lager - Kämmerer</title></svelte:head>
 
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <p class="text-sm text-gray-500">Artikel</p>
-            <p class="text-2xl font-semibold text-gray-900 mt-1">{totalArticles}</p>
+{#snippet stockCell(article: Article)}
+    {#if article.hasSizes}
+        <div class="flex flex-wrap gap-1.5">
+            <Badge tone="primary" size="xs" label={`Gesamt ${article.stock}`} />
+            {#each article.sizes as entry (entry.name)}
+                <Badge
+                    tone={sizeTone(entry)}
+                    size="xs"
+                    label={`${entry.name}: ${entry.stock ?? 0}`}
+                />
+            {/each}
         </div>
-        <div class="p-4 bg-white border border-amber-200 rounded-xl shadow-sm">
-            <p class="text-sm text-amber-700 flex items-center gap-2"><span class="bi bi-exclamation-diamond"></span> Niedrig</p>
-            <p class="text-2xl font-semibold text-amber-700 mt-1">{lowCount}</p>
-        </div>
-        <div class="p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <p class="text-sm text-gray-500">Einheiten gesamt</p>
-            <p class="text-2xl font-semibold text-gray-900 mt-1">{totalUnits}</p>
-        </div>
-    </div>
+    {:else}
+        <span class="font-semibold text-fg">{article.stock}</span>
+    {/if}
+{/snippet}
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-        <div class="px-6 py-4 flex items-center justify-between flex-wrap gap-3">
-            <h2 class="text-lg font-semibold text-gray-900">Artikel im Lager</h2>
-            <span class="text-sm text-gray-500">{articles.length} Eintraege</span>
-        </div>
-        <div class="hidden xl:block overflow-x-auto">
-            <table class="w-full min-w-full divide-y divide-gray-200 text-sm">
-                <thead class="bg-gray-50">
-                <tr>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Bestand</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Mindestbestand</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                    <th class="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Aktion</th>
-                </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                {#if articles.length === 0}
-                    <tr>
-                        <td colspan="5" class="px-6 py-6 text-center text-sm text-gray-500">Keine Artikel vorhanden.</td>
-                    </tr>
-                {:else}
-                    {#each articles as article}
-                        <tr class={`hover:bg-gray-50 transition ${lowStock(article) ? "bg-amber-50/60" : ""}`}>
-                            <td class="px-6 py-4 text-gray-900 font-semibold">{article.name}</td>
-                            <td class="px-6 py-4 text-gray-700">
-                                {#if article.sizes?.length}
-                                    <div class="flex flex-wrap gap-2">
-                                        <div class={`px-3 py-2 rounded-xl border ${negativeStock(article) ? "border-red-200 bg-red-50 text-red-800" : "border-gray-200 bg-gray-50"}`}>
-                                            <p class="text-[11px] uppercase tracking-wide text-gray-500">Gesamt</p>
-                                            <p class="text-sm font-semibold text-gray-900">{sizeTotal(article.sizes)}</p>
-                                        </div>
-                                        {#each article.sizes as size}
-                                            <div class={`px-3 py-2 rounded-xl border ${
-                                                Number(size.stock) < 0
-                                                    ? "border-red-200 bg-red-50 text-red-800"
-                                                    : Number(size.stock) === 0
-                                                        ? "border-amber-200 bg-amber-50/60 text-amber-800"
-                                                        : "border-sky-200 bg-sky-50 text-sky-800"
-                                            }`}>
-                                                <div class="text-xs font-semibold uppercase tracking-wide">{size.name}</div>
-                                                <div class="text-sm font-semibold">{size.stock ?? 0}</div>
-                                            </div>
-                                        {/each}
-                                    </div>
-                                {:else}
-                                    <span class={negativeStock(article) ? "text-red-700 font-semibold" : ""}>{article.stock ?? 0}</span>
-                                {/if}
-                            </td>
-                            <td class="px-6 py-4 text-gray-700">
-                                <div class="flex items-center gap-2">
-                                    <span class="px-2 py-1 text-xs rounded-full border border-gray-200 bg-gray-50">{article.minStock ?? 0}</span>
-                                    <span class="text-xs text-gray-500">min</span>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4">
-                                {#if negativeStock(article)}
-                                    <span class="px-3 py-1 text-xs font-semibold rounded-full border border-red-200 bg-red-50 text-red-700 inline-flex items-center gap-1">
-                                        <span class="bi bi-exclamation-octagon"></span> Bestand negativ
-                                    </span>
-                                {:else if lowStock(article)}
-                                    <span class="px-3 py-1 text-xs font-semibold rounded-full border border-amber-200 bg-amber-50 text-amber-700 inline-flex items-center gap-1">
-                                        <span class="bi bi-exclamation-diamond"></span> Niedriger Bestand
-                                    </span>
-                                {:else}
-                                    <span class="px-3 py-1 text-xs font-semibold rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 inline-flex items-center gap-1">
-                                        <span class="bi bi-check-circle"></span> OK
-                                    </span>
-                                {/if}
-                            </td>
-                            <td class="px-6 py-4 space-y-2">
-                                <form method="post" action="?/adjust" class="flex items-center flex-wrap gap-2 text-xs">
-                                    <input type="hidden" name="id" value={article.id} />
-                                    {#if article.sizes?.length}
-                                        <select name="size" class="border border-gray-300 rounded-lg px-2 py-2 text-xs focus:ring-2 focus:ring-blue-500">
-                                            {#each article.sizes as size}
-                                                <option value={size.name}>{size.name} ({size.stock ?? 0})</option>
-                                            {/each}
-                                        </select>
-                                    {/if}
-                                    <input type="number" name="delta" step="1" class="w-24 border border-gray-300 rounded-lg px-2 py-2" placeholder="+/-" />
-                                    <button type="submit" class="px-3 py-2 font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Anpassen</button>
-                                </form>
-                                <a href={`/intern/kaemmerer/articles/${article.id}`} class="inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold border border-blue-200 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100">
-                                    <span class="bi bi-box"></span>
-                                    Details
-                                </a>
-                            </td>
-                        </tr>
-                    {/each}
-                {/if}
-                </tbody>
-            </table>
-        </div>
-
-        <div class="xl:hidden px-4 pb-5 space-y-4">
-            {#if articles.length === 0}
-                <p class="text-sm text-gray-500 px-2">Keine Artikel vorhanden.</p>
+{#snippet minStockCell(article: Article)}
+    {#if article.hasSizes}
+        <div class="flex flex-wrap gap-1.5">
+            {#each article.sizes as entry (entry.name)}
+                <Badge tone="neutral" size="xs" label={`${entry.name}: ${entry.minStock ?? 0}`} />
             {:else}
-                {#each articles as article}
-                    <div class={`border rounded-2xl p-4 shadow-sm space-y-3 ${lowStock(article) ? "border-amber-200 bg-amber-50/60" : "border-gray-200 bg-white"}`}>
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <p class="text-base font-semibold text-gray-900">{article.name}</p>
-                                {#if article.sizes?.length}
-                                    <p class="text-xs text-gray-500 mt-1">Gesamt: {sizeTotal(article.sizes)}</p>
-                                {:else}
-                                    <p class="text-xs text-gray-500 mt-1">Bestand: {article.stock ?? 0}</p>
-                                {/if}
-                            </div>
-                            {#if lowStock(article)}
-                                <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-amber-200 bg-amber-50 text-amber-700 inline-flex items-center gap-1">
-                                    <span class="bi bi-exclamation-diamond"></span> Niedrig
-                                </span>
-                            {:else}
-                                <span class="px-3 py-1 text-[11px] font-semibold rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 inline-flex items-center gap-1">
-                                    <span class="bi bi-check-circle"></span> OK
-                                </span>
-                            {/if}
-                        </div>
-
-                        {#if article.sizes?.length}
-                            <div class="flex flex-wrap gap-2">
-                                {#each article.sizes as size}
-                                    <span class={`px-2 py-1 text-[11px] rounded-full border ${
-                                        Number(size.stock) < 0
-                                            ? "border-red-200 bg-red-50 text-red-800"
-                                            : Number(size.stock) === 0
-                                                ? "border-amber-200 bg-amber-50/60 text-amber-800"
-                                                : "border-sky-200 bg-sky-50 text-sky-800"
-                                    } inline-flex items-center gap-2`}>
-                                        {size.name}: {size.stock ?? 0}
-                                    </span>
-                                {/each}
-                            </div>
-                        {/if}
-
-                        <div class="flex flex-wrap gap-2 text-xs text-gray-700">
-                            <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50 inline-flex items-center gap-2">
-                                <span class="bi bi-exclamation-diamond text-gray-500"></span> Mindestbestand {article.minStock ?? 0}
-                            </span>
-                            <span class={`px-3 py-1 rounded-full border inline-flex items-center gap-2 ${negativeStock(article) ? "border-red-200 bg-red-50 text-red-800" : "border-gray-200 bg-gray-50"}`}>
-                                <span class="bi bi-box-seam text-gray-500"></span> Gesamt {articleStock(article)}
-                            </span>
-                        </div>
-
-                        <div class="space-y-2">
-                            <form method="post" action="?/adjust" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                <input type="hidden" name="id" value={article.id} />
-                                {#if article.sizes?.length}
-                                    <select name="size" class="border border-gray-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500">
-                                        {#each article.sizes as size}
-                                            <option value={size.name}>{size.name} ({size.stock ?? 0})</option>
-                                        {/each}
-                                    </select>
-                                {/if}
-                                <input type="number" name="delta" step="1" class="w-full border border-gray-300 rounded-lg px-3 py-2" placeholder="+/-" />
-                                <button type="submit" class="px-3 py-2 font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg sm:col-span-2">Anpassen</button>
-                            </form>
-                            <a href={`/intern/kaemmerer/articles/${article.id}`} class="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold border border-blue-200 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100">
-                                <span class="bi bi-box"></span>
-                                Details
-                            </a>
-                        </div>
-                    </div>
-                {/each}
-            {/if}
+                <span class="text-fg-subtle">–</span>
+            {/each}
         </div>
+    {:else}
+        <span class="text-fg-muted">{article.minStock}</span>
+    {/if}
+{/snippet}
+
+{#snippet statusCell(article: Article)}
+    {#if !article.active}
+        <Badge tone="neutral" size="xs" label="Deaktiviert" />
+    {:else if isLow(article)}
+        <Badge tone="warning" size="xs" icon="exclamation-diamond" label="Niedriger Bestand" />
+    {:else}
+        <Badge tone="success" size="xs" icon="check-circle" label="OK" />
+    {/if}
+{/snippet}
+
+<div class="space-y-8">
+    <PageHeader
+        title="Lager"
+        eyebrow="Kämmerer"
+        subtitle="Bestände einsehen, Zu- und Abgänge buchen sowie Inventur korrigieren."
+        back={{ href: "/intern/kaemmerer" }}
+    >
+        {#snippet actions()}
+            <SearchInput bind:value={search} placeholder="Artikel suchen..." label="Artikel durchsuchen" />
+            <Button href="/intern/kaemmerer/storage/reorder" variant="primary" icon="cart-plus">
+                Nachbestellliste
+            </Button>
+        {/snippet}
+    </PageHeader>
+
+    {#if form?.error}<Alert tone="danger" message={form.error} />{/if}
+    {#if form?.success}<Alert tone="success" message={form.success} />{/if}
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatTile label="Artikel" value={stats.count} icon="box" />
+        <StatTile
+            label="Niedriger Bestand"
+            value={stats.low}
+            tone="warning"
+            icon="exclamation-diamond"
+            href="/intern/kaemmerer/storage/reorder"
+        />
+        <StatTile label="Einheiten gesamt" value={stats.units} tone="primary" icon="box-seam" />
     </div>
+
+    <Card title="Artikel im Lager" meta={`${filtered.length} Einträge`} padding="none">
+        <DataTable
+            columns={[
+                { key: "name", label: "Artikel", value: (a) => a.name },
+                { key: "stock", label: "Bestand", cell: stockCell },
+                { key: "minStock", label: "Mindestbestand", cell: minStockCell },
+                { key: "status", label: "Status", cell: statusCell }
+            ] satisfies Column<Article>[]}
+            rows={filtered}
+            getKey={(a) => a.id}
+            cardTitle={(a) => a.name}
+            cardSubtitle={(a) => (a.hasSizes ? `${a.sizes.length} Größen` : undefined)}
+            rowHref={(a) => `/intern/kaemmerer/articles/${a.id}`}
+            rowClass={(a) => (isLow(a) ? "bg-warning-soft" : "")}
+            empty={search ? "Kein passender Artikel gefunden." : "Keine Artikel vorhanden."}
+        >
+            {#snippet actions(article)}
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="sliders"
+                    onclick={() => openStock(article)}
+                >
+                    Bestand
+                </Button>
+                <Button
+                    href={`/intern/kaemmerer/articles/${article.id}`}
+                    variant="ghost"
+                    size="sm"
+                    icon="box"
+                >
+                    Details
+                </Button>
+            {/snippet}
+        </DataTable>
+    </Card>
 </div>
+
+<Modal
+    bind:open={stockOpen}
+    title={target ? `Bestand: ${target.name}` : "Bestand"}
+    description="Zu- und Abgang buchen oder den Bestand auf einen Inventurwert setzen."
+>
+    {#if target}
+        {#if target?.hasSizes}
+            <FormField label="Größe" hint="Bei Artikeln mit Größen wird je Größe gebucht.">
+                {#snippet children({ id })}
+                    <select
+                        {id}
+                        bind:value={size}
+                        class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
+                    >
+                        {#each target?.sizes ?? [] as entry (entry.name)}
+                            <option value={entry.name}>
+                                {entry.name} (Bestand {entry.stock ?? 0}, Mindestbestand {entry.minStock ?? 0})
+                            </option>
+                        {/each}
+                    </select>
+                {/snippet}
+            </FormField>
+        {/if}
+
+        <form method="post" action="?/adjust" class="space-y-3 pt-2 border-t border-border">
+            <input type="hidden" name="id" value={target?.id ?? ""} />
+            <input type="hidden" name="size" value={size} />
+
+            <FormField label="Zu- oder Abgang" hint="Positive Zahl bucht zu, negative Zahl bucht ab.">
+                {#snippet children({ id })}
+                    <TextInput {id} name="delta" type="number" step="1" bind:value={delta} />
+                {/snippet}
+            </FormField>
+
+            <div class="flex justify-end">
+                <Button type="submit" variant="primary" icon="plus-slash-minus">Bestand anpassen</Button>
+            </div>
+        </form>
+
+        <form method="post" action="?/correct" class="space-y-3 pt-4 border-t border-border">
+            <input type="hidden" name="id" value={target?.id ?? ""} />
+            <input type="hidden" name="size" value={size} />
+
+            <FormField
+                label="Inventurkorrektur"
+                hint="Setzt den Bestand auf genau diesen Wert. Nicht kleiner als 0."
+            >
+                {#snippet children({ id })}
+                    <TextInput {id} name="value" type="number" min={0} step="1" bind:value={correction} />
+                {/snippet}
+            </FormField>
+
+            <div class="flex justify-end">
+                <Button type="submit" variant="warning" icon="clipboard-check">Bestand korrigieren</Button>
+            </div>
+        </form>
+    {/if}
+</Modal>

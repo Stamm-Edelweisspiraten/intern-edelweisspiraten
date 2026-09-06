@@ -1,0 +1,15 @@
+# Geheimnisse duerfen niemals ins Image.
+.env
+.env.*
+!.env.example
+
+node_modules
+.svelte-kit
+build
+.git
+.github
+.idea
+.vscode
+*.md
+Dockerfile
+.dockerignore

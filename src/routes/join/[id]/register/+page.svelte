@@ -1,153 +1,130 @@
 <script lang="ts">
-    export let data;
-    export let form;
-    export const csr = false;
+    import { enhance } from "$app/forms";
+    import AuthShell from "$lib/components/AuthShell.svelte";
+    import { Alert, Button, FormField, TextInput } from "$lib/components/ui";
+    import type { ActionData, PageData } from "./$types";
 
-    import PublicFooter from "$lib/components/PublicFooter.svelte";
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    const age = (birthday?: string) => {
-        if (!birthday) return null;
-        const b = new Date(birthday);
-        if (isNaN(b.getTime())) return null;
-        const today = new Date();
-        let years = today.getFullYear() - b.getFullYear();
-        const m = today.getMonth() - b.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < b.getDate())) years--;
-        return years;
-    };
+    let accountType = $state<"child" | "parent">(data.isAdult ? "parent" : "child");
+    let password = $state("");
+    let passwordRepeat = $state("");
+    let submitting = $state(false);
 
-    const isAdult = (age(data.member.birthday) ?? 0) >= 18;
-
-    let accountType: "child" | "parent" = isAdult ? "parent" : "child";
-    let password = "";
-    let password2 = "";
-
-    $: passwordMismatch = password && password2 && password !== password2;
+    const mismatch = $derived(passwordRepeat.length > 0 && password !== passwordRepeat);
 </script>
 
 <svelte:head>
-    <title>Registrierung - Stamm Edelweisspiraten</title>
+    <title>Registrierung</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100 flex flex-col">
-    <div class="flex-1 flex items-center justify-center px-4 py-10">
-        <div class="w-full max-w-xl bg-white/90 backdrop-blur-sm border border-gray-200 shadow-xl rounded-2xl p-8 space-y-6">
-            <div class="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500">Benutzerkonto erstellen</p>
-                    <h1 class="text-2xl font-bold text-gray-900">Für {data.member.firstname} {data.member.lastname}</h1>
-                    <p class="text-sm text-gray-600 mt-1">
-                        {#if isAdult}
-                            Für volljährige Mitglieder wird automatisch ein Eltern-/Erwachsenen-Konto erstellt.
-                        {:else}
-                            Wähle, ob du dich als Kind oder Elternteil registrierst.
-                        {/if}
-                    </p>
-                </div>
-                <span class="inline-flex items-center gap-2 px-3 py-1 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700">
-                    <span class="bi bi-shield-lock"></span> Datenschutz
-                </span>
-            </div>
+<AuthShell
+    title={`Zugang für ${data.member.firstname} ${data.member.lastname}`}
+    eyebrow="Zugang erstellen"
+    icon="person-plus"
+    subtitle={data.isAdult
+        ? "Da das Mitglied volljährig ist, wird ein eigenständiger Zugang angelegt."
+        : "Lege fest, wem dieser Zugang gehört, und wähle ein Passwort."}
+>
+    {#if form?.error}
+        <Alert tone="danger" message={form.error} />
+    {/if}
 
-            <div class="grid grid-cols-2 gap-2">
-                <button
+    <form
+        method="post"
+        class="space-y-4"
+        use:enhance={() => {
+            submitting = true;
+            return async ({ update }) => {
+                await update({ reset: false });
+                submitting = false;
+            };
+        }}
+    >
+        <input type="hidden" name="accountType" value={accountType} />
+
+        {#if !data.isAdult}
+            <fieldset class="space-y-2">
+                <legend class="block text-sm font-semibold text-fg-muted mb-1">Wem gehört dieser Zugang?</legend>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
                         type="button"
-                        class={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl border ${accountType === "child" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700"} ${isAdult ? "opacity-50 cursor-not-allowed" : ""}`}
-                        on:click={() => { if (!isAdult) accountType = "child"; }}
-                        aria-disabled={isAdult}
-                >
-                    <span class="bi bi-person"></span> Kind
-                </button>
-                <button
+                        onclick={() => (accountType = "parent")}
+                        aria-pressed={accountType === "parent"}
+                        class={`px-4 py-3 rounded-xl border text-sm font-semibold text-left transition ${accountType === "parent" ? "border-primary bg-primary-soft text-primary-soft-fg" : "border-border bg-surface text-fg hover:bg-surface-muted"}`}
+                    >
+                        Elternteil
+                        <span class="block text-xs font-normal opacity-80">Ich verwalte für mein Kind.</span>
+                    </button>
+                    <button
                         type="button"
-                        class={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl border ${accountType === "parent" ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700"}`}
-                        on:click={() => accountType = "parent"}
-                >
-                    <span class="bi bi-people"></span> Elternteil
-                </button>
-            </div>
-
-            <div class="flex items-center justify-between gap-3 p-3 border border-gray-200 rounded-xl bg-gray-50">
-                <div class="text-sm text-gray-700">
-                    <div class="font-semibold text-gray-900">Schon ein Konto?</div>
-                    <div>Einfach anmelden und verknüpfen.</div>
+                        onclick={() => (accountType = "child")}
+                        aria-pressed={accountType === "child"}
+                        class={`px-4 py-3 rounded-xl border text-sm font-semibold text-left transition ${accountType === "child" ? "border-primary bg-primary-soft text-primary-soft-fg" : "border-border bg-surface text-fg hover:bg-surface-muted"}`}
+                    >
+                        Mitglied selbst
+                        <span class="block text-xs font-normal opacity-80">Der Zugang gehört dem Mitglied.</span>
+                    </button>
                 </div>
-                <a
-                        href={`/login?join=${data.member.id}`}
-                        class="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-100 border border-gray-300 text-gray-800 rounded-xl shadow-sm font-semibold"
-                >
-                    <span class="bi bi-box-arrow-in-right"></span>
-                    Login
-                </a>
-            </div>
+            </fieldset>
+        {/if}
 
-            <form method="post" class="space-y-4">
-                <input type="hidden" name="accountType" value={accountType} />
+        <FormField label="Name" required>
+            {#snippet children({ id, describedBy })}
+                <TextInput {id} {describedBy} name="name" value={form?.name ?? ""} required autocomplete="name" />
+            {/snippet}
+        </FormField>
 
-                <div class="space-y-1">
-                    <label class="block text-sm font-medium text-gray-700">Name</label>
-                    <input name="name" required class="w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"/>
-                </div>
+        <FormField label="E-Mail-Adresse" hint="Wird zugleich für die Anmeldung verwendet." required>
+            {#snippet children({ id, describedBy })}
+                <TextInput
+                    {id}
+                    {describedBy}
+                    name="email"
+                    type="email"
+                    value={form?.email ?? ""}
+                    required
+                    autocomplete="username"
+                />
+            {/snippet}
+        </FormField>
 
-                <div class="space-y-1">
-                    <label class="block text-sm font-medium text-gray-700">E-Mail</label>
-                    <input name="email" type="email" required class="w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"/>
-                </div>
+        <FormField label="Passwort" hint={`Mindestens ${data.minPasswordLength} Zeichen.`} required>
+            {#snippet children({ id, describedBy })}
+                <TextInput
+                    {id}
+                    {describedBy}
+                    name="password"
+                    type="password"
+                    bind:value={password}
+                    minlength={data.minPasswordLength}
+                    required
+                    autocomplete="new-password"
+                />
+            {/snippet}
+        </FormField>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div class="space-y-1">
-                        <label class="block mb-1 text-sm font-medium text-gray-700">Passwort</label>
-                        <input
-                                name="password"
-                                type="password"
-                                required
-                                minlength="8"
-                                class="w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                bind:value={password}
-                        />
-                    </div>
-                    <div class="space-y-1">
-                        <label class="block mb-1 text-sm font-medium text-gray-700">Passwort wiederholen</label>
-                        <input
-                                name="password2"
-                                type="password"
-                                required
-                                minlength="8"
-                                class="w-full px-4 py-3 border rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                bind:value={password2}
-                        />
-                        {#if passwordMismatch}
-                            <p class="text-red-600 text-xs mt-1">Passwörter stimmen nicht überein.</p>
-                        {/if}
-                    </div>
-                </div>
+        <FormField
+            label="Passwort wiederholen"
+            required
+            error={mismatch ? "Die beiden Passwörter stimmen nicht überein." : undefined}
+        >
+            {#snippet children({ id, describedBy, invalid })}
+                <TextInput
+                    {id}
+                    {describedBy}
+                    {invalid}
+                    name="password2"
+                    type="password"
+                    bind:value={passwordRepeat}
+                    required
+                    autocomplete="new-password"
+                />
+            {/snippet}
+        </FormField>
 
-                {#if form?.error}
-                    <p class="text-red-600 text-sm bg-red-50 border border-red-200 rounded-xl px-3 py-2">{form.error}</p>
-                {/if}
-
-                <button class="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-60 shadow-sm font-semibold"
-                        disabled={passwordMismatch}>
-                    Konto erstellen
-                </button>
-            </form>
-
-            <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-700">
-                <p class="font-semibold mb-2">Datenschutz</p>
-                <p>Deine Daten werden nur für die interne Verwaltung des Stammes genutzt und nicht an Dritte weitergegeben.</p>
-            </div>
-
-            <div class="mt-4 text-center">
-                <p class="text-gray-600 mb-2">Du hast bereits ein Konto?</p>
-                <a
-                        href={`/login?join=${data.member.id}`}
-                        class="inline-flex items-center gap-2 px-5 py-3 bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 rounded-xl shadow-sm font-semibold"
-                >
-                    <span class="bi bi-box-arrow-in-right"></span>
-                    Mit bestehendem Konto anmelden &amp; verknüpfen
-                </a>
-            </div>
-        </div>
-    </div>
-    <PublicFooter />
-</div>
+        <Button type="submit" variant="primary" full loading={submitting} disabled={mismatch} icon="check-lg">
+            Zugang erstellen
+        </Button>
+    </form>
+</AuthShell>

@@ -1,125 +1,194 @@
 <script lang="ts">
-    export let data;
+    import { Alert, Badge, Button, Card, ConfirmDialog, DataTable, PageHeader, StatTile } from "$lib/components/ui";
+    import type { Column } from "$lib/components/ui";
+    import { formatEuro } from "$lib/money";
+    import { formatDate } from "$lib/format";
+    import {
+        orderStatusLabel,
+        orderStatusTone,
+        paymentStatusLabel,
+        paymentStatusTone
+    } from "$lib/kaemmerer/orderStatus";
+    import type { ActionData, PageData } from "./$types";
 
-    const order = data.order;
-    const articles = data.articles ?? [];
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    const euro = (v: number) => `${(Number(v) || 0).toFixed(2)} EUR`;
+    type Item = PageData["order"]["items"][number];
+    type Row = { index: number; item: Item };
 
-    const statusLabel = (status: string) => {
-        if (status === "ordered") return "Bestellt";
-        if (status === "processing") return "In Bearbeitung";
-        if (status === "delivered") return "Zugestellt";
-        if (status === "paid") return "Bezahlt";
-        return status;
-    };
+    const order = $derived(data.order);
 
-    const paymentLabel = (status: string) => {
-        if (status === "open") return "Offen";
-        if (status === "partial") return "Teilweise";
-        if (status === "paid") return "Bezahlt";
-        return status;
-    };
+    /** Der Index wird mitgefuehrt, weil ?/toggle ihn als itemIndex erwartet. */
+    const rows = $derived((order.items ?? []).map((item, index) => ({ index, item })));
 
-    const receivedCount = order.items.filter((i: any) => i.received).length;
+    const receivedCount = $derived(rows.filter((row) => row.item.received).length);
 
-    const stockForItem = (item: any) => {
+    /** Bestand des Artikels bzw. der Größe; null, wenn nicht ermittelbar. */
+    function stockFor(item: Item): number | null {
         if (!item.articleId) return null;
-        const article = articles.find((a: any) => a.id === item.articleId);
+        const article = data.articles.find((entry) => entry.id === item.articleId);
         if (!article) return null;
-        if (item.size && Array.isArray(article.sizes)) {
-            const match = article.sizes.find((s: any) => s.name === item.size);
-            return Number(match?.stock) ?? null;
-        }
-        return Number(article.stock) ?? null;
-    };
 
-    const hasEnoughStock = (item: any) => {
-        const stock = stockForItem(item);
-        if (stock === null || isNaN(stock)) return null;
-        return stock >= (Number(item.quantity) || 0);
-    };
+        if (item.size) {
+            const size = article.sizes.find((entry) => entry.name === item.size);
+            return size ? (size.stock ?? 0) : null;
+        }
+        return article.stock;
+    }
+
+    let cancelOpen = $state(false);
+    let cancelForm = $state<HTMLFormElement | null>(null);
 </script>
 
-<div class="max-w-5xl mx-auto mt-16 space-y-8">
-    <div class="flex items-center justify-between flex-wrap gap-3">
-        <div class="space-y-1">
-            <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Kaemmerer</p>
-            <h1 class="text-3xl font-bold text-gray-900">Bestellung {order.number}</h1>
-            <p class="text-sm text-gray-600">Angelegt am {order.createdAt?.slice?.(0, 10) ?? "-"}{order.createdByName ? ` von ${order.createdByName}` : ""}</p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-            <span class="px-3 py-1 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700">Status: {statusLabel(order.status)}</span>
-            <span class="px-3 py-1 text-xs font-semibold rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">Zahlung: {paymentLabel(order.paymentStatus)}</span>
-        </div>
+<svelte:head><title>Bestellung {data.order.number} - Kämmerer</title></svelte:head>
+
+{#snippet articleCell(row: Row)}
+    <div class="space-y-1">
+        <p class="font-semibold text-fg">{row.item.name}</p>
+        {#if stockFor(row.item) !== null}
+            {@const stock = stockFor(row.item) ?? 0}
+            <p class={`text-xs flex items-center gap-1 ${stock >= row.item.quantity ? "text-success" : "text-warning"}`}>
+                <span
+                    class={`bi bi-${stock >= row.item.quantity ? "box-seam" : "exclamation-diamond"}`}
+                    aria-hidden="true"
+                ></span>
+                Lager: {stock}
+            </p>
+        {/if}
+    </div>
+{/snippet}
+
+{#snippet deliveryCell(row: Row)}
+    {#if row.item.received}
+        <Badge tone="success" size="xs" icon="check-lg" label="Zugestellt" />
+    {:else if row.item.backorder}
+        <Badge tone="warning" size="xs" icon="exclamation-diamond" label="Nachbestellt" />
+    {:else}
+        <Badge tone="neutral" size="xs" label="Offen" />
+    {/if}
+{/snippet}
+
+<div class="space-y-8">
+    <PageHeader
+        title={`Bestellung ${order.number}`}
+        eyebrow="Kämmerer"
+        subtitle={`Angelegt am ${formatDate(order.createdAt)}${order.createdByName ? ` von ${order.createdByName}` : ""}`}
+        back={{ href: "/intern/kaemmerer/orders", label: "Zurück zur Verwaltung" }}
+    >
+        {#snippet badge()}
+            {#if order.cancelled}
+                <Badge tone="danger" icon="x-octagon" label="Storniert" />
+            {/if}
+        {/snippet}
+
+        {#snippet actions()}
+            {#if data.canCancel && !order.cancelled}
+                <Button variant="danger" icon="x-octagon" onclick={() => (cancelOpen = true)}>
+                    Bestellung stornieren
+                </Button>
+            {/if}
+        {/snippet}
+    </PageHeader>
+
+    {#if form?.error}<Alert tone="danger" message={form.error} />{/if}
+    {#if form?.success}<Alert tone="success" message={form.success} />{/if}
+
+    {#if order.cancelled}
+        <Alert
+            tone="warning"
+            title="Diese Bestellung ist storniert"
+            message="Der Lagerbestand wurde zurückgebucht und die zugehörigen Rechnungen wurden storniert."
+        />
+    {/if}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatTile
+            label="Status"
+            value={orderStatusLabel(order.status)}
+            icon="truck"
+            tone={order.status === "delivered" ? "success" : order.status === "cancelled" ? "danger" : "warning"}
+        />
+        <StatTile
+            label="Zahlung"
+            value={paymentStatusLabel(order.paymentStatus)}
+            icon="cash-coin"
+            tone={order.paymentStatus === "paid" ? "success" : "warning"}
+        />
+        <StatTile
+            label="Zugestellt"
+            value={`${receivedCount}/${rows.length}`}
+            icon="check2-square"
+            tone={receivedCount === rows.length && rows.length > 0 ? "success" : "neutral"}
+        />
+        <StatTile label="Gesamtbetrag" value={formatEuro(order.total)} icon="receipt" tone="primary" />
     </div>
 
-    <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-        <div class="flex items-center justify-between flex-wrap gap-2">
-            <div class="space-y-1">
-                <p class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Mitglieder</p>
-                <div class="flex flex-wrap gap-2">
-                    {#each order.members as member}
-                        <span class="px-3 py-1 rounded-full border border-gray-200 bg-gray-50 text-sm text-gray-800">{member.name}</span>
-                    {/each}
-                </div>
-            </div>
-            <div class="text-right">
-                <p class="text-sm text-gray-500">Artikel erledigt</p>
-                <p class="text-xl font-semibold text-gray-900">{receivedCount}/{order.items.length}</p>
-            </div>
-        </div>
-
-        <div class="divide-y divide-gray-100">
-            {#each order.items as item, idx}
-                <div class="py-4 flex flex-wrap items-center justify-between gap-3">
-                    <div class="space-y-1">
-                        <p class="font-semibold text-gray-900">{item.name}</p>
-                        <p class="text-xs text-gray-500">
-                            {item.quantity}x {euro(item.price)}{item.size ? ` · Groesse ${item.size}` : ""}
-                        </p>
-                        {#if stockForItem(item) !== null}
-                            {#if hasEnoughStock(item)}
-                                <p class="text-xs text-emerald-700 flex items-center gap-1">
-                                    <span class="bi bi-box-seam"></span> Lager: genug ({stockForItem(item)})
-                                </p>
-                            {:else}
-                                <p class="text-xs text-amber-700 flex items-center gap-1">
-                                    <span class="bi bi-exclamation-diamond"></span> Lager: zu wenig ({stockForItem(item) ?? "?"})
-                                </p>
-                            {/if}
-                        {/if}
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <span class={`px-3 py-1 text-xs font-semibold rounded-full border ${item.received ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-                            {item.received ? "Zugestellt" : "Offen"}
-                        </span>
-                        <form method="post" action="?/toggle" class="flex items-center gap-2">
-                            <input type="hidden" name="itemIndex" value={idx} />
-                            <input type="hidden" name="received" value={item.received ? "false" : "true"} />
-                            <button type="submit" class={`px-3 py-2 text-xs font-semibold rounded-lg border transition ${
-                                item.received
-                                    ? "border-gray-200 bg-white text-gray-800 hover:bg-gray-50"
-                                    : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                            }`}>
-                                {item.received ? "Als offen markieren" : "Als zugestellt markieren"}
-                            </button>
-                        </form>
-                    </div>
-                </div>
+    <Card title="Mitglieder" subtitle="Auf diese Mitglieder wurde die Bestellung gebucht.">
+        <div class="flex flex-wrap gap-2">
+            {#each order.members as member (member.id)}
+                <Badge tone="neutral" label={member.name} />
+            {:else}
+                <p class="text-sm text-fg-subtle">Es ist kein Mitglied verknüpft.</p>
             {/each}
         </div>
+    </Card>
 
-        <div class="flex items-center justify-between pt-2 border-t border-gray-200 text-sm">
-            <span class="text-gray-600">Summe</span>
-            <span class="text-lg font-bold text-gray-900">{euro(order.total)}</span>
-        </div>
-    </div>
+    <Card title="Positionen" meta={`${rows.length} Artikel`} padding="none">
+        <DataTable
+            columns={[
+                { key: "name", label: "Artikel", cell: articleCell },
+                { key: "size", label: "Größe", value: (row) => row.item.size ?? "–" },
+                { key: "quantity", label: "Menge", align: "right", value: (row) => row.item.quantity },
+                { key: "price", label: "Einzelpreis", align: "right", value: (row) => formatEuro(row.item.price) },
+                { key: "delivery", label: "Lieferung", cell: deliveryCell },
+                { key: "total", label: "Gesamt", align: "right", value: (row) => formatEuro(row.item.total) }
+            ] satisfies Column<Row>[]}
+            {rows}
+            getKey={(row) => String(row.index)}
+            cardTitle={(row) => row.item.name}
+            cardSubtitle={(row) => (row.item.size ? `Größe ${row.item.size}` : undefined)}
+            empty="Keine Positionen vorhanden."
+        >
+            {#snippet actions(row)}
+                {#if data.canManage && !order.cancelled}
+                    <form method="post" action="?/toggle">
+                        <input type="hidden" name="itemIndex" value={row.index} />
+                        <input type="hidden" name="received" value={row.item.received ? "false" : "true"} />
+                        <Button
+                            type="submit"
+                            variant={row.item.received ? "secondary" : "success"}
+                            size="sm"
+                            icon={row.item.received ? "arrow-counterclockwise" : "check-lg"}
+                        >
+                            {row.item.received ? "Als offen markieren" : "Als zugestellt markieren"}
+                        </Button>
+                    </form>
+                {/if}
+            {/snippet}
+        </DataTable>
+
+        {#snippet footer()}
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-semibold text-fg-muted">Summe</span>
+                <span class="text-lg font-bold text-fg">{formatEuro(order.total)}</span>
+            </div>
+        {/snippet}
+    </Card>
 
     <div class="flex justify-end">
-        <a href="/intern/kaemmerer/orders" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-gray-800 bg-white hover:bg-gray-50 shadow-sm">
-            <span class="bi bi-arrow-left"></span>
-            Zurueck zu den Bestellungen
-        </a>
+        <Button href="/intern/kaemmerer/orders" variant="secondary" icon="arrow-left">
+            Zurück zur Verwaltung
+        </Button>
     </div>
 </div>
+
+<form method="post" action="?/cancel" bind:this={cancelForm} class="hidden"></form>
+
+<ConfirmDialog
+    bind:open={cancelOpen}
+    title="Bestellung stornieren?"
+    message={`Die Bestellung ${order.number} wird storniert. Noch nicht ausgegebene Positionen werden ins Lager zurückgebucht und die zugehörigen Rechnungen storniert.`}
+    confirmLabel="Stornieren"
+    tone="danger"
+    onconfirm={() => cancelForm?.requestSubmit()}
+/>

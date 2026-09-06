@@ -1,18 +1,16 @@
 import type { PageServerLoad } from "./$types";
-import { error, redirect } from "@sveltejs/kit";
+import { redirect } from "@sveltejs/kit";
 import { getMember, getMemberLogs } from "$lib/server/memberService";
-import { hasPermission } from "$lib/server/permissionService";
+import { requirePermissionForAnyGroup } from "$lib/server/permissionGuard";
 
-export const load: PageServerLoad = async ({ params, locals }) => {
-    if (!hasPermission(locals.permissions ?? [], "members.view")) {
-        throw error(403, "Keine Berechtigung");
-    }
-
-    const id = params.id;
+export const load: PageServerLoad = async (event) => {
+    const id = event.params.id;
     const member = await getMember(id);
     if (!member) {
         throw redirect(303, "/intern/members");
     }
+
+    requirePermissionForAnyGroup(event, "members.view", member.groups);
 
     const logs = await getMemberLogs(id);
 

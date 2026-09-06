@@ -1,75 +1,107 @@
 <script lang="ts">
-    export let data;
-    export const csr = false;
+    import { page } from "$app/state";
+    import { Badge, Button, Card, EmptyState, PageHeader, SearchInput } from "$lib/components/ui";
+    import { can } from "$lib/can";
+    import type { PageData } from "./$types";
 
-    let search = "";
+    let { data }: { data: PageData } = $props();
 
-    $: filtered = data.groups.filter((g) =>
-        g.name.toLowerCase().includes(search.toLowerCase())
+    type Group = PageData["groups"][number];
+
+    /**
+     * Die Suche lief bisher ins Leere: die Seite hatte `export const csr = false`
+     * gesetzt, wodurch im Betrieb gar kein JavaScript geladen wurde.
+     */
+    let search = $state("");
+
+    const allowed = $derived(new Set(data.allowedGroups ?? []));
+    const permissions = $derived(page.data.permissions ?? []);
+
+    function canOpen(group: Group): boolean {
+        return data.canAll || allowed.has(group.id);
+    }
+
+    const filtered = $derived(
+        data.groups.filter((group) => {
+            const needle = search.trim().toLowerCase();
+            if (!needle) return true;
+            return `${group.name} ${group.type} ${group.description ?? ""} ${group.meeting_time ?? ""}`
+                .toLowerCase()
+                .includes(needle);
+        })
     );
 </script>
 
-<div class="max-w-6xl mx-auto mt-12 space-y-8">
-    <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-        <div class="space-y-2">
-            <p class="text-xs font-semibold uppercase tracking-[0.08em] text-gray-500">Gruppen</p>
-            <div class="flex items-center gap-3 flex-wrap">
-                <h1 class="text-3xl font-bold text-gray-900">Gruppenverwaltung</h1>
-                <span class="px-3 py-1 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700">
-                    {data.groups.length} Gruppen
-                </span>
-            </div>
-            <p class="text-gray-600 max-w-3xl">Übersicht aller Gruppen, Termine und Beschreibungen.</p>
-            <div class="flex flex-wrap gap-2">
-                <a
-                        href="/intern/dashboard"
-                        class="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl font-semibold text-gray-800 shadow-sm transition"
-                >
-                    <span class="bi bi-arrow-left"></span>
-                    Zurück
-                </a>
-                <a
-                        href="/intern/admin"
-                        class="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition"
-                >
-                    <span class="bi bi-speedometer2"></span>
-                    Admin
-                </a>
-            </div>
-        </div>
-        <div class="w-full md:w-80">
-            <label class="text-sm font-semibold text-gray-700">Gruppen suchen</label>
-            <div class="mt-1 relative">
-                <span class="bi bi-search absolute left-3 top-2.5 text-gray-400"></span>
-                <input
-                        type="text"
-                        placeholder="Name, Typ, Beschreibung..."
-                        bind:value={search}
-                        class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-400 text-sm text-gray-700"
-                />
-            </div>
-        </div>
-    </div>
+<svelte:head><title>Gruppen - Intern</title></svelte:head>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {#each filtered as g}
-            <a
-                    href={`/intern/groups/${g.id}`}
-                    class="block p-5 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition"
-            >
-                <div class="flex items-center justify-between gap-3">
-                    <div class="text-sm uppercase text-gray-500 font-semibold tracking-wide">{g.type}</div>
-                    <span class="text-xs text-gray-500">{g.meeting_time || "Kein Termin"}</span>
-                </div>
-                <div class="text-xl font-bold text-gray-900 mt-1">{g.name}</div>
-                <div class="text-gray-600 text-sm mt-2 line-clamp-3">{g.description || "Keine Beschreibung"}</div>
-            </a>
-        {/each}
+<div class="space-y-8">
+    <PageHeader
+        title="Gruppenverwaltung"
+        eyebrow="Gruppen"
+        subtitle="Übersicht aller Gruppen, Gruppenstunden und Beschreibungen."
+        back={{ href: "/intern/dashboard", label: "Zurück" }}
+    >
+        {#snippet badge()}
+            <Badge tone="primary" label={`${data.groups.length} Gruppen`} />
+        {/snippet}
 
-        {#if filtered.length === 0}
-            <div class="col-span-full text-gray-500 text-center py-10 border border-dashed border-gray-300 rounded-xl">
-                Keine Gruppen gefunden.
-            </div>
-        {/if}
-    </div>
+        {#snippet actions()}
+            <SearchInput
+                bind:value={search}
+                placeholder="Name, Typ, Beschreibung..."
+                label="Gruppen suchen"
+                count={filtered.length}
+            />
+            {#if can(permissions, "admin.view")}
+                <Button href="/intern/admin" variant="primary" icon="speedometer2">Adminbereich</Button>
+            {/if}
+        {/snippet}
+    </PageHeader>
+
+    {#if filtered.length === 0}
+        <Card>
+            <EmptyState
+                icon="diagram-3"
+                title="Keine Gruppen gefunden"
+                description={search.trim()
+                    ? "Für diesen Suchbegriff gibt es keine passende Gruppe."
+                    : "Es wurde noch keine Gruppe angelegt."}
+            />
+        </Card>
+    {:else}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {#each filtered as group (group.id)}
+                <Card class={canOpen(group) ? "" : "opacity-70"}>
+                    {#snippet header()}
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <Badge tone="info" size="xs" label={group.type} />
+                            <span class="text-xs text-fg-subtle">
+                                {group.meeting_time || "Kein Termin"}
+                            </span>
+                        </div>
+                        <h2 class="text-xl font-bold text-fg mt-2">{group.name}</h2>
+                    {/snippet}
+
+                    <p class="text-sm text-fg-muted line-clamp-3">
+                        {group.description || "Keine Beschreibung hinterlegt."}
+                    </p>
+
+                    {#snippet footer()}
+                        {#if canOpen(group)}
+                            <Button
+                                href={`/intern/groups/${group.id}`}
+                                variant="secondary"
+                                size="sm"
+                                icon="box-arrow-in-right"
+                            >
+                                Öffnen
+                            </Button>
+                        {:else}
+                            <span class="text-xs text-fg-subtle">Keine Berechtigung für Details.</span>
+                        {/if}
+                    {/snippet}
+                </Card>
+            {/each}
+        </div>
+    {/if}
 </div>

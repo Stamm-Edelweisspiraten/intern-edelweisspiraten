@@ -1,336 +1,349 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
-    import type { SubmitFunction } from "@sveltejs/kit";
+    import {
+        Alert, Button, Card, FormField, PageHeader, Select, TextInput
+    } from "$lib/components/ui";
+    import { addToast } from "$lib/toastStore";
+    import type { ActionData, PageData } from "./$types";
 
-    export let data;
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    let loading = false;
-    let successMsg = "";
-    let errorMsg = "";
+    const STAENDE = [
+        "Neuling-Wölfling",
+        "Wölfling",
+        "Neuling-Pfadfinder",
+        "Jungpfadfinder",
+        "Knappe",
+        "Pfadfinder",
+        "Späher",
+        "Kreuzpfadfinder"
+    ];
 
-    let isSecondMember = false;
-    let contributionDues = { stamm: true, gau: false, landesmark: false, bund: false };
+    const STATUS = ["aktiv", "passiv", "gekündigt"];
 
-    $: if (!isSecondMember && (contributionDues.stamm || contributionDues.gau || contributionDues.landesmark || contributionDues.bund)) {
-        contributionDues = { stamm: false, gau: false, landesmark: false, bund: false };
+    let submitting = $state(false);
+
+    let emails = $state([{ label: "", email: "" }]);
+    let numbers = $state([{ label: "", number: "" }]);
+    let selectedGroups = $state<string[]>([]);
+
+    let isSecondMember = $state(false);
+
+    /**
+     * Die Beitragshaken gelten jetzt für ALLE Mitglieder. Vorher wurden sie
+     * für reguläre Mitglieder zwangsweise abgewählt und von der Berechnung
+     * ohnehin ignoriert, sodass jedes reguläre Mitglied den vollen Beitrag
+     * zahlte — auch wenn etwas anderes eingetragen war.
+     */
+    let dues = $state({ stamm: true, gau: true, landesmark: true, bund: true });
+
+    function addEmail() {
+        emails = [...emails, { label: "", email: "" }];
+    }
+    function removeEmail(index: number) {
+        emails = emails.filter((_, i) => i !== index);
     }
 
-    $: if (isSecondMember && !contributionDues.stamm) {
-        contributionDues = { ...contributionDues, stamm: true };
+    function addNumber() {
+        numbers = [...numbers, { label: "", number: "" }];
+    }
+    function removeNumber(index: number) {
+        numbers = numbers.filter((_, i) => i !== index);
     }
 
-    // --------------------------------------------
-    // Emails
-    // --------------------------------------------
-    let emails = [{ label: "", email: "" }];
-    function addEmail() { emails = [...emails, { label: "", email: "" }]; }
-
-    // --------------------------------------------
-    // Telefonnummern
-    // --------------------------------------------
-    let numbers = [{ label: "", number: "" }];
-    function addNumber() { numbers = [...numbers, { label: "", number: "" }]; }
-
-    // --------------------------------------------
-    // Gruppen als wiederholbare Selects
-    // --------------------------------------------
-    let selectedGroups: string[] = [];
     function addGroup() {
-        const first = data.groups?.[0]?.id ?? "";
-        selectedGroups = [...selectedGroups, first];
+        selectedGroups = [...selectedGroups, data.groups?.[0]?.id ?? ""];
     }
-    function updateGroup(idx: number, value: string) {
-        const copy = [...selectedGroups];
-        copy[idx] = value;
-        selectedGroups = copy;
-    }
-    function removeGroup(idx: number) {
-        selectedGroups = selectedGroups.filter((_, i) => i !== idx);
+    function removeGroup(index: number) {
+        selectedGroups = selectedGroups.filter((_, i) => i !== index);
     }
 
-    const resetFormState = () => {
+    function resetState() {
         emails = [{ label: "", email: "" }];
         numbers = [{ label: "", number: "" }];
         selectedGroups = [];
         isSecondMember = false;
-        contributionDues = { stamm: true, gau: false, landesmark: false, bund: false };
-    };
+        dues = { stamm: true, gau: true, landesmark: true, bund: true };
+    }
 
-    const onSubmit: SubmitFunction = ({ update }) => {
-        loading = true;
-        successMsg = "";
-        errorMsg = "";
-        return async ({ result, form }) => {
-            if (result.type === "success") {
-                successMsg = result.data?.memberName
-                    ? `Das Mitglied ${result.data.memberName} wurde erfolgreich erstellt!`
-                    : "Das Mitglied wurde erfolgreich erstellt!";
-                form?.reset();
-                resetFormState();
-            } else if (result.type === "failure") {
-                errorMsg = result.data?.error ?? "Speichern fehlgeschlagen.";
-            } else if (result.type === "error") {
-                errorMsg = result.error?.message ?? "Speichern fehlgeschlagen.";
-            }
-            loading = false;
-            await update();
-        };
-    };
+    const inputClass =
+        "w-full px-3 py-2 rounded-control text-sm bg-surface text-fg border border-border-strong";
 </script>
 
+<svelte:head><title>Mitglied anlegen - Intern</title></svelte:head>
 
-<div class="max-w-4xl mx-auto mt-12 p-10 bg-white rounded-2xl shadow-xl border border-gray-200">
+<div class="max-w-4xl mx-auto space-y-8">
+    <PageHeader
+        title="Neues Mitglied"
+        eyebrow="Mitgliedverwaltung"
+        subtitle="Stammdaten, Kontakt, Gruppen und Beiträge."
+        back={{ href: "/intern/members" }}
+    />
 
-    <h1 class="text-4xl font-bold mb-8 text-gray-900">Neues Mitglied anlegen</h1>
-
-    {#if successMsg}
-        <div class="mb-4 px-4 py-3 rounded-lg bg-green-100 text-green-800 border border-green-200">
-            {successMsg}
-        </div>
-    {/if}
-    {#if errorMsg}
-        <div class="mb-4 px-4 py-3 rounded-lg bg-red-100 text-red-800 border border-red-200">
-            {errorMsg}
-        </div>
+    {#if form?.error}
+        <Alert tone="danger" message={form.error} />
     {/if}
 
-    <form method="post" enctype="multipart/form-data" use:enhance={onSubmit} class="space-y-8">
+    <!--
+        Die Action heisst `createMember`; ohne `?/createMember` sucht
+        SvelteKit eine Action namens "default" und antwortet mit 404. Das
+        Formular schickte bisher ohne Angabe ab -- das Anlegen kam damit nie
+        beim Server an.
+    -->
+    <form
+        method="post"
+        action="?/createMember"
+        enctype="multipart/form-data"
+        class="space-y-8"
+        use:enhance={() => {
+            submitting = true;
+            return async ({ result, update }) => {
+                submitting = false;
 
+                if (result.type === "success") {
+                    const name = (result.data as { memberName?: string } | undefined)?.memberName;
+                    addToast(
+                        name ? `${name} wurde angelegt.` : "Das Mitglied wurde angelegt.",
+                        "success"
+                    );
+                    resetState();
+                    await update();
+                    return;
+                }
+
+                await update({ reset: false });
+            };
+        }}
+    >
         <input type="hidden" name="groups" value={JSON.stringify(selectedGroups)} />
 
-        <!-- NAME -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Vorname</label>
-                <input name="firstname" required
-                       class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
+        <Card title="Person">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Vorname" required>
+                    {#snippet children({ id, describedBy })}
+                        <TextInput {id} {describedBy} name="firstname" required autocomplete="given-name" />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="Nachname" required>
+                    {#snippet children({ id, describedBy })}
+                        <TextInput {id} {describedBy} name="lastname" required autocomplete="family-name" />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="Fahrtenname" hint="Optional.">
+                    {#snippet children({ id, describedBy })}
+                        <TextInput {id} {describedBy} name="fahrtenname" />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="Geburtsdatum" required>
+                    {#snippet children({ id, describedBy })}
+                        <TextInput {id} {describedBy} name="birthday" type="date" required />
+                    {/snippet}
+                </FormField>
             </div>
+        </Card>
 
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Nachname</label>
-                <input name="lastname" required
-                       class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
+        <Card title="Anschrift">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Straße und Hausnummer" required class="md:col-span-2">
+                    {#snippet children({ id, describedBy })}
+                        <TextInput {id} {describedBy} name="address_street" placeholder="Beispielweg 1" required />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="Postleitzahl" required>
+                    {#snippet children({ id, describedBy })}
+                        <TextInput {id} {describedBy} name="address_zip" placeholder="28195" required />
+                    {/snippet}
+                </FormField>
+
+                <FormField label="Ort" required>
+                    {#snippet children({ id, describedBy })}
+                        <TextInput {id} {describedBy} name="address_city" placeholder="Bremen" required />
+                    {/snippet}
+                </FormField>
             </div>
-        </div>
+        </Card>
 
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Fahrtenname (optional)</label>
-            <input name="fahrtenname"
-                   class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
-        </div>
+        <Card title="Mitgliedschaft">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField label="Stand">
+                    {#snippet children({ id })}
+                        <Select
+                            {id}
+                            name="stand"
+                            options={STAENDE.map((stand) => ({ value: stand, label: stand }))}
+                        />
+                    {/snippet}
+                </FormField>
 
-        <!-- Geburtstag -->
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Geburtsdatum</label>
-            <input type="date" name="birthday" required
-                   class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
-        </div>
+                <FormField label="Status">
+                    {#snippet children({ id })}
+                        <Select
+                            {id}
+                            name="status"
+                            options={STATUS.map((status) => ({ value: status, label: status }))}
+                        />
+                    {/snippet}
+                </FormField>
 
-        <!-- Adresse -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label class="text-sm font-medium text-gray-700 mb-1 block">Straße & Hausnummer</label>
-                <input name="address_street" placeholder="Beispielweg 1" required
-                       class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
+                <FormField label="Eintrittsdatum">
+                    {#snippet children({ id })}
+                        <TextInput {id} name="joined" type="date" />
+                    {/snippet}
+                </FormField>
             </div>
+        </Card>
 
-            <div>
-                <label class="text-sm font-medium text-gray-700 mb-1 block">PLZ</label>
-                <input name="address_zip" placeholder="12345" required
-                       class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
-            </div>
+        <Card title="Beiträge" subtitle="Welche Beitragsanteile zahlt dieses Mitglied?">
+            <div class="space-y-4">
+                <label class="flex items-start gap-3 px-4 py-3 rounded-card border border-border cursor-pointer">
+                    <input type="checkbox" name="is_second_member" bind:checked={isSecondMember} class="mt-1 rounded-control border-border-strong" />
+                    <span>
+                        <span class="block text-sm font-semibold text-fg">Zweitmitglied</span>
+                        <span class="block text-xs text-fg-subtle">
+                            Wird als Vermerk auf der Beitragsrechnung ausgewiesen.
+                        </span>
+                    </span>
+                </label>
 
-            <div>
-                <label class="text-sm font-medium text-gray-700 mb-1 block">Stadt</label>
-                <input name="address_city" placeholder="Musterstadt" required
-                       class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
-            </div>
-        </div>
-
-        <!-- Stand -->
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Stand</label>
-            <select name="stand"
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500">
-
-                <option>Neuling-Wölfling</option>
-                <option>Wölfling</option>
-                <option>Neuling-Pfadinder</option>
-                <option>Jungpfadfinder</option>
-                <option>Knappe</option>
-                <option>Pfadfinder</option>
-                <option>Späher</option>
-                <option>Kreuzpfadfinder</option>
-
-            </select>
-        </div>
-
-        <!-- Status -->
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
-            <select name="status"
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500">
-
-                <option>aktiv</option>
-                <option>passiv</option>
-                <option>gekündigt</option>
-
-            </select>
-        </div>
-
-        <!-- Zweitmitglied -->
-        <div class="space-y-3">
-            <label class="flex items-center gap-2 text-gray-800">
-                <input type="checkbox" name="is_second_member" bind:checked={isSecondMember}
-                       class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                <span>Zweitmitglied</span>
-            </label>
-
-            {#if isSecondMember}
-                <div class="border border-gray-200 rounded-xl p-4 bg-gray-50/50">
-                    <input type="hidden" name="dues_stamm" value="on" />
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <label class="flex items-center gap-2 text-gray-800">
-                            <input type="checkbox" checked disabled class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                            <span>Stamm (immer fällig)</span>
+                <fieldset class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <legend class="text-sm font-semibold text-fg-muted mb-2">Beitragsanteile</legend>
+                    {#each [["stamm", "Stamm"], ["gau", "Gau"], ["landesmark", "Landesmark"], ["bund", "Bund"]] as [key, label] (key)}
+                        <label class="flex items-center gap-2 px-3 py-2 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition">
+                            <input
+                                type="checkbox"
+                                name={`dues_${key}`}
+                                bind:checked={dues[key as keyof typeof dues]}
+                                class="rounded-control border-border-strong"
+                            />
+                            <span class="text-sm text-fg">{label}</span>
                         </label>
-                        <label class="flex items-center gap-2 text-gray-800">
-                            <input type="checkbox" name="dues_gau" bind:checked={contributionDues.gau}
-                                   class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                            <span>Gau</span>
-                        </label>
-                        <label class="flex items-center gap-2 text-gray-800">
-                            <input type="checkbox" name="dues_landesmark" bind:checked={contributionDues.landesmark}
-                                   class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                            <span>Landesmark</span>
-                        </label>
-                        <label class="flex items-center gap-2 text-gray-800">
-                            <input type="checkbox" name="dues_bund" bind:checked={contributionDues.bund}
-                                   class="h-4 w-4 text-blue-600 border-gray-300 rounded" />
-                            <span>Bund</span>
-                        </label>
+                    {/each}
+                </fieldset>
+                <p class="text-xs text-fg-subtle">
+                    Abgewählte Anteile werden dem Mitglied nicht berechnet.
+                </p>
+            </div>
+        </Card>
+
+        <Card title="Kontakt">
+            <div class="space-y-6">
+                <fieldset class="space-y-2">
+                    <legend class="text-sm font-semibold text-fg-muted mb-2">E-Mail-Adressen</legend>
+                    {#each emails as entry, index (index)}
+                        <div class="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 items-end">
+                            <label class="text-xs text-fg-subtle">
+                                Bezeichnung
+                                <input bind:value={entry.label} name={`email_label_${index}`} placeholder="Mutter" class={`mt-1 ${inputClass}`} />
+                            </label>
+                            <label class="text-xs text-fg-subtle">
+                                E-Mail
+                                <input bind:value={entry.email} name={`email_email_${index}`} type="email" placeholder="name@example.org" class={`mt-1 ${inputClass}`} />
+                            </label>
+                            <Button variant="ghost" size="sm" icon="trash" ariaLabel="E-Mail entfernen" onclick={() => removeEmail(index)} />
+                        </div>
+                    {/each}
+                    <Button variant="secondary" size="sm" icon="plus-lg" onclick={addEmail}>
+                        E-Mail hinzufügen
+                    </Button>
+                </fieldset>
+
+                <fieldset class="space-y-2">
+                    <legend class="text-sm font-semibold text-fg-muted mb-2">Telefonnummern</legend>
+                    {#each numbers as entry, index (index)}
+                        <div class="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2 items-end">
+                            <label class="text-xs text-fg-subtle">
+                                Bezeichnung
+                                <input bind:value={entry.label} name={`number_label_${index}`} placeholder="Mobil" class={`mt-1 ${inputClass}`} />
+                            </label>
+                            <label class="text-xs text-fg-subtle">
+                                Nummer
+                                <input bind:value={entry.number} name={`number_number_${index}`} type="tel" placeholder="0170 1234567" class={`mt-1 ${inputClass}`} />
+                            </label>
+                            <Button variant="ghost" size="sm" icon="trash" ariaLabel="Nummer entfernen" onclick={() => removeNumber(index)} />
+                        </div>
+                    {/each}
+                    <Button variant="secondary" size="sm" icon="plus-lg" onclick={addNumber}>
+                        Telefonnummer hinzufügen
+                    </Button>
+                </fieldset>
+            </div>
+        </Card>
+
+        <Card title="Gruppen">
+            <div class="space-y-2">
+                {#each selectedGroups as groupId, index (index)}
+                    <div class="flex gap-2 items-center">
+                        <label class="sr-only" for={`group-${index}`}>Gruppe {index + 1}</label>
+                        <div class="flex-1">
+                            <Select
+                                id={`group-${index}`}
+                                bind:value={selectedGroups[index]}
+                                options={(data.groups ?? []).map((group) => ({
+                                    value: group.id,
+                                    label: group.name
+                                }))}
+                            />
+                        </div>
+                        <Button variant="ghost" size="sm" icon="trash" ariaLabel="Gruppe entfernen" onclick={() => removeGroup(index)} />
                     </div>
-                </div>
-            {/if}
-        </div>
+                {/each}
+                <Button variant="secondary" size="sm" icon="plus-lg" onclick={addGroup}>
+                    Gruppe hinzufügen
+                </Button>
+            </div>
+        </Card>
 
-        <!-- Gruppen Auswahl (mehrere Selects) -->
-        <div class="space-y-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Gruppen</label>
-            {#if selectedGroups.length === 0}
-                <p class="text-sm text-gray-500">Keine Gruppe ausgewählt.</p>
-            {/if}
-            {#each selectedGroups as gid, i}
-                <div class="flex gap-3 items-center">
-                    <select
-                            class="flex-1 px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500"
-                            bind:value={selectedGroups[i]}
-                            on:change={(e) => updateGroup(i, (e.target as HTMLSelectElement).value)}
-                    >
-                        {#each data.groups as g}
-                            <option value={g.id}>{g.name} ({g.type})</option>
+        <Card title="Einwilligungen und Unterlagen">
+            <div class="space-y-4">
+                <fieldset class="space-y-2">
+                    <legend class="text-sm font-semibold text-fg-muted mb-2">Veröffentlichung von Bildern</legend>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {#each [["consent_social", "Soziale Medien"], ["consent_website", "Webseite"], ["consent_print", "Druckerzeugnisse"]] as [name, label] (name)}
+                            <label class="flex items-center gap-2 px-3 py-2 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition">
+                                <input type="checkbox" {name} class="rounded-control border-border-strong" />
+                                <span class="text-sm text-fg">{label}</span>
+                            </label>
                         {/each}
-                    </select>
-                    <button type="button"
-                            class="px-4 py-3 bg-red-100 text-red-700 rounded-lg h-full"
-                            on:click={() => removeGroup(i)}>
-                        Entfernen
-                    </button>
-                </div>
-            {/each}
-            <button type="button" on:click={addGroup}
-                    class="px-4 py-3 bg-blue-100 text-blue-700 rounded-lg">
-                + Gruppe hinzufügen
-            </button>
-        </div>
+                    </div>
+                </fieldset>
 
-        <!-- Medien-Einverständnis -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <label class="flex items-center gap-2">
-                <input type="checkbox" name="consent_social" />
-                <span>Social Media erlaubt</span>
-            </label>
-            <label class="flex items-center gap-2">
-                <input type="checkbox" name="consent_website" />
-                <span>Stammeswebsite erlaubt</span>
-            </label>
-            <label class="flex items-center gap-2">
-                <input type="checkbox" name="consent_print" />
-                <span>Print erlaubt</span>
-            </label>
-        </div>
-
-        <!-- Uploads -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Datenschutzerklärung / Einwilligung (PDF/JPG/PNG, max. 10 MB)</label>
-                <input type="file" name="consent_file" accept=".pdf,image/png,image/jpeg"
-                       class="w-full border rounded-lg px-3 py-2" />
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Stammesanmeldung (PDF/JPG/PNG, max. 10 MB)</label>
-                <input type="file" name="application_file" accept=".pdf,image/png,image/jpeg"
-                       class="w-full border rounded-lg px-3 py-2" />
-            </div>
-        </div>
-
-        <!-- Emails -->
-        <div class="space-y-4">
-            <label class="text-sm font-medium text-gray-700">E-Mails</label>
-
-            {#each emails as email, i}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input placeholder="Bezeichnung"
-                           name={`email_label_${i}`} bind:value={email.label}
-                           class="px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
+                    <FormField label="Einwilligungserklärung" hint="PDF, PNG oder JPEG.">
+                        {#snippet children({ id })}
+                            <input
+                                {id}
+                                type="file"
+                                name="consent_file"
+                                accept=".pdf,image/png,image/jpeg"
+                                class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-control file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold"
+                            />
+                        {/snippet}
+                    </FormField>
 
-                    <input placeholder="E-Mail"
-                           name={`email_email_${i}`} bind:value={email.email}
-                           class="px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
+                    <FormField label="Aufnahmeantrag" hint="PDF, PNG oder JPEG.">
+                        {#snippet children({ id })}
+                            <input
+                                {id}
+                                type="file"
+                                name="application_file"
+                                accept=".pdf,image/png,image/jpeg"
+                                class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-control file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold"
+                            />
+                        {/snippet}
+                    </FormField>
                 </div>
-            {/each}
+            </div>
+        </Card>
 
-            <button type="button" on:click={addEmail}
-                    class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg">+ Weitere E-Mail</button>
-        </div>
-
-        <!-- Telefonnummern -->
-        <div class="space-y-4 pt-4">
-            <label class="text-sm font-medium text-gray-700">Telefonnummern</label>
-
-            {#each numbers as num, i}
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input placeholder="Bezeichnung"
-                           name={`number_label_${i}`} bind:value={num.label}
-                           class="px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
-
-                    <input placeholder="Telefonnummer"
-                           name={`number_number_${i}`} bind:value={num.number}
-                           class="px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
-                </div>
-            {/each}
-
-            <button type="button" on:click={addNumber}
-                    class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg">+ Weitere Nummer</button>
-        </div>
-
-        <!-- Eintritt -->
-        <div class="pt-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Eintrittsdatum</label>
-            <input type="date" name="joined"
-                   class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:ring-2 ring-blue-500" />
-        </div>
-
-        <!-- ACTION BUTTONS -->
-        <div class="flex items-center gap-4 pt-6">
-            <a href="/intern/members"
-               class="px-5 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg">Abbrechen</a>
-
-            <button type="submit" formaction="?/createMember"
-                    disabled={loading}
-                    class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow">
-                {loading ? "Speichere..." : "Erstellen"}
-            </button>
+        <div class="flex justify-end gap-3 flex-wrap">
+            <Button href="/intern/members" variant="secondary">Abbrechen</Button>
+            <Button type="submit" variant="primary" icon="person-plus" loading={submitting}>
+                Mitglied anlegen
+            </Button>
         </div>
     </form>
 </div>

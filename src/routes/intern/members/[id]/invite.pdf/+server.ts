@@ -1,29 +1,28 @@
 import { error } from "@sveltejs/kit";
+import type { RequestHandler } from "./$types";
 import { getMember } from "$lib/server/memberService";
-import { createInvitePdf } from "$lib/server/pdf/invitePdf";
-import { hasPermission } from "$lib/server/permissionService";
+import { requirePermissionForAnyGroup } from "$lib/server/permissionGuard";
+import { deliverPdf } from "$lib/server/pdf/deliver";
 
-export async function GET({ params, locals }) {
-    if (!hasPermission(locals.permissions ?? [], "members.view")) {
-        throw error(403, "Keine Berechtigung");
-    }
+/**
+ * Einladungsschreiben eines Mitglieds.
+ *
+ * Erzeugt wird es über die zentrale Vorlagenliste
+ * ($lib/server/pdf/registry) -- dieselbe, die auch
+ * `POST /api/v1/pdf/invite` bedient. Diese Adresse bleibt als bequemer Weg
+ * aus der Mitgliederliste heraus.
+ */
+export const GET: RequestHandler = async (event) => {
+    const member = await getMember(event.params.id);
+    if (!member) throw error(404, "Mitglied nicht gefunden");
 
-    const memberId = params.id;
+    requirePermissionForAnyGroup(event, "members.view", member.groups);
 
-    const member = await getMember(memberId);
-    if (!member) {
-        throw error(404, "Mitglied nicht gefunden");
-    }
-
-    const pdfBuffer = await createInvitePdf({
-        ...member,
-        id: memberId
-    });
-
-    return new Response(pdfBuffer, {
-        headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": `inline; filename="invite-${memberId}.pdf"`
-        }
-    });
-}
+    // Ohne PUBLIC_APP_URL zaehlt der Ursprung dieser Anfrage -- sonst traegt
+    // der QR-Code eine Adresse, die es in dieser Installation nicht gibt.
+    return deliverPdf(
+        "invite",
+        { memberId: member.id, baseUrl: event.url.origin },
+        { filename: `einladung-${member.lastname || member.id}.pdf` }
+    );
+};

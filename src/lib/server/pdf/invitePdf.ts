@@ -1,8 +1,33 @@
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import type { Member } from "../memberService";
+import { env } from "$env/dynamic/private";
 
-export async function createInvitePdf(member: Member) {
+/**
+ * Einladungsschreiben mit QR-Code.
+ *
+ * Absender und Fusszeile kommen aus den Organisationseinstellungen --
+ * vorher standen Name und Anschrift eines bestimmten Stamms fest im
+ * Quelltext.
+ */
+export interface InvitePdfOrganization {
+    name: string;
+    city?: string;
+}
+
+export interface InvitePdfOptions {
+    /**
+     * Grundadresse fuer den Beitrittslink. Vorrang hat weiterhin
+     * PUBLIC_APP_URL; sonst zaehlt der Ursprung der Anfrage.
+     */
+    baseUrl?: string;
+}
+
+export async function createInvitePdf(
+    member: Member,
+    organization: InvitePdfOrganization = { name: "Internes Portal" },
+    options: InvitePdfOptions = {}
+) {
     const doc = new PDFDocument({
         size: "A4",
         margin: 60
@@ -15,7 +40,16 @@ export async function createInvitePdf(member: Member) {
         doc.on("end", () => resolve(Buffer.concat(chunks)))
     );
 
-    const joinUrl = `https://intern.edelweisspiraten-bremen.de/join/${member._id}`;
+    /*
+     * Vorher war die Produktions-Adresse fest einkodiert -- damit zeigte der
+     * QR-Code aus einer Testumgebung immer auf die Produktion. Der zweite
+     * Anlauf fiel auf "http://localhost:5173" zurueck, was in einer
+     * Installation ohne PUBLIC_APP_URL genauso unbrauchbar ist: der Ausdruck
+     * sieht richtig aus, der QR-Code fuehrt aber ins Leere, und es faellt
+     * niemandem auf. Deshalb reicht die Route den Ursprung der Anfrage durch.
+     */
+    const baseUrl = (env.PUBLIC_APP_URL || options.baseUrl || "").replace(/\/+$/, "");
+    const joinUrl = `${baseUrl}/join/${member.id}`;
     const baseName = `${member.firstname} ${member.lastname}`;
     const displayName = `${member.firstname} ${member.lastname}${member.fahrtenname ? ` (${member.fahrtenname})` : ""}`;
 
@@ -27,7 +61,7 @@ export async function createInvitePdf(member: Member) {
     // ===============================
     // ABSENDER (oben links)
     // ===============================
-    const sender = "Stamm Edelweißpiraten · Drakenburger Str. 42 · 28207 Bremen";
+    const sender = [organization.name, organization.city].filter(Boolean).join(" · ");
 
     doc.font("Helvetica")
         .fontSize(10)
@@ -76,7 +110,7 @@ export async function createInvitePdf(member: Member) {
     const textBlock = `
 Liebe/r ${displayName},
 
-Sie wurden eingeladen, sich auf der internen Mitgliederplattform des Stammes Edelweißpiraten zu registrieren.
+Sie wurden eingeladen, sich auf der internen Mitgliederplattform von ${organization.name} zu registrieren.
 
 Scannen Sie den QR-Code oben rechts oder geben Sie den folgenden Einladungscode manuell ein.
     `;
@@ -135,7 +169,7 @@ Scannen Sie den QR-Code oben rechts oder geben Sie den folgenden Einladungscode 
 
     doc
         .fontSize(12)
-        .text(`Mitglieds-ID:  ${member._id}`, 60, y)
+        .text(`Mitglieds-ID:  ${member.id}`, 60, y)
         .text(`Name:         ${displayName}`, 60, y + 15)
         .text(`Adresse:      ${member.address.street}, ${member.address.zip ?? ""} ${member.address.city}`, 60, y + 30)
 
@@ -143,7 +177,7 @@ Scannen Sie den QR-Code oben rechts oder geben Sie den folgenden Einladungscode 
     // Fußtext
     // ===============================
     doc.fontSize(10);
-    doc.text("Stamm Edelweißpiraten – Christliche Pfadfinderschaft Deutschland e.V.", 60, doc.page.height - 80, {
+    doc.text(organization.name, 60, doc.page.height - 80, {
         width: doc.page.width - 120,
         align: "center"
     });

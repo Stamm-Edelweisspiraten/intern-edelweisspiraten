@@ -1,115 +1,254 @@
+import { error, fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
-import { getUser, updateUser } from "$lib/server/userService";
-import { getAllMembers } from "$lib/server/memberService";
-import { fail, error } from "@sveltejs/kit";
-import { db } from "$lib/server/mongo";
-import { ObjectId } from "mongodb";
-import { hasPermission } from "$lib/server/permissionService";
 import { env } from "$env/dynamic/private";
+import { requirePermission, requireAnyPermission } from "$lib/server/permissionGuard";
+import { deleteUser, disableMfa, getUser, unlockUser, updateUser } from "$lib/server/userService";
+import { getAllMembers } from "$lib/server/memberService";
+import { getAllGroups } from "$lib/server/groupService";
+import { listRoles } from "$lib/server/roleService";
+import { isGroupScopable } from "$lib/permissions";
+import { listSessionsForUser, revokeAllForUser, revokeSessionById } from "$lib/server/auth/session";
+import { issueToken } from "$lib/server/auth/passwordReset";
+import { describeSmtpError, sendEmail } from "$lib/server/emailService";
+import { inviteTemplate, passwordResetTemplate } from "$lib/server/emailTemplates/passwordReset";
+import { getOrganizationSettings } from "$lib/server/settingsService";
+import { isUuid } from "$lib/server/db/ids";
+import { matchesPermission } from "$lib/permissions/match";
+import { formatDateTime, fullName } from "$lib/format";
 
-export const load: PageServerLoad = async ({ params, url, locals }) => {
-    if (!hasPermission(locals.permissions ?? [], "user.view")) {
-        throw error(403, "Keine Berechtigung");
-    }
+export const load: PageServerLoad = async (event) => {
+    requirePermission(event, "user.view");
 
-    const canImpersonate = hasPermission(locals.permissions ?? [], "admin.*") ||
-        hasPermission(locals.permissions ?? [], "user.impersonate");
+    const user = await getUser(event.params.id);
+    if (!user) throw error(404, "Benutzer nicht gefunden");
 
-    const user = await getUser(params.id);
-    if (!user) throw new Error("User not found");
-
-    const members = (await getAllMembers()).map((m) => ({
-        id: m._id.toString(),
-        firstname: m.firstname,
-        lastname: m.lastname
-    }));
-
-    const akRes = await fetch(`${env.AUTHENTIK_URL}/api/v3/core/groups/?page_size=1000`, {
-        headers: { Authorization: `Bearer ${env.AUTHENTIK_TOKEN}` }
-    });
-    if (!akRes.ok) {
-        throw error(500, "Authentik Gruppen konnten nicht geladen werden");
-    }
-    const akGroups = await akRes.json();
+    const [members, groups, roles, sessions] = await Promise.all([
+        getAllMembers(),
+        getAllGroups(),
+        listRoles(),
+        listSessionsForUser(user.id)
+    ]);
 
     return {
-        scope: url.searchParams.get("scope"),
-        canImpersonate,
+        canImpersonate: matchesPermission(event.locals.permissions, "user.impersonate"),
+        canEdit: matchesPermission(event.locals.permissions, "user.edit"),
+        canDelete: matchesPermission(event.locals.permissions, "user.delete"),
+        isSelf: event.locals.user?.id === user.id,
         user: {
-            id: user._id.toString(),
+            id: user.id,
             name: user.name,
             email: user.email,
-            memberId: user.memberId,
-            createdAt: user.createdAt,
-            memberIds: user.memberIds ?? [],
-            groups: (user.groups ?? []).map((g: any) => g?.toString?.() ?? g)
+            type: user.type,
+            status: user.status,
+            roleIds: user.roleIds,
+            /** Zuweisungen samt Gruppenbezug; groupId null = stammesweit. */
+            roleAssignments: user.roleAssignments,
+            memberIds: user.memberIds,
+            mfaEnabled: user.mfaEnabled,
+            lockedUntil: user.lockedUntil ? formatDateTime(user.lockedUntil) : null,
+            failedLoginAttempts: user.failedLoginAttempts,
+            lastLoginAt: user.lastLoginAt ? formatDateTime(user.lastLoginAt) : null,
+            createdAt: formatDateTime(user.createdAt)
         },
-        members,
-        authentikGroups: akGroups.results ?? []
+        roles: roles.map((role) => ({
+            id: role.id,
+            name: role.name,
+            key: role.key,
+            description: role.description ?? "",
+            /**
+             * Nur Rollen, die mindestens ein gruppenbezogenes Recht tragen,
+             * bekommen die Gruppenauswahl. Eine Rolle mit finance.manage
+             * "fuer die Meute Panther" waere sinnlos.
+             */
+            groupScopable: (role.permissions ?? []).some(isGroupScopable)
+        })),
+        groups: groups.map((group) => ({ id: group.id, name: group.name, type: group.type })),
+        members: members.map((m) => ({
+            id: m.id,
+            name: fullName(m)
+        })),
+        sessions: sessions.map((session) => ({
+            id: session.id,
+            device: session.device ?? "Unbekanntes Gerät",
+            ip: session.ip ?? "-",
+            lastSeenAt: formatDateTime(session.lastSeenAt),
+            createdAt: formatDateTime(session.createdAt),
+            isCurrent: session.id === event.locals.session?.id
+        }))
     };
 };
 
 export const actions: Actions = {
-    update: async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "user.edit")) {
-            throw error(403, "Keine Berechtigung");
+    update: async (event) => {
+        requirePermission(event, "user.edit");
+
+        const form = await event.request.formData();
+        const name = String(form.get("name") ?? "").trim();
+        const email = String(form.get("email") ?? "").trim();
+        const type = String(form.get("type") ?? "parent") === "child" ? "child" : "parent";
+        const status = String(form.get("status") ?? "active");
+
+        if (!name || !email.includes("@")) {
+            return fail(400, { error: "Name und eine gültige E-Mail-Adresse sind erforderlich." });
         }
 
-        const form = await request.formData();
-
-        const id = form.get("id") as string;
-        const name = form.get("name") as string;
-        const email = form.get("email") as string;
-
-        let memberId = form.get("memberId") as string | null;
-        if (!memberId || memberId.trim() === "") {
-            memberId = null;
-        }
-
-        await updateUser(id, {
+        const result = await updateUser(event.params.id, {
             name,
             email,
-            memberId
+            type,
+            status: status === "disabled" ? "disabled" : status === "invited" ? "invited" : "active"
         });
 
-        return { success: true };
+        if (!result.ok) return fail(400, { error: result.error });
+        return { success: "Die Angaben wurden gespeichert." };
     },
 
-    "update-members": async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "user.edit")) {
-            throw error(403, "Keine Berechtigung");
+    /**
+     * Rollen zuweisen -- stammesweit und/oder je Gruppe.
+     *
+     * Das Formular schickt je Rolle ein Kaestchen "stammesweit" (Feld
+     * `roles`) und die ausgewaehlten Gruppen (Feld `groups_<roleId>`). Beides
+     * ist zugleich moeglich; stammesweit schliesst die Gruppen ohnehin ein,
+     * die Zeilen stoeren aber nicht.
+     */
+    roles: async (event) => {
+        requirePermission(event, "user.edit");
+
+        const form = await event.request.formData();
+        const orgWide = form.getAll("roles").map(String).filter(isUuid);
+
+        const assignments = orgWide.map((roleId) => ({ roleId, groupId: null as string | null }));
+
+        for (const [field, value] of form.entries()) {
+            if (!field.startsWith("groups_")) continue;
+            const roleId = field.slice("groups_".length);
+            const groupId = String(value);
+            if (!isUuid(roleId) || !isUuid(groupId)) continue;
+            assignments.push({ roleId, groupId });
         }
 
-        const form = await request.formData();
+        const result = await updateUser(event.params.id, { roleAssignments: assignments });
+        if (!result.ok) return fail(400, { error: result.error });
 
-        const userId = form.get("userId")?.toString();
-        const memberIds = JSON.parse(form.get("memberIds")?.toString() ?? "[]");
-
-        if (!userId) return fail(400, { error: "User-ID fehlt" });
-
-        // 1. Alle Member von User entfernen
-        await db.collection("users").updateOne(
-            { _id: new ObjectId(userId) },
-            { $set: { memberIds: memberIds } }
-        );
-
-        return { success: true };
+        return { success: "Die Rollen wurden gespeichert." };
     },
 
-    "update-groups": async ({ request, locals }) => {
-        if (!hasPermission(locals.permissions ?? [], "user.edit")) {
-            throw error(403, "Keine Berechtigung");
+    members: async (event) => {
+        requirePermission(event, "user.edit");
+
+        const form = await event.request.formData();
+        const memberIds = form.getAll("members").map(String).filter(Boolean);
+
+        const result = await updateUser(event.params.id, { memberIds });
+        if (!result.ok) return fail(400, { error: result.error });
+
+        return { success: "Die verknüpften Mitglieder wurden gespeichert." };
+    },
+
+    /**
+     * Schickt einen Link zum Setzen eines Passworts.
+     *
+     * Bei einem noch nicht aktivierten Zugang ist das die **Einladung** und
+     * nicht ein Zuruecksetzen: der Zugang hat gar kein Passwort, und die
+     * Einladung gilt 14 Tage statt 2 Stunden. Die Oberflaeche hebt die Schaltflaeche
+     * deshalb hervor, solange der Status `invited` ist.
+     */
+    resetPassword: async (event) => {
+        requirePermission(event, "user.edit");
+
+        const user = await getUser(event.params.id);
+        if (!user) return fail(404, { error: "Benutzer nicht gefunden." });
+
+        const invite = user.status === "invited";
+
+        try {
+            const { token } = await issueToken(user.id, invite ? "invite" : "reset");
+            const base = env.PUBLIC_APP_URL || event.url.origin;
+            const organization = await getOrganizationSettings();
+            const link = `${base}/password/reset/${token}`;
+
+            await sendEmail({
+                to: user.email,
+                subject: invite
+                    ? `Dein Zugang zum internen Bereich – ${organization.name}`
+                    : `Passwort zurücksetzen – ${organization.name}`,
+                html: invite
+                    ? inviteTemplate(user.name, link, 14, organization.name)
+                    : passwordResetTemplate(user.name, link, 2, organization.name)
+            });
+        } catch (err) {
+            console.error("Einladungs- bzw. Passwortmail fehlgeschlagen:", err);
+            // describeSmtpError nennt den naechsten Schritt statt eines
+            // "ECONNREFUSED 127.0.0.1:587".
+            return fail(500, { error: describeSmtpError(err) });
         }
 
-        const form = await request.formData();
-        const userId = form.get("userId")?.toString();
-        const groups = form.getAll("groups").map((g) => g?.toString?.()).filter(Boolean) as string[];
+        return {
+            success: invite
+                ? "Die Einladung wurde erneut versendet."
+                : "Ein Link zum Zurücksetzen wurde versendet."
+        };
+    },
 
-        if (!userId) return fail(400, { error: "User-ID fehlt" });
+    /** Entfernt die Zwei-Faktor-Einrichtung, z.B. bei Geräteverlust. */
+    resetMfa: async (event) => {
+        requireAnyPermission(event, ["user.edit", "user.mfa.reset"]);
 
-        await updateUser(userId, { groups });
+        if (!isUuid(event.params.id)) {
+            return fail(400, { error: "Ungültige Kennung." });
+        }
 
-        return { success: true };
+        await disableMfa(event.params.id);
+
+        return { success: "Die Zwei-Faktor-Authentifizierung wurde zurückgesetzt." };
+    },
+
+    /** Hebt eine Kontosperre nach zu vielen Fehlversuchen auf. */
+    unlock: async (event) => {
+        requirePermission(event, "user.edit");
+
+        if (!isUuid(event.params.id)) {
+            return fail(400, { error: "Ungültige Kennung." });
+        }
+
+        await unlockUser(event.params.id);
+
+        return { success: "Die Sperre wurde aufgehoben." };
+    },
+
+    revokeSession: async (event) => {
+        requirePermission(event, "user.edit");
+
+        const form = await event.request.formData();
+        const sessionId = String(form.get("sessionId") ?? "");
+
+        if (!isUuid(event.params.id)) {
+            return fail(400, { error: "Ungültige Kennung." });
+        }
+
+        await revokeSessionById(sessionId, event.params.id);
+        return { success: "Die Sitzung wurde beendet." };
+    },
+
+    revokeAllSessions: async (event) => {
+        requirePermission(event, "user.edit");
+
+        if (!isUuid(event.params.id)) {
+            return fail(400, { error: "Ungültige Kennung." });
+        }
+
+        const count = await revokeAllForUser(event.params.id);
+        return { success: `${count} Sitzungen wurden beendet.` };
+    },
+
+    delete: async (event) => {
+        requirePermission(event, "user.delete");
+
+        if (event.locals.user?.id === event.params.id) {
+            return fail(400, { error: "Der eigene Zugang kann nicht gelöscht werden." });
+        }
+
+        await deleteUser(event.params.id);
+        throw redirect(303, "/intern/admin/user?hinweis=geloescht");
     }
-
 };

@@ -1,101 +1,302 @@
-# Finance Design Sheet (intern/finance)
+# Kasse – fachliche Ergänzungen
 
-## Leitidee
-- Verwaltungs-UI mit ruhigem White-Space: `max-w-6xl`, `mt-16`, grosse `space-y`-Abstaende, Karten mit `rounded-2xl`, `border border-gray-200`, `shadow-sm`.
-- Primarer Farbkanal Blau/Sky fuer Navigation und primaere CTAs; Statusfarben: Gruen/Emerald fuer Erfolg, Rot fuer Abgang, Amber fuer offene Posten, Grautoene fuer Grundrauschen.
-- Tabellenzentrierter Inhalt, ergaenzt durch kompakte Stat-Karten und Sektionen mit klaren Ueberschriften.
-- Bootstrap Icons (`bi ...`) als Inline-Icons mit `gap-2` in Buttons oder Labels.
-- Textton sachlich/klar, deutsche Begriffe ohne Umlaute (Geschaeftsjahr, Uebersicht, Zurueck, Hat bezahlt).
+Für Gestaltung, Farben und Komponenten gilt uneingeschränkt
+[`intern-design-sheet.md`](./intern-design-sheet.md). Dieses Blatt hält nur
+fest, was für die Kasse darüber hinaus gilt.
 
-## Farb- und Typostil (Tailwind Tokens)
-- Hintergrund: `bg-white`, Karten-Rand `border-gray-200`, Tabellenkopf `bg-gray-50`, Grautext `text-gray-600/700`, Titel `text-gray-900`.
-- Primaer: `bg-blue-600 hover:bg-blue-700 text-white`; Alternative Link-CTA: `text-blue-700 bg-blue-50 border-blue-200`.
-- Info/Sekundaer: Sky fuer Highlights (`bg-sky-50 to-white`, Tags `bg-sky-100 border-sky-200 text-sky-800`).
-- Warnung: Amber (`text-amber-600`) fuer offene Betraege.
-- Erfolg: Emerald (`bg-emerald-50 border-emerald-200 text-emerald-700`).
-- Gefahr/Abgang: Rot (`text-red-500/600`).
-- Schrift-Hierarchie: H1 `text-3xl-4xl font-bold`, Sektionen `text-xl font-semibold`, Tabellenkopf `text-xs font-semibold uppercase tracking-wide`, Body `text-sm`.
+---
 
-## Layout- und Strukturmuster
-- Seitenkopf: Titel + Kurzbeschreibung links, CTA(s) rechts; `flex` mit `gap-4` und Wrap fuer Mobile.
-- Raster: `grid grid-cols-1 lg:grid-cols-3` fuer Hero/Stats, mit 2/1 Split bei Hauptkarte + CTA-Kachel.
-- Karten: `p-5/6` innen, `space-y-4`; alternative weiche Flaeche via `bg-gradient-to-br from-sky-50 to-white` fuer Hero.
-- Tabellen: `overflow-x-auto` Container; Tabelle mit `divide-y divide-gray-200`, Kopf `bg-gray-50`, Zeilen Hover `hover:bg-gray-50`; leere Zustaende als einzelne Zeile mit grauem Text.
-- Badges/Pills: kleine Caps `text-[11px] font-semibold`, runde Form (`rounded-full`) mit Border (z.B. Aktuelles Jahr Tag `bg-sky-100 border-sky-200 text-sky-800`).
-- Abstaende: `gap-3/4/6`, Buttons `px-4 py-3` (gross) oder `px-3 py-2` (kompakt), Inputs `px-3/4 py-2/3` mit `rounded-lg/xl`.
+## 1. Geld ist ganzzahlig
 
-## Komponentenrezepturen
-- Primaer-Button: `inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold shadow-sm transition`.
-- Sekundaer/Neutral: `bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 rounded-xl shadow-sm`.
-- Erfolg ("Hat bezahlt"): `text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg`.
-- Warnung/CTA-Kachel: Zahl in `text-amber-600`, Kachel mit `hover:border-amber-200 hover:shadow`.
-- Sucheingabe: `w-60 px-4 py-3 rounded-xl text-sm border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-sky-200 focus:border-sky-300`.
-- Tabellenzellen: Text `text-sm`, Zahlen fett; Zusatzinfos in `text-xs text-gray-500` unter Hauptzeile.
-- Modals: Overlay `fixed inset-0 bg-black/50 backdrop-blur-sm flex center z-50 px-4`; Card `bg-white rounded-2xl border-gray-200 shadow-2xl max-w-lg w-full`, Header mit Titel + Close, Body `space-y-4`, Footer Buttons rechts.
-- Formfelder: `border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500` (oder Emerald in Zahlungsmodals); Labels `text-sm font-semibold text-gray-700`.
-- Dropdown (custom): Button mit Border + Shadow; Liste `absolute z-10 w-full bg-white border border-gray-300 rounded-lg mt-1 shadow`; Close-on-click-outside via Svelte `onMount` listener.
-- Tags fuer Counters: `px-3 py-1 text-xs font-semibold rounded-full border` (z.B. `text-sky-800 bg-sky-100`).
-- Buttons/Aktionen: CTA-Leiste rechts im Kopf (`flex items-center gap-3 flex-wrap`), Primaer rechts aussen, Sekundaer links daneben; Rueck-Link als neutraler Button links vor den CTAs. Footer-Buttons in Karten rechtsbuendig.
+Beträge werden **als Cents** geführt – in der Datenbank, in den Services, in
+den Typen und in der REST-API. Fließkommazahlen für Geld gibt es nicht.
 
-## Interaktionsmuster
-- Filter: Clientseitig via `search.trim().toLowerCase()`, Match ueber zusammengesetzten String aus Titel/Typ/Note/Betrag; Ergebnislisten und Counts aktualisieren sich reaktiv (`filteredItems`, `filteredTransactions`).
-- Sortierung: Transaktionen nach Datum desc (`new Date(...).getTime()`), Outstanding nach Jahr gruppiert.
-- Waehrungsformat: helper `const euro = (value:number) => `${value.toFixed(2)} EUR`; immer 2 Nachkommastellen.
-- Statusfarben in Tabellenzeilen: aktuelles Jahr mit `bg-sky-50/70 ring-1 ring-sky-200`, archivierte in `bg-gray-50 text-gray-500`.
-- Scroll-Lock bei Modals: Body-Overflow sichern und beim Schliessen wiederherstellen (`document.body.style.overflow`).
-- Form-Submit: klassische `<form method="post" action="?...">` Buttons, versteckte Inputs fuer IDs.
-- CTA-Positionierung: Actions stehen im Kopf immer rechts vom Titelblock; auf Mobile umbrechen, Reihenfolge beibehalten. In Karten liegen Aktionen oben rechts oder unten rechts, nie mittig.
+```ts
+import { formatEuro, parseEuro, splitEvenly, sumCents } from "$lib/money";
 
-## Textbausteine
-- CTA-Texte: "Neues Geschaeftsjahr", "Transaktion", "Hat bezahlt", "Offene Rechnung".
-- Hilfetexte kurz halten: "Offene Positionen aus allen aktiven Geschaeftsjahren." / "Keine offenen Einnahmen hinterlegt." / "Keine passenden Transaktionen gefunden.".
-- Nummern immer fett, Einheiten in EUR ausschreiben.
-
-## Svelte-Grundgeruest fuer neue Finance-Seiten
-```svelte
-<script lang="ts">
-  export let data;
-  const euro = (v:number) => `${v.toFixed(2)} EUR`;
-  let search = "";
-</script>
-
-<div class="max-w-6xl mx-auto mt-16 space-y-8">
-  <div class="flex items-center justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="text-4xl font-bold text-gray-900">Seitentitel</h1>
-      <p class="text-sm text-gray-600 mt-1">Kurze Beschreibung.</p>
-    </div>
-    <div class="flex items-center gap-3 flex-wrap">
-      <input type="search" placeholder="Suchen..." bind:value={search}
-        class="w-60 px-4 py-3 rounded-xl text-sm border border-gray-300 bg-white shadow-sm focus:ring-2 focus:ring-sky-200 focus:border-sky-300" />
-      <a href="#" class="inline-flex items-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition">
-        <span class="bi bi-plus-circle"></span>
-        Primaere Aktion
-      </a>
-    </div>
-  </div>
-
-  <div class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-4">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold text-gray-900">Sektionstitel</h2>
-      <span class="text-sm text-gray-500">Meta</span>
-    </div>
-    <!-- Tabelle/Liste/Stats hier -->
-  </div>
-</div>
+formatEuro(1234);        // "12,34 EUR"
+parseEuro("1.234,56");   // 123456  (null bei ungültiger Eingabe)
+splitEvenly(1000, 3);    // [334, 333, 333]  – Summe bleibt 1000
 ```
 
-## Wann welches Farbschema
-- Geld-Eingaenge/OK-Aktionen: Gruen/Emerald (Buttons, Icons).
-- Offene/warnende Infos: Amber-Ton fuer Zahlen oder Icons.
-- Navigation/Standard-CTA: Blau/Sky.
-- Archiv/sekundaer: Grautoene, keine intensiven Hintergruende.
+- Eingabefelder zeigen `(cents / 100).toFixed(2).replace(".", ",")`.
+- `parseEuro` liefert bei ungültiger Eingabe `null`; das ist ein Formularfehler
+  und darf **nicht** stillschweigend als 0 verbucht werden.
+- Aufteilungen laufen über `splitEvenly`, damit keine Cents verschwinden.
+- Die API weist einen Betrag mit Nachkommastellen ausdrücklich ab: 12,50 EUR
+  sind `1250`, nicht `12.5`.
 
-## Checkliste bei neuen Screens
-- Nutze `max-w-6xl` + `space-y-8` fuer vertikale Rhythmik.
-- Primaere Aktion rechts im Kopf; Rueck-Link als neutraler Button oder Link.
-- Tabellen immer mit Kopfzeile, Hover-State und Empty-State-Zeile.
-- Betragsfelder/Anzeigen immer ueber `euro()` formatieren.
-- Bei Modals Body-Scroll sperren, Buttons rechtsbuendig, Inputs mit Fokus-Ring.
-- Zaehler/Badges fuer Anzahl Eintraege oder Filterergebnisse anzeigen.
-- Button-Abstaende: horizontal `gap-3` in CTA-Leisten, vertikal `mt-4` unter Formulargruppen; Listen-Header-CTAs immer Icon+Label (Bootstrap Icon + Text).
+---
+
+## 2. Doppelte Buchführung
+
+Jede Geldbewegung ist ein **Buchungssatz** (`journal_entries`) aus mindestens
+zwei **Zeilen** (`journal_lines`). Je Zeile ist genau einer der beiden Beträge
+– Soll oder Haben – größer als 0, und über den ganzen Satz stimmen die Summen
+überein.
+
+Geprüft wird das dreifach, und das ist Absicht:
+
+1. `validateLines()` vor dem Schreiben – für eine verständliche Meldung.
+2. `postEntry()` beim Schreiben.
+3. Ein **aufgeschobener Constraint-Trigger** in PostgreSQL
+   (`journal_lines_balanced`). Er greift auch bei Zugriffen, die an der
+   Anwendung vorbeigehen. Aufgeschoben deshalb, weil ein Satz nach dem
+   Einfügen der ersten Zeile zwangsläufig unausgeglichen ist.
+
+**Gebucht wird ausschließlich über `postEntry()`.** Das gilt für die einfache
+Maske, die Zahlung auf eine Rechnung, die Abrechnung einer Bestellung,
+wiederkehrende Buchungen, den Kontoauszug-Import und die REST-API. Wer daran
+vorbei schreibt, erzeugt einen unausgeglichenen Satz – und die Datenbank weist
+ihn ab.
+
+### Zwei Masken
+
+| Maske | Für wen | Wie |
+|---|---|---|
+| `createTransaction()` | Kassenwart | Einnahme/Ausgabe + Buchungsart + Konto → zwei Zeilen entstehen im Hintergrund |
+| `postEntry()` | Expertenmaske `/intern/finance/journal/create` | Beliebig viele Zeilen mit Soll und Haben von Hand |
+
+Soll und Haben tauchen in der einfachen Maske bewusst nicht auf.
+
+### Storno statt Löschen
+
+Es gibt **kein** Löschen von Buchungen. Eine falsche Buchung wird über
+`reverseEntry()` storniert: der ursprüngliche Beleg bleibt erhalten, ein
+Gegensatz mit vertauschten Seiten hebt ihn auf, und beide verweisen
+aufeinander (`reverses_id` / `reversed_by_id`). Auch die REST-API hat deshalb
+kein `DELETE` auf Buchungssätze, sondern `POST …/reverse`.
+
+In Berichten werden Stornos **nicht** ausgeblendet: Original und Gegensatz
+heben sich in der Summe auf. Sie herauszufiltern wäre falsch, weil dann nur
+die Gegenbuchung stehenbliebe.
+
+---
+
+## 3. Kontenrahmen
+
+Der mitgelieferte Kontenrahmen steht als reine Daten in
+`src/lib/server/finance/chartData.ts` – ohne Datenbankzugriff, damit das
+Seed-Skript außerhalb von Vite dieselbe Liste benutzt und sie nicht ein
+zweites Mal existiert.
+
+Er ist an SKR49 angelehnt, aber bewusst schlank. Vier steuerliche Sphären:
+ideeller Bereich, Vermögensverwaltung, Zweckbetrieb, wirtschaftlicher
+Geschäftsbetrieb. Konten des Rahmens sind als `system` markiert und nicht
+löschbar; Nummer und Kontoart bleiben unveränderlich, weil die
+Geschäftslogik sie über die Nummer sucht (siehe `SYSTEM_ACCOUNTS`).
+
+Bebuchte Konten lassen sich nie löschen, nur deaktivieren.
+
+**Buchungsarten** (`booking_categories`) sind die Auswahlliste der einfachen
+Maske und zeigen auf ein Erfolgskonto. Sie ersetzen den früheren festen Enum
+`TRANSACTION_KINDS` – vorher gab es zwei Auswahllisten in der Oberfläche mit
+unterschiedlichem Inhalt.
+
+---
+
+## 4. Kalendertage
+
+Alle `date`-Spalten halten einen **Tag ohne Uhrzeit**. Ein aus Ortszeit
+gebautes Datum (`new Date(2026, 4, 10)` = lokale Mitternacht) landet über
+`toISOString()` östlich von Greenwich im Vortag. Genau das ist beim Einlesen
+eines Kontoauszugs passiert: aus dem 10.05. wurde der 09.05.
+
+Deshalb: **jedes Kalenderdatum läuft durch `$lib/server/db/dates`.**
+
+```ts
+import { toCalendarDate, todayCalendar, calendarDate } from "$lib/server/db/dates";
+```
+
+`toCalendarDate()` nimmt die Ortszeit-Bestandteile und legt sie auf
+UTC-Mitternacht. Ein Jahresvergleich läuft über `calendarYear()`, nie über
+`getFullYear()` eines rohen Datums.
+
+---
+
+## 5. Farbrollen der Kasse
+
+| Sachverhalt | Ton |
+|---|---|
+| Einnahme, bezahlt, erledigt | `success` |
+| Ausgabe, Storno, Löschen | `danger` |
+| Offener Posten, Abschluss, fällig | `warning` |
+| Teilzahlung, Hinweis, Herkunft | `info` |
+| Navigation, Hauptaktion | `primary` |
+| Archiv, storniert | `neutral`, zusätzlich `opacity-70` |
+
+Beträge werden fett gesetzt, mit `tabular-figures`; Ausgaben mit
+vorangestelltem Minuszeichen.
+
+Dieselben Rollen gelten in den **Diagrammen**: Erträge `success`,
+Aufwendungen `danger`, Ergebnisse und Verläufe `primary`, offene Posten
+`warning`. Die Farben kommen als CSS-Variablen ins SVG
+(`var(--color-success)`), nie als Hexwert — sonst müsste für den dunklen
+Modus eine zweite Palette gepflegt werden. Die Zuordnung steht an einer
+Stelle: `src/lib/components/finance/charts/colors.ts`.
+
+---
+
+## 6. Zustände
+
+**Rechnung** (Forderung wie Verbindlichkeit):
+`open` → `partial` → `paid`, dazu `cancelled` als Sonderfall.
+
+- Der offene Rest ergibt sich aus `amount - paidAmount` und wird über
+  `computeOutstanding()` ermittelt – **an genau einer Stelle**. Frühere
+  Kopien dieser Berechnung wichen voneinander ab, sodass Übersicht und
+  Detailansicht unterschiedliche Summen zeigten.
+- `overdue` bedeutet: offen **und** `dueDate` liegt vor dem heutigen
+  Kalendertag. Eine heute fällige Rechnung ist noch nicht überfällig.
+- Zahlungen laufen ausschließlich über `payInvoice()` bzw. `payBill()`; der
+  Überzahlungsschutz steckt in der Prüfbedingung `invoices_paid_check` der
+  Datenbank, nicht in der Oberfläche.
+- Eine Zahlung wird über `reversePayment()` zurückgenommen: der Buchungssatz
+  wird storniert, die Zahlung gekennzeichnet, der bezahlte Betrag reduziert.
+
+**Bestellung:** Lieferung und Bezahlung sind **zwei unabhängige Merkmale** und
+werden als zwei getrennte Kennzeichen dargestellt:
+
+- `status`: `ordered` → `processing` → `delivered`, dazu `cancelled`
+- `paymentStatus`: `open` → `partial` → `paid`
+
+`paid` ist bewusst **kein** Lieferstatus. Früher überschrieb eine vollständige
+Zahlung den Status `delivered` und löschte damit die Lieferinformation.
+
+**Geschäftsjahr:** `active` → `closed` → `archived`. Der Trigger
+`journal_entries_year_open` weist Buchungen in einem nicht aktiven Jahr ab.
+Deshalb schreibt `closeFiscalYear()` erst die Übertragsbuchungen und setzt
+danach den Status – andersherum liefe der Abschluss in seine eigene Sperre.
+
+---
+
+## 7. Kontoabgleich
+
+Der Import erkennt die Spalten über die Kopfzeile, weil jede Bank andere
+Bezeichnungen verwendet. Gegen doppeltes Einlesen schützt ein Fingerabdruck je
+Zeile (Konto, Datum, Betrag, Verwendungszweck) mit eindeutigem Index.
+
+Der Abgleich **schlägt nur vor**; bestätigt wird immer von Hand. Der Betrag
+muss exakt stimmen – eine Zuordnung „ungefähr“ wäre in einer Buchhaltung
+wertlos. Datumsnähe und Textüberschneidung entscheiden nur über die
+Reihenfolge der Vorschläge.
+
+---
+
+## 8. Absicherung
+
+SvelteKit führt bei Formular-Aktionen **kein** `load` aus. Eine Absicherung im
+`load` schützt die zugehörigen Aktionen deshalb nicht. Jede Aktion ruft
+`requirePermission` selbst auf:
+
+```ts
+export const actions: Actions = {
+    add: async (event) => {
+        requirePermission(event, "finance.manage");
+        // ...
+    }
+};
+```
+
+Berechtigungen und wo sie erzwungen werden:
+
+| Schlüssel | Wofür |
+|---|---|
+| `finance.view` | Alles Lesende: Journal, Konten, Berichte, offene Posten |
+| `finance.manage` | Buchen, Stornieren, Zahlungen, Beiträge, Konten pflegen |
+| `finance.export` | CSV-Ausgaben (Jahresexport, Berichte) |
+| `finance.close` | Jahresabschluss |
+
+`finance.export` und `finance.close` waren früher deklariert, aber an keiner
+Stelle erzwungen – der Export hing an `finance.view`, der Abschluss an
+`finance.manage`.
+
+Anzeigebedingungen (`canManage`) laufen über `matchesPermission`, nie über
+`Array.includes`: Letzteres kennt keine Platzhalter, sodass eine Rolle mit
+`finance.*` die Schaltflächen nicht sah, obwohl die Aktion durchging.
+
+---
+
+## 9. Auswertungen
+
+Alle Berichte lesen ausschließlich aus den Buchungszeilen. Es gibt keine
+zweite Wahrheit, die auseinanderlaufen könnte, und keinen gespeicherten
+Saldo.
+
+| Bericht | Was er beantwortet |
+|---|---|
+| GuV | Erträge und Aufwendungen eines Zeitraums, aufgeteilt nach steuerlichen Bereichen |
+| Vermögensübersicht | Aktiva gegen Passiva zum Stichtag; das Ergebnis schließt sie rechnerisch |
+| **Summen- und Saldenliste** | Je Konto: Anfangsbestand, Soll, Haben, Saldo. Die Kontrollrechnung der Buchhaltung |
+| **Monatsübersicht** | Erträge, Aufwendungen und Ergebnis je Monat, mit Jahressumme |
+| Kassenbericht | Bewegungen eines Kassen- oder Bankkontos mit laufendem Bestand |
+| Kontenblatt | Buchungen eines Sachkontos |
+| Fälligkeitsstaffel | Offene Forderungen nach Alter |
+
+Zwei Regeln, die bei der Summen- und Saldenliste zählen und beide beim ersten
+Anlauf falsch waren:
+
+1. **Erfolgskonten tragen keinen Anfangsbestand.** Erträge und Aufwendungen
+   beginnen jede Periode bei null — genau dafür wird ein Geschäftsjahr
+   abgeschlossen. Nur Bestandskonten (Aktiva, Passiva, Eigenkapital) tragen
+   ihren Saldo vor.
+2. **Ein Konto ohne Bewegung, aber mit Vortrag, bleibt in der Liste.** Es
+   über die Bewegungen des Zeitraums zu suchen lässt genau diese Konten
+   verschwinden — und damit den Vortrag. Deshalb: Konten, Vortragssummen und
+   Zeitraumsummen getrennt abfragen und im Speicher zusammenführen.
+
+Die Probe der Liste ist, dass die Summe der Soll-Bewegungen der Summe der
+Haben-Bewegungen entspricht (`balanced`). Weicht sie ab, zeigt die Seite das
+deutlich an, statt die Zahl zu verstecken.
+
+**Diagramme** stehen neben ihrer Tabelle, nie statt ihr — Näheres im
+[`intern-design-sheet.md`](./intern-design-sheet.md), Abschnitt „Diagramme“.
+
+---
+
+## 10. PDFs
+
+Eine Vorlagenliste für alles: `src/lib/server/pdf/registry.ts`. Jede Vorlage
+trägt Namen, benötigtes Recht, zod-Schema der Eingabe und Erzeugerfunktion.
+
+- **Eine Rechteprüfung**, nicht drei verschiedene Muster. Das Recht steht auf
+  der Vorlage; `POST /api/v1/pdf/{vorlage}` und die Adressen unter `/intern`
+  lesen es dort ab.
+- **Ein gemeinsames Gerüst** (`pdf/layout.ts`): Kopf mit Organisation und
+  Logo, Fußzeile mit Seitenzahl, eine Tabellenfunktion, die umbricht und den
+  Tabellenkopf auf der neuen Seite wiederholt. Vorher baute jeder Erzeuger
+  das selbst — und schrieb bei mehr Zeilen, als auf eine Seite passen, über
+  den Rand hinaus.
+- **Selbstbeschreibung**: `GET /api/v1/pdf` liefert die Liste samt JSON
+  Schema. Eine Vorlage, die dazukommt, steht dort automatisch.
+- Beträge laufen auch hier über `formatEuro`; das PDF rechnet nie selbst.
+
+---
+
+## 11. REST-API
+
+`/api/v1` liegt **vor** dem HTML-Gate im Hook. Ohne gültiges Token gibt es
+`401` als JSON, keine Weiterleitung auf `/login` – sonst bekäme ein
+Fremdsystem eine Anmeldeseite mit Status 200, und jede Fehlerbehandlung auf
+der Gegenseite wäre unbrauchbar.
+
+- Tokens tragen als Scopes dieselben Berechtigungsschlüssel wie das Portal.
+  Es gibt **kein zweites Berechtigungsmodell**.
+- Schreibende Zugriffe laufen durch dieselben Dienstfunktionen wie die
+  Formular-Aktionen. Insbesondere gebucht wird ausschließlich über
+  `postEntry()`.
+- Fehler folgen RFC 9457 (`application/problem+json`).
+- Listen antworten einheitlich mit `data` und `meta`.
+
+---
+
+## 12. Textbausteine
+
+Schaltflächen: „Neues Geschäftsjahr“, „Buchung“, „Freier Buchungssatz“,
+„Zahlung erfassen“, „Stornieren“, „Beiträge anlegen“, „Jahr abschließen“,
+„Kontoauszug einlesen“, „Export (CSV)“.
+
+Leere Zustände: „Alle Forderungen sind ausgeglichen.“ ·
+„Noch keine Buchungssätze in diesem Geschäftsjahr.“ ·
+„Keine Bestellungen in diesem Geschäftsjahr.“ ·
+„Noch kein Kontoauszug eingelesen“.

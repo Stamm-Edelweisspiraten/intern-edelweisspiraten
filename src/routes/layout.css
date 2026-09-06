@@ -1,85 +1,319 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
-:root {
-    --bg: #f7f8fb;
-    --surface: #ffffff;
-    --border: #e5e7eb;
-    --text: #0f172a;
-    --muted: #6b7280;
-    --primary: #2563eb;
-    --primary-strong: #1d4ed8;
-    --radius: 14px;
-    --shadow: 0 20px 60px -30px rgba(15, 23, 42, 0.35);
+/*
+ * Design-Tokens des internen Portals.
+ *
+ * Grundlage ist intern-design-sheet.md. Zwei bewusste Abweichungen von der
+ * urspruenglichen Fassung:
+ *
+ * 1. Kantiger. Karten und Bedienelemente sind nur noch minimal gerundet.
+ *    Die Radien stehen jetzt tatsaechlich in Tokens (--radius-card,
+ *    --radius-control) -- vorher waren beide definiert, aber nirgends benutzt,
+ *    und alle 132 Rundungen standen als rounded-2xl/-xl fest in den Dateien.
+ *    Damit auch noch nicht umgestellte Stellen mitziehen, ist zusaetzlich die
+ *    Radien-Skala von Tailwind selbst flachgelegt.
+ *
+ * 2. Neutrales Grau statt Slate. Der Dunkelmodus lag auf blaustichigen
+ *    Slate-Toenen (#0b1220, #0f172a, #111827); die Flaechen wirkten dadurch
+ *    eingefaerbt statt neutral. Beide Modi laufen jetzt auf einer neutralen
+ *    Graustufenreihe, die Rollenfarben bleiben die einzigen Farbtraeger.
+ *
+ * Farben stehen nur hier. Rohe Paletten-Klassen (bg-white, border-gray-200)
+ * in Seiten und Komponenten sind ausdruecklich unerwuenscht -- nur ueber
+ * diese Tokens funktioniert das Umschalten der Darstellung ueberhaupt.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+    --font-sans: "Inter Variable", "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+
+    /* Flaechen und Text */
+    --color-surface: var(--surface);
+    --color-surface-muted: var(--surface-muted);
+    --color-surface-sunken: var(--surface-sunken);
+    --color-border: var(--border);
+    --color-border-strong: var(--border-strong);
+    --color-fg: var(--fg);
+    --color-fg-muted: var(--fg-muted);
+    --color-fg-subtle: var(--fg-subtle);
+
+    /* Farbrollen */
+    --color-primary: var(--primary);
+    --color-primary-hover: var(--primary-hover);
+    --color-primary-fg: var(--primary-fg);
+    --color-primary-soft: var(--primary-soft);
+    --color-primary-soft-fg: var(--primary-soft-fg);
+    --color-primary-soft-border: var(--primary-soft-border);
+
+    --color-success: var(--success);
+    --color-success-soft: var(--success-soft);
+    --color-success-soft-fg: var(--success-soft-fg);
+    --color-success-soft-border: var(--success-soft-border);
+
+    --color-warning: var(--warning);
+    --color-warning-soft: var(--warning-soft);
+    --color-warning-soft-fg: var(--warning-soft-fg);
+    --color-warning-soft-border: var(--warning-soft-border);
+
+    --color-danger: var(--danger);
+    --color-danger-hover: var(--danger-hover);
+    --color-danger-soft: var(--danger-soft);
+    --color-danger-soft-fg: var(--danger-soft-fg);
+    --color-danger-soft-border: var(--danger-soft-border);
+
+    --color-info: var(--info);
+    --color-info-soft: var(--info-soft);
+    --color-info-soft-fg: var(--info-soft-fg);
+    --color-info-soft-border: var(--info-soft-border);
+
+    /*
+     * Radien. Bewusst nicht 0 -- "etwas kantiger", nicht scharfkantig.
+     * Karten 4 px, Bedienelemente 2 px.
+     */
+    --radius-card: 0.25rem;
+    --radius-control: 0.125rem;
 }
 
-* {
-    box-sizing: border-box;
+/*
+ * Die Radien-Skala von Tailwind selbst. Solange einzelne Seiten noch
+ * rounded-xl oder rounded-2xl schreiben, ziehen sie darueber mit, ohne dass
+ * jede Datei angefasst werden muss.
+ */
+@theme {
+    --radius-xs: 0.0625rem;
+    --radius-sm: 0.125rem;
+    --radius-md: 0.125rem;
+    --radius-lg: 0.125rem;
+    --radius-xl: 0.125rem;
+    --radius-2xl: 0.25rem;
+    --radius-3xl: 0.25rem;
+    --radius-4xl: 0.375rem;
 }
 
-body {
-    margin: 0;
-    font-family: 'Manrope', 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background: radial-gradient(circle at 10% 10%, rgba(37,99,235,0.08), transparent 35%),
-    radial-gradient(circle at 90% 0%, rgba(59,130,246,0.12), transparent 30%),
-    var(--bg);
-    color: var(--text);
-    min-height: 100vh;
+@layer base {
+    :root {
+        color-scheme: light;
+
+        --surface: #ffffff;
+        --surface-muted: #fafafa;
+        --surface-sunken: #f4f4f5;
+        --border: #e4e4e7;
+        --border-strong: #d4d4d8;
+        --fg: #18181b;
+        --fg-muted: #52525b;
+        /* Bewusst zinc-500 statt zinc-400: zinc-400 liegt auf Weiss bei etwa
+           2.8:1 und verfehlt damit die AA-Anforderung. Dieser Wert erreicht
+           4.8:1 auf --surface und 4.6:1 auf --surface-muted. */
+        --fg-subtle: #71717a;
+
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --primary-fg: #ffffff;
+        --primary-soft: #eff6ff;
+        --primary-soft-fg: #1d4ed8;
+        --primary-soft-border: #bfdbfe;
+
+        --success: #059669;
+        --success-soft: #ecfdf5;
+        --success-soft-fg: #047857;
+        --success-soft-border: #a7f3d0;
+
+        --warning: #d97706;
+        --warning-soft: #fffbeb;
+        --warning-soft-fg: #b45309;
+        --warning-soft-border: #fde68a;
+
+        --danger: #dc2626;
+        --danger-hover: #b91c1c;
+        --danger-soft: #fef2f2;
+        --danger-soft-fg: #b91c1c;
+        --danger-soft-border: #fecaca;
+
+        --info: #0284c7;
+        --info-soft: #f0f9ff;
+        --info-soft-fg: #0369a1;
+        --info-soft-border: #bae6fd;
+
+        --shadow-card: 0 1px 2px 0 rgb(24 24 27 / 0.06), 0 1px 3px 0 rgb(24 24 27 / 0.04);
+        --shadow-raised: 0 10px 30px -12px rgb(24 24 27 / 0.25);
+
+        /* Terminfarben -- siehe src/lib/events/colors.ts.
+           Eigene Reihe neben den semantischen Tokens: die Farbe kennzeichnet
+           die Art des Termins, die Tokens den Status. Die -soft-fg-Werte
+           liegen auf ihrer -soft-Flaeche jeweils ueber 4.5:1. */
+        --event-blau: #2563eb;
+        --event-blau-soft: #eff6ff;
+        --event-blau-soft-fg: #1d4ed8;
+        --event-gruen: #059669;
+        --event-gruen-soft: #ecfdf5;
+        --event-gruen-soft-fg: #047857;
+        --event-rot: #dc2626;
+        --event-rot-soft: #fef2f2;
+        --event-rot-soft-fg: #b91c1c;
+        --event-orange: #ea580c;
+        --event-orange-soft: #fff7ed;
+        --event-orange-soft-fg: #c2410c;
+        --event-gelb: #ca8a04;
+        --event-gelb-soft: #fefce8;
+        --event-gelb-soft-fg: #a16207;
+        --event-violett: #7c3aed;
+        --event-violett-soft: #f5f3ff;
+        --event-violett-soft-fg: #6d28d9;
+        --event-tuerkis: #0891b2;
+        --event-tuerkis-soft: #ecfeff;
+        --event-tuerkis-soft-fg: #0e7490;
+        --event-grau: #52525b;
+        --event-grau-soft: #f4f4f5;
+        --event-grau-soft-fg: #3f3f46;
+    }
+
+    .dark {
+        color-scheme: dark;
+
+        /* Neutrale Graustufen statt Slate -- kein Blaustich mehr. */
+        --surface: #18181b;
+        --surface-muted: #0f0f11;
+        --surface-sunken: #131316;
+        --border: #2a2a2e;
+        --border-strong: #3f3f45;
+        --fg: #f4f4f5;
+        --fg-muted: #b8b8bf;
+        /* 5.1:1 auf --surface, 5.6:1 auf --surface-muted. */
+        --fg-subtle: #8a8a92;
+
+        --primary: #3b82f6;
+        --primary-hover: #60a5fa;
+        --primary-fg: #0f0f11;
+        --primary-soft: #1a2744;
+        --primary-soft-fg: #bfdbfe;
+        --primary-soft-border: #2c4372;
+
+        --success: #34d399;
+        --success-soft: #0f2a1f;
+        --success-soft-fg: #6ee7b7;
+        --success-soft-border: #1c5c42;
+
+        --warning: #fbbf24;
+        --warning-soft: #2b2008;
+        --warning-soft-fg: #fcd34d;
+        --warning-soft-border: #6b4a12;
+
+        --danger: #f87171;
+        --danger-hover: #fca5a5;
+        --danger-soft: #2e1414;
+        --danger-soft-fg: #fca5a5;
+        --danger-soft-border: #7a2a2a;
+
+        --info: #38bdf8;
+        --info-soft: #0d2733;
+        --info-soft-fg: #7dd3fc;
+        --info-soft-border: #185066;
+
+        --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.3);
+        --shadow-raised: 0 10px 30px -12px rgb(0 0 0 / 0.6);
+
+        /* Terminfarben im Dunkelmodus: kraeftige Farbe aufgehellt, Flaeche
+           stark abgedunkelt, Schrift hell -- dieselbe Bauart wie bei den
+           semantischen Tokens darueber. */
+        --event-blau: #3b82f6;
+        --event-blau-soft: #1a2744;
+        --event-blau-soft-fg: #bfdbfe;
+        --event-gruen: #34d399;
+        --event-gruen-soft: #0f2a1f;
+        --event-gruen-soft-fg: #6ee7b7;
+        --event-rot: #f87171;
+        --event-rot-soft: #2e1414;
+        --event-rot-soft-fg: #fca5a5;
+        --event-orange: #fb923c;
+        --event-orange-soft: #2c1808;
+        --event-orange-soft-fg: #fdba74;
+        --event-gelb: #fbbf24;
+        --event-gelb-soft: #2b2008;
+        --event-gelb-soft-fg: #fcd34d;
+        --event-violett: #a78bfa;
+        --event-violett-soft: #221a3d;
+        --event-violett-soft-fg: #ddd6fe;
+        --event-tuerkis: #22d3ee;
+        --event-tuerkis-soft: #0c2830;
+        --event-tuerkis-soft-fg: #a5f3fc;
+        --event-grau: #a1a1aa;
+        --event-grau-soft: #232327;
+        --event-grau-soft-fg: #d4d4d8;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font-sans);
+        background-color: var(--surface-muted);
+        color: var(--fg);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    /*
+     * Ziffern in Tabellen stehen untereinander. In einer Buchhaltung ist das
+     * kein Detail: mit proportionalen Ziffern springen die Nachkommastellen
+     * einer Betragsspalte von Zeile zu Zeile.
+     */
+    table,
+    .tabular-figures {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Kantige Kontrollkaestchen; Optionsfelder bleiben rund. */
+    input[type="checkbox"] {
+        border-radius: var(--radius-control);
+    }
+
+    /*
+     * Sichtbarer Fokus auf allem Interaktiven. Das Design-Sheet fordert das
+     * bereits; umgesetzt war es bisher nur auf Eingabefeldern -- kein
+     * einziger Button und kein Link hatte einen Fokus-Stil.
+     */
+    :focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+        border-radius: var(--radius-control);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
 }
 
-a {
-    color: inherit;
-    text-decoration: none;
+@layer components {
+    /* Nur fuer Inhalte, die als HTML aus dem Mail-Editor stammen. */
+    .prose-mail :where(p, ul, ol) {
+        margin: 0 0 0.75rem;
+    }
 }
 
-.card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-}
-
-.btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    padding: 0.75rem 1.1rem;
-    border-radius: 12px;
-    font-weight: 600;
-    transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, color 120ms ease;
-    border: 1px solid transparent;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, var(--primary), var(--primary-strong));
-    color: #fff;
-    box-shadow: 0 12px 30px -14px rgba(37, 99, 235, 0.5);
-}
-
-.btn-primary:hover {
-    transform: translateY(-1px);
-}
-
-.container {
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 1.25rem;
-}
-
-/* Ensure readable text on strong brand backgrounds */
-.bg-blue-500,
-.bg-blue-600,
-.bg-blue-700,
-.bg-blue-800,
-.bg-blue-900 {
-    color: #fff !important;
-}
-
-.bg-blue-500 a,
-.bg-blue-600 a,
-.bg-blue-700 a,
-.bg-blue-800 a,
-.bg-blue-900 a {
-    color: #fff !important;
-}
+/*
+ * Z-Index-Skala, damit sich Kopfzeile, Menue, Banner, Modal und Toasts nicht
+ * mehr gegenseitig verdecken (vorher lagen Banner, Menue und Toasts alle auf
+ * z-50, sodass Toasts das Impersonation-Banner ueberdeckt haben).
+ *
+ *   Inhalt            0
+ *   Sticky-Kopfzeile 30
+ *   Menue-Overlay    40
+ *   Menue-Panel      50
+ *   Modal            60
+ *   Toasts           70
+ */

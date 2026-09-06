@@ -1,18 +1,52 @@
-<footer class="mt-12 border-t border-gray-200 pt-6 text-sm text-gray-600">
+<script lang="ts">
+    import { page } from "$app/state";
+
+    /**
+     * Fusszeile des internen Bereichs.
+     *
+     * Benutzte vorher rohe Paletten-Klassen (border-gray-200, bg-white,
+     * text-gray-600, hover:text-blue-700) und war damit im dunklen Design
+     * unlesbar -- weisse Flaeche auf dunklem Grund. Die Verweise standen
+     * ausserdem fest im Quelltext; sie kommen jetzt aus den
+     * Organisationseinstellungen.
+     */
+
+    const organization = $derived(page.data.organization);
+</script>
+
+<footer class="mt-12 border-t border-border pt-6 text-sm text-fg-muted">
     <div class="flex flex-wrap items-center gap-3 justify-between">
         <div class="flex flex-wrap items-center gap-3">
-            <a href="https://edelweisspiraten-bremen.de/impressum" class="hover:text-blue-700" target="_blank" rel="noreferrer">Impressum</a>
-            <span class="text-gray-300">•</span>
-            <a href="https://edelweisspiraten-bremen.de/datenschutz" class="hover:text-blue-700" target="_blank" rel="noreferrer">Datenschutz</a>
+            <span>{organization?.name ?? ""}</span>
+            {#if organization?.imprintUrl}
+                <span class="text-fg-subtle" aria-hidden="true">•</span>
+                <a
+                    href={organization.imprintUrl}
+                    class="hover:text-primary transition"
+                    target="_blank"
+                    rel="noreferrer">Impressum</a
+                >
+            {/if}
+            {#if organization?.privacyUrl}
+                <span class="text-fg-subtle" aria-hidden="true">•</span>
+                <a
+                    href={organization.privacyUrl}
+                    class="hover:text-primary transition"
+                    target="_blank"
+                    rel="noreferrer">Datenschutz</a
+                >
+            {/if}
         </div>
-        <a
-                href="https://instagram.com/edelweisspiraten_cpd"
+        {#if organization?.instagramUrl}
+            <a
+                href={organization.instagramUrl}
                 target="_blank"
                 rel="noreferrer"
-                class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
-        >
-            <span class="bi bi-instagram"></span>
-            Instagram
-        </a>
+                class="inline-flex items-center gap-2 px-3 py-2 rounded-control border border-border bg-surface text-fg hover:bg-surface-muted transition"
+            >
+                <span class="bi bi-instagram" aria-hidden="true"></span>
+                Instagram
+            </a>
+        {/if}
     </div>
 </footer>

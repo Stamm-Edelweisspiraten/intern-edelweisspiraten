@@ -1,56 +1,72 @@
-import type { Actions, PageServerLoad } from "./$types";
 import { error, fail } from "@sveltejs/kit";
-import { getFinanceSettings, saveFinanceSettings } from "$lib/server/settingsService";
-import { hasPermission } from "$lib/server/permissionService";
+import type { Actions, PageServerLoad } from "./$types";
+import { getFinanceSettings, isValidIban, saveFinanceSettings } from "$lib/server/settingsService";
+import { requireAnyPermission } from "$lib/server/permissionGuard";
+import { matchesAnyPermission } from "$lib/permissions/match";
+import { parseEuro } from "$lib/money";
 
-const canView = (perms: string[]) =>
-    hasPermission(perms, "admin.*") || hasPermission(perms, "system.settings.view");
+/**
+ * Einstellungen der Kasse: Beitragssaetze und Bankverbindung.
+ *
+ * Die Bankdaten sind neu -- der Beitragsbescheid als PDF war bereits fertig
+ * umgesetzt und druckte einen Abschnitt "Bankverbindung", es gab aber
+ * nirgends einen Ort, an dem IBAN, BIC oder Kontoinhaber hinterlegt werden
+ * konnten. Entsprechend war das PDF an keine Route angeschlossen.
+ */
 
-const canUpdate = (perms: string[]) =>
-    hasPermission(perms, "admin.*") || hasPermission(perms, "system.settings.update");
-
-export const load: PageServerLoad = async ({ locals }) => {
-    const perms = locals.permissions ?? [];
-    if (!canView(perms)) {
-        throw error(403, "Keine Berechtigung");
-    }
-
-    const finance = await getFinanceSettings();
+export const load: PageServerLoad = async (event) => {
+    requireAnyPermission(event, ["admin.view", "system.settings.view"]);
 
     return {
-        finance,
-        canUpdate: canUpdate(perms)
+        finance: await getFinanceSettings(),
+        canUpdate: matchesAnyPermission(event.locals.permissions, [
+            "admin.view",
+            "system.settings.update"
+        ])
     };
 };
 
 export const actions: Actions = {
-    updateFinance: async ({ request, locals }) => {
-        const perms = locals.permissions ?? [];
-        if (!canUpdate(perms)) {
-            throw error(403, "Keine Berechtigung");
+    updateFinance: async (event) => {
+        requireAnyPermission(event, ["admin.view", "system.settings.update"]);
+
+        const form = await event.request.formData();
+        const contributions = { stamm: 0, gau: 0, landesmark: 0, bund: 0 };
+
+        for (const field of ["stamm", "gau", "landesmark", "bund"] as const) {
+            const value = parseEuro(String(form.get(`contrib_${field}`) ?? "0"));
+            if (value === null || value < 0) {
+                return fail(400, { error: `Der Beitrag "${field}" ist kein gültiger Betrag.` });
+            }
+            contributions[field] = value;
         }
 
-        const form = await request.formData();
+        // Bestehende Bankdaten mitnehmen, wenn das Formular sie nicht sendet --
+        // sonst wuerde ein Speichern der Beitragssaetze sie loeschen.
+        const current = await getFinanceSettings();
+        const iban = String(form.get("bank_iban") ?? current.bank.iban).replace(/\s+/g, "").toUpperCase();
 
-        const toNumber = (val: FormDataEntryValue | null) => {
-            const num = parseFloat((val ?? "").toString().replace(",", "."));
-            return isNaN(num) ? 0 : num;
-        };
+        if (iban && !isValidIban(iban)) {
+            return fail(400, { error: "Die IBAN ist nicht gültig." });
+        }
 
-        const finance = {
-            contributions: {
-                stamm: toNumber(form.get("contrib_stamm")),
-                gau: toNumber(form.get("contrib_gau")),
-                landesmark: toNumber(form.get("contrib_landesmark")),
-                bund: toNumber(form.get("contrib_bund"))
-            }
+        const bank = {
+            accountHolder: String(form.get("bank_accountHolder") ?? current.bank.accountHolder),
+            iban,
+            bic: String(form.get("bank_bic") ?? current.bank.bic).replace(/\s+/g, "").toUpperCase(),
+            bankName: String(form.get("bank_bankName") ?? current.bank.bankName),
+            creditorId: String(form.get("bank_creditorId") ?? current.bank.creditorId)
         };
 
         try {
-            await saveFinanceSettings(finance, locals.user?.userinfo?.email ?? "system");
-            return { success: true, finance };
-        } catch (err: any) {
-            return fail(500, { error: err?.message ?? "Speichern fehlgeschlagen." });
+            await saveFinanceSettings(
+                { contributions, bank },
+                event.locals.user?.email ?? "system"
+            );
+            return { success: "Die Einstellungen wurden gespeichert." };
+        } catch (err) {
+            console.error("Einstellungen konnten nicht gespeichert werden:", err);
+            return fail(500, { error: "Die Einstellungen konnten nicht gespeichert werden." });
         }
     }
 };

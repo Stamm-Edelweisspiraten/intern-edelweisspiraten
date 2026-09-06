@@ -1,91 +1,90 @@
 <script lang="ts">
-    export let data;
+    import { Alert, Button, Card, FormField, PageHeader, TextInput } from "$lib/components/ui";
+    import { formatEuro } from "$lib/money";
+    import type { ActionData, PageData } from "./$types";
 
-    type Dues = {
-        stamm: number;
-        gau: number;
-        landesmark: number;
-        bund: number;
-    };
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    type FormState = {
-        year: number;
-        dues: Dues;
-    };
+    const FIELDS = [
+        { key: "stamm", label: "Stamm" },
+        { key: "gau", label: "Gau" },
+        { key: "landesmark", label: "Landesmark" },
+        { key: "bund", label: "Bund" }
+    ] as const;
 
-    let form: FormState = {
-        year: data.currentYear ?? new Date().getFullYear(),
-        dues: { ...(data.defaultDues ?? { stamm: 0, gau: 0, landesmark: 0, bund: 0 }) }
-    };
+    /** Cents als Formularwert in Euro-Schreibweise. */
+    const asInput = (cents: number) => (cents / 100).toFixed(2).replace(".", ",");
 
-    const euro = (value: number) => `${value.toFixed(2)} EUR`;
+    let values = $state<Record<string, string>>(
+        Object.fromEntries(FIELDS.map((f) => [f.key, asInput(data.defaultDues[f.key])]))
+    );
+
+    const total = $derived(
+        FIELDS.reduce((sum, f) => {
+            const parsed = Number(String(values[f.key]).replace(",", "."));
+            return sum + (Number.isFinite(parsed) ? Math.round(parsed * 100) : 0);
+        }, 0)
+    );
 </script>
 
-<div class="max-w-3xl mx-auto mt-16">
-    <div class="flex items-center justify-between mb-6">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-900">Neues Geschaeftsjahr</h1>
-            <p class="text-gray-600 mt-1">Lege Beitragshoehen fest.</p>
-        </div>
-        <a href="/intern/finance" class="text-blue-600 font-semibold hover:text-blue-700 text-sm">
-            Zurueck zur Uebersicht
-        </a>
-    </div>
+<svelte:head><title>Neues Geschäftsjahr - Intern</title></svelte:head>
 
-    <form class="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-6" method="post" action="?/create">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">Jahr</label>
-                <input
+<div class="max-w-2xl mx-auto space-y-8">
+    <PageHeader
+        title="Neues Geschäftsjahr"
+        eyebrow="Kasse"
+        subtitle="Lege das Jahr und die Beitragssätze fest."
+        back={{ href: "/intern/finance" }}
+    />
+
+    {#if form?.error}
+        <Alert tone="danger" message={form.error} />
+    {/if}
+
+    <Card>
+        <form method="post" action="?/create" class="space-y-5">
+            <FormField label="Jahr" required>
+                {#snippet children({ id, describedBy })}
+                    <TextInput
+                        {id}
+                        {describedBy}
                         name="year"
                         type="number"
-                        min="2000"
-                        class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        bind:value={form.year}
-                />
-                <p class="text-xs text-gray-500 mt-1">Geschaeftsjahr (Kalenderjahr).</p>
-            </div>
-        </div>
+                        value={String(data.currentYear)}
+                        min={2000}
+                        max={data.currentYear + 5}
+                        required
+                    />
+                {/snippet}
+            </FormField>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="space-y-4">
-                <h2 class="text-lg font-semibold text-gray-900">Jahresbeitrag</h2>
-                <div class="space-y-3">
-                    <label class="flex items-center justify-between text-sm text-gray-700">
-                        <span>Stamm</span>
-                        <input name="dues_stamm" type="number" step="0.01" min="0" class="w-32 border border-gray-300 rounded-lg px-3 py-2"
-                               bind:value={form.dues.stamm} />
-                    </label>
-                    <label class="flex items-center justify-between text-sm text-gray-700">
-                        <span>Gau</span>
-                        <input name="dues_gau" type="number" step="0.01" min="0" class="w-32 border border-gray-300 rounded-lg px-3 py-2"
-                               bind:value={form.dues.gau} />
-                    </label>
-                    <label class="flex items-center justify-between text-sm text-gray-700">
-                        <span>Landesmark</span>
-                        <input name="dues_landesmark" type="number" step="0.01" min="0" class="w-32 border border-gray-300 rounded-lg px-3 py-2"
-                               bind:value={form.dues.landesmark} />
-                    </label>
-                    <label class="flex items-center justify-between text-sm text-gray-700">
-                        <span>Bund</span>
-                        <input name="dues_bund" type="number" step="0.01" min="0" class="w-32 border border-gray-300 rounded-lg px-3 py-2"
-                               bind:value={form.dues.bund} />
-                    </label>
+            <fieldset class="space-y-4">
+                <legend class="text-sm font-semibold text-fg-muted">Beitragssätze pro Mitglied</legend>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {#each FIELDS as field (field.key)}
+                        <FormField label={field.label}>
+                            {#snippet children({ id, describedBy })}
+                                <TextInput
+                                    {id}
+                                    {describedBy}
+                                    name={`dues_${field.key}`}
+                                    inputmode="decimal"
+                                    bind:value={values[field.key]}
+                                    placeholder="0,00"
+                                />
+                            {/snippet}
+                        </FormField>
+                    {/each}
                 </div>
-                <p class="text-xs text-gray-500">Aktueller Gesamtbetrag: {euro(form.dues.stamm + form.dues.gau + form.dues.landesmark + form.dues.bund)}</p>
-            </div>
-        </div>
+                <p class="text-sm text-fg-muted">
+                    Gesamtbeitrag: <strong class="text-fg">{formatEuro(total)}</strong>
+                </p>
+            </fieldset>
 
-        <div class="flex items-center gap-3">
-            <button
-                    type="submit"
-                    class="inline-flex items-center justify-center px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition"
-            >
-                Speichern
-            </button>
-            <a href="/intern/finance" class="text-gray-600 hover:text-gray-800 text-sm font-semibold">
-                Abbrechen
-            </a>
-        </div>
-    </form>
+            <div class="flex justify-end gap-3 pt-2">
+                <Button href="/intern/finance" variant="secondary">Abbrechen</Button>
+                <Button type="submit" variant="primary" icon="plus-circle">Anlegen</Button>
+            </div>
+        </form>
+    </Card>
 </div>

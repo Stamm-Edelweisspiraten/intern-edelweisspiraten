@@ -7,7 +7,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     const email = userinfo?.email ?? "";
 
     const dbUser = email ? await getUserByEmail(email) : null;
-    const memberIds: string[] = (dbUser?.memberIds ?? []).map((id: any) => id?.toString?.() ?? id).filter(Boolean);
+    const memberIds: string[] = dbUser?.memberIds ?? [];
     const members = memberIds.length ? await getMembersByIds(memberIds) : [];
 
     return {

@@ -1,30 +1,24 @@
 import { error } from "@sveltejs/kit";
-import { hasPermission } from "$lib/server/permissionService";
+import type { RequestHandler } from "./$types";
 import { getGroup } from "$lib/server/groupService";
-import { getMembersByGroup } from "$lib/server/memberService";
-import { createGroupMembersPdf } from "$lib/server/pdf/groupMembersPdf";
+import { requirePermissionForGroup } from "$lib/server/permissionGuard";
+import { deliverPdf } from "$lib/server/pdf/deliver";
 
-export async function GET({ params, locals }) {
-    if (!hasPermission(locals.permissions ?? [], "groups.view")) {
-        throw error(403, "Keine Berechtigung");
-    }
+/**
+ * Mitgliederliste einer Gruppe.
+ *
+ * Erzeugt über die zentrale Vorlagenliste; dieselbe Vorlage bedient
+ * `POST /api/v1/pdf/group-members`.
+ */
+export const GET: RequestHandler = async (event) => {
+    const group = await getGroup(event.params.id);
+    if (!group) throw error(404, "Gruppe nicht gefunden");
 
-    const group = await getGroup(params.id);
-    if (!group) {
-        throw error(404, "Gruppe nicht gefunden");
-    }
+    requirePermissionForGroup(event, "groups.view", group.id);
 
-    const members = await getMembersByGroup(params.id);
-
-    const pdfBuffer = await createGroupMembersPdf({
-        group,
-        members
-    });
-
-    return new Response(pdfBuffer, {
-        headers: {
-            "Content-Type": "application/pdf",
-            "Content-Disposition": `inline; filename="gruppe-${group.name}-mitglieder.pdf"`
-        }
-    });
-}
+    return deliverPdf(
+        "group-members",
+        { groupId: group.id },
+        { filename: `gruppe-${group.name}-mitglieder.pdf` }
+    );
+};

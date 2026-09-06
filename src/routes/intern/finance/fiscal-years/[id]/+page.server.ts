@@ -1,102 +1,135 @@
+import { error, fail } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
-import { error, fail, redirect } from "@sveltejs/kit";
-import { addTransaction, getFiscalYear } from "$lib/server/financeService";
-import { getAllMembers, getMember } from "$lib/server/memberService";
 import { requirePermission } from "$lib/server/permissionGuard";
+import { closeFiscalYear, getFiscalYear, updateDues } from "$lib/server/finance/yearService";
+import { computeOutstanding } from "$lib/server/finance/invoiceService";
+import { listTransactions, sumByDirection } from "$lib/server/finance/transactionService";
+import { listFinanceLogs } from "$lib/server/finance/journalService";
+import { previewDuesSeeding, seedYearlyDues } from "$lib/server/finance/duesSeeding";
+import { getOrdersForFiscalYear } from "$lib/server/orders/orderBilling";
+import { parseEuro } from "$lib/money";
+import { formatDateTime } from "$lib/format";
+import { matchesPermission } from "$lib/permissions/match";
+
+/**
+ * Jahresansicht der Kasse.
+ *
+ * Die Buchungsliste ist hier nur noch ein Auszug der letzten Vorgaenge; das
+ * vollstaendige Journal samt Filter und Erfassung liegt unter
+ * /intern/finance/journal. Diese Seite traegt Kennzahlen, Beitragssaetze,
+ * Bestellungen und den Jahresabschluss.
+ */
+
+const RECENT_LIMIT = 15;
 
 export const load: PageServerLoad = async (event) => {
     requirePermission(event, "finance.view");
-    const { params } = event;
-    const fiscalYear = await getFiscalYear(params.id);
-    if (!fiscalYear) {
-        throw error(404, "Fiscal year not found");
-    }
 
-    const members = await getAllMembers();
+    const year = await getFiscalYear(event.params.id);
+    if (!year) throw error(404, "Geschäftsjahr nicht gefunden");
 
-    const pendingInvoices = (fiscalYear.invoices ?? [])
-        .filter((inv) => (inv.status ?? "pending") === "pending")
-        .map((inv) => {
-            const paidSum = (fiscalYear.transactions ?? [])
-                .filter((tx) => tx.invoiceId === inv.id && (tx.status ?? "paid") === "paid")
-                .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-
-            return {
-                id: inv.id ?? "",
-                memberId: inv.memberId ?? "",
-                title: inv.member ?? "Unbekannt",
-                amount: Math.max((Number(inv.amount) || 0) - paidSum, 0),
-                payable: Number(inv.amount) || 0,
-                paid: paidSum,
-                type: inv.kind ?? "Sonstiges",
-                note: inv.note ?? "",
-                invoiceId: inv.id
-            };
-        })
-        .filter((item) => item.amount > 0);
-
-    const outstandingTotal = pendingInvoices.reduce((sum, item) => sum + item.amount, 0);
+    const [transactions, totals, outstanding, orders, logs, seedPreview] = await Promise.all([
+        listTransactions({ fiscalYearId: year.id, limit: RECENT_LIMIT }),
+        sumByDirection(year.id),
+        computeOutstanding({ fiscalYearId: year.id }),
+        getOrdersForFiscalYear(year.id),
+        listFinanceLogs(year.id, 10),
+        previewDuesSeeding(year.id)
+    ]);
 
     return {
-        fiscalYear,
-        outstanding: {
-            total: outstandingTotal,
-            items: pendingInvoices
-        },
-        actions: [] as { title: string; note?: string }[],
-        memberOrders: [] as { member: string; item: string; amount: number }[],
-        memberSuggestions: members.map((m: any) => ({
-            id: m._id?.toString?.() ?? m.id ?? "",
-            name: `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || "Unbekannt"
+        year,
+        transactions,
+        income: totals.income,
+        expense: totals.expense,
+        balance: totals.income - totals.expense,
+        outstandingTotal: outstanding.reduce((sum, invoice) => sum + invoice.outstanding, 0),
+        outstandingCount: outstanding.length,
+        // Ueber den gemeinsamen Matcher statt ueber Array.includes -- eine
+        // breitere Rolle wie "finance.*" blieb sonst unerkannt.
+        canManage: matchesPermission(event.locals.permissions, "finance.manage"),
+        canClose: matchesPermission(event.locals.permissions, "finance.close"),
+        canExport: matchesPermission(event.locals.permissions, "finance.export"),
+        seedPreview: seedPreview
+            ? { newCount: seedPreview.newCount, newTotal: seedPreview.newTotal }
+            : null,
+        memberOrders: orders.map((order) => ({
+            id: order.id,
+            number: order.number,
+            total: order.total,
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+            createdAt: order.createdAt.toISOString()
+        })),
+        activity: logs.map((log) => ({
+            id: log.id,
+            entity: log.entity,
+            action: log.action,
+            user: log.user,
+            at: formatDateTime(log.createdAt)
         }))
     };
 };
 
 export const actions: Actions = {
-    addTransaction: async (event) => {
+    /**
+     * Beiträge anlegen -- ausdrücklich statt als Nebenwirkung eines
+     * Seitenaufrufs.
+     */
+    seedDues: async (event) => {
         requirePermission(event, "finance.manage");
-        const { request, params } = event;
-        const form = await request.formData();
 
-        const fiscalYear = await getFiscalYear(params.id);
-        if (!fiscalYear) return fail(404, { error: "Fiscal year not found" });
-        if (fiscalYear.status === "archived") {
-            return fail(400, { error: "Archivierte Geschaeftsjahre koennen nicht bearbeitet werden." });
-        }
+        const result = await seedYearlyDues(event.params.id, event.locals.user?.email ?? "system");
+        if (!result.ok) return fail(400, { error: result.error });
 
-        const amount = Number(form.get("amount") ?? 0);
-        const date = form.get("date")?.toString() ?? "";
-        const direction = form.get("direction")?.toString() === "out" ? "out" : "in";
-        const kind = form.get("kind")?.toString() ?? "custom";
-        const memberInput = form.get("member")?.toString() ?? "";
-        const memberId = form.get("memberId")?.toString() ?? "";
-        const note = form.get("note")?.toString() ?? "";
+        return {
+            success:
+                result.created === 0
+                    ? "Es waren bereits alle Jahresbeiträge angelegt."
+                    : `${result.created} Jahresbeiträge wurden angelegt.`
+        };
+    },
 
-        if (!params.id) return fail(400, { error: "Missing fiscal year id" });
-        if (Number.isNaN(amount) || amount <= 0) return fail(400, { error: "Invalid amount" });
-        if (!date) return fail(400, { error: "Date is required" });
+    updateDues: async (event) => {
+        requirePermission(event, "finance.manage");
 
-        let memberName = memberInput || "Unbekannt";
-        if (memberId) {
-            const m = await getMember(memberId);
-            if (m) {
-                memberName = `${m.firstname ?? ""} ${m.lastname ?? ""}`.trim() || memberName;
+        const form = await event.request.formData();
+        const dues = { stamm: 0, gau: 0, landesmark: 0, bund: 0 };
+
+        for (const field of ["stamm", "gau", "landesmark", "bund"] as const) {
+            const value = parseEuro(String(form.get(`dues_${field}`) ?? "0"));
+            if (value === null || value < 0) {
+                return fail(400, { error: `Der Beitrag „${field}“ ist kein gültiger Betrag.` });
             }
+            dues[field] = value;
         }
 
-        const tx = await addTransaction(params.id, {
-            memberId: memberId || undefined,
-            member: memberName,
-            date,
-            direction,
-            kind,
-            amount,
-            note: note || undefined,
-            status: "paid"
+        const result = await updateDues(event.params.id, dues, event.locals.user?.email ?? "system");
+        if (!result.ok) return fail(400, { error: result.error });
+
+        return { success: "Die Beitragssätze wurden gespeichert." };
+    },
+
+    close: async (event) => {
+        // Der Jahresabschluss hat eine eigene Berechtigung; sie war bisher
+        // deklariert, aber an keiner Stelle erzwungen.
+        requirePermission(event, "finance.close");
+
+        const form = await event.request.formData();
+        const carryOver = form.get("carryOver") === "1";
+
+        const result = await closeFiscalYear(event.params.id, {
+            user: event.locals.user?.email ?? "system",
+            carryOverOpenInvoices: carryOver
         });
 
-        if (!tx) return fail(500, { error: "Could not save transaction" });
+        if (!result.ok) return fail(400, { error: result.error });
 
-        throw redirect(303, `/intern/finance/fiscal-years/${params.id}`);
+        return {
+            success:
+                result.carriedOver && result.carriedOver > 0
+                    ? `Das Geschäftsjahr wurde abgeschlossen. ${result.carriedOver} offene Posten wurden übertragen.`
+                    : "Das Geschäftsjahr wurde abgeschlossen."
+        };
     }
 };

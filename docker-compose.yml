@@ -1,0 +1,152 @@
+# Entwicklungsumgebung: Datenbank und Objektspeicher. Die Anwendung laeuft
+# daneben mit `npm run dev`.
+#
+#   docker compose up -d
+#   npm run db:migrate
+#   npm run storage:setup     # Bucket und Zugangsschluessel, ab in den Adminbereich
+#
+# Fuer den Betrieb zusaetzlich das Profil "app" starten:
+#   docker compose --profile app up -d
+# Das baut das Abbild aus dem Dockerfile, wendet die Migrationen an und
+# startet den Server auf Port 3000.
+#
+# Der Objektspeicher ist OPTIONAL. Ohne ihn liegen alle Dateien wie bisher in
+# der Datenbank; fuer einen Stamm reicht das. Wer ihn nicht braucht, laesst
+# `npm run storage:setup` einfach weg -- die Dienste kosten dann nur etwas
+# Arbeitsspeicher.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: ep-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: intern
+      POSTGRES_PASSWORD: intern
+      POSTGRES_DB: intern
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intern -d intern"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # S3-kompatibler Objektspeicher. Garage ist fuer genau diesen Fall gebaut:
+  # wenige Knoten, selbst betrieben, keine Cloud dahinter.
+  garage:
+    image: dxflrs/garage:v2.2.0
+    container_name: ep-garage
+    restart: unless-stopped
+    environment:
+      # Beide aus der .env -- sie duerfen nicht in garage.toml stehen, die
+      # Datei liegt in der Versionsverwaltung.
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET fehlt - siehe .env.example}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN fehlt - siehe .env.example}
+    volumes:
+      - ./docker/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    ports:
+      # S3-Schnittstelle. Die Anwendung spricht im Entwicklungsbetrieb
+      # http://localhost:3900 an.
+      - "3900:3900"
+      # Verwaltungsschnittstelle -- gebraucht von der Oberflaeche und von
+      # `npm run storage:setup`.
+      - "3903:3903"
+    healthcheck:
+      # Kein CMD-SHELL: das Abbild bringt keine Shell mit, es enthaelt nur
+      # das Programm selbst. `garage status` spricht ueber RPC mit dem Knoten
+      # und ist damit ein echtes Lebenszeichen, nicht nur ein offener Port.
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Bedienoberflaeche fuer Garage: Buckets, Schluessel, Rechte, Belegung.
+  # Nur fuer den Betreiber gedacht, nicht fuer die Mitglieder des Stamms.
+  garage-webui:
+    image: khairul169/garage-webui:latest
+    container_name: ep-garage-webui
+    restart: unless-stopped
+    depends_on:
+      garage:
+        condition: service_healthy
+    environment:
+      # Alles ueber die Umgebung, KEINE garage.toml hineinreichen: die
+      # Oberflaeche zieht die Datei vor, und darin steht der
+      # Verwaltungstoken bewusst nicht -- er kaeme sonst in die
+      # Versionsverwaltung. Mit gemounteter Datei laeuft sie in 400er.
+      API_BASE_URL: http://garage:3903
+      API_ADMIN_KEY: ${GARAGE_ADMIN_TOKEN}
+      S3_ENDPOINT_URL: http://garage:3900
+      S3_REGION: garage
+    ports:
+      - "3909:3909"
+
+  app:
+    profiles: ["app"]
+    build: .
+    restart: unless-stopped
+    environment:
+      # DATABASE_URL hat Vorrang vor den einzelnen DB_*-Variablen und vor
+      # der im Setup abgelegten Datei. Wer eine fremde Datenbank benutzt,
+      # ersetzt diese Zeile oder setzt stattdessen DB_HOST, DB_NAME, DB_USER,
+      # DB_PASSWORD, DB_PORT und DB_SSL.
+      DATABASE_URL: ${DATABASE_URL:-postgres://intern:intern@postgres:5432/intern}
+      # Beide je 32 Byte, base64: openssl rand -base64 32
+      SESSION_SECRET: ${SESSION_SECRET}
+      MFA_ENC_KEY: ${MFA_ENC_KEY}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+      # Muss mit PUBLIC_APP_URL uebereinstimmen. Ohne diese Angabe
+      # weist adapter-node jeden Formular-POST als CSRF mit 403 ab,
+      # sobald die Anwendung nicht unter genau der Adresse laeuft, die
+      # es aus den Kopfzeilen ableitet.
+      ORIGIN: ${ORIGIN:-${PUBLIC_APP_URL:-http://localhost:3000}}
+      # Ohne diese Angaben sieht die Anwendung nur die IP des Proxys, wodurch
+      # die Begrenzung der Anmeldeversuche pro IP wirkungslos waere.
+      ADDRESS_HEADER: ${ADDRESS_HEADER:-}
+      XFF_DEPTH: ${XFF_DEPTH:-}
+      # SMTP laesst sich auch im Adminbereich unter /intern/admin/email
+      # einstellen. Sind SMTP_HOST und SMTP_FROM hier gesetzt, haben sie
+      # Vorrang und die Adminseite zeigt die Werte nur noch an.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
+      SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
+      # none | starttls | tls. Ohne Angabe aus dem Port abgeleitet.
+      SMTP_ENCRYPTION: ${SMTP_ENCRYPTION:-}
+      # Obergrenze des Anfragekoerpers. adapter-node nimmt sonst 512K an --
+      # jeder Upload ueber dieser Groesse scheiterte mit 413, obwohl die
+      # Oberflaeche 10 MB je Datei zulaesst.
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-12M}
+      # Kommagetrennte Herkuenfte, die die REST-API aus einem Browser
+      # aufrufen duerfen. Leer bedeutet: kein Zugriff aus fremden Seiten.
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-}
+      # Objektspeicher. Im Container heisst der Dienst "garage", nicht
+      # "localhost" -- deshalb steht der Endpunkt hier und nicht nur im
+      # Adminbereich. Umgebungsvariablen haben Vorrang vor der Einstellung in
+      # der Datenbank; sind sie leer, gilt wieder der Adminbereich.
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://garage:3900}
+      S3_REGION: ${S3_REGION:-garage}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_PREFIX: ${S3_PREFIX:-}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      garage:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
+  garage-meta:
+  garage-data:

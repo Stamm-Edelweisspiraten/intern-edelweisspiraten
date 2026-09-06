@@ -1,95 +1,106 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
-    import type { SubmitFunction } from "@sveltejs/kit";
+    import { Alert, Button, Card, FormField, PageHeader, TextInput } from "$lib/components/ui";
+    import type { ActionData, PageData } from "./$types";
 
-    export let data;
+    let { data, form }: { data: PageData; form: ActionData } = $props();
 
-    let loading = false;
-
-    const onSubmit: SubmitFunction = () => {
-        loading = true;
-    };
+    let submitting = $state(false);
 </script>
 
-<div class="max-w-3xl mx-auto mt-12 p-10 bg-white rounded-2xl shadow-xl border border-gray-200">
+<svelte:head><title>Benutzer anlegen - Intern</title></svelte:head>
 
-    <h1 class="text-4xl font-bold mb-8 text-gray-900">
-        Neuen Benutzer anlegen
-    </h1>
+<div class="max-w-3xl mx-auto space-y-8">
+    <PageHeader
+        title="Benutzer anlegen"
+        eyebrow="Adminbereich"
+        subtitle="Der Zugang wird ohne Passwort angelegt. Die Person erhält einen Link zur Aktivierung."
+        back={{ href: "/intern/admin/user" }}
+    />
 
-    <form method="post" use:enhance={onSubmit} class="space-y-7">
+    {#if form?.error}
+        <Alert tone="danger" message={form.error} />
+    {/if}
 
-        <!-- NAME -->
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input
-                    name="name"
-                    type="text"
-                    required
-                    placeholder="Max Mustermann"
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
-                       focus:ring-2 focus:ring-blue-500 outline-none transition"
-            />
-        </div>
+    <Card>
+        <form
+            method="post"
+            action="?/createUser"
+            class="space-y-5"
+            use:enhance={() => {
+                submitting = true;
+                return async ({ update }) => {
+                    await update({ reset: false });
+                    submitting = false;
+                };
+            }}
+        >
+            <FormField label="Name" required>
+                {#snippet children({ id, describedBy })}
+                    <TextInput
+                        {id}
+                        {describedBy}
+                        name="name"
+                        value={form?.name ?? ""}
+                        placeholder="Max Mustermann"
+                        required
+                    />
+                {/snippet}
+            </FormField>
 
-        <!-- EMAIL -->
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
-            <input
-                    name="email"
-                    type="email"
-                    required
-                    placeholder="beispiel@mail.de"
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
-                       focus:ring-2 focus:ring-blue-500 outline-none transition"
-            />
-        </div>
+            <FormField label="E-Mail-Adresse" hint="Wird zugleich für die Anmeldung verwendet." required>
+                {#snippet children({ id, describedBy })}
+                    <TextInput
+                        {id}
+                        {describedBy}
+                        name="email"
+                        type="email"
+                        value={form?.email ?? ""}
+                        placeholder="name@example.org"
+                        required
+                    />
+                {/snippet}
+            </FormField>
 
-        <!-- GROUPS -->
-        <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">
-                Gruppen
-            </label>
+            <fieldset class="space-y-2">
+                <legend class="block text-sm font-semibold text-fg-muted mb-1">Kontoart</legend>
+                <div class="flex gap-3 flex-wrap">
+                    <label class="flex items-center gap-2 px-4 py-3 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition">
+                        <input type="radio" name="type" value="parent" checked />
+                        <span class="text-sm text-fg">Erwachsen / Eltern</span>
+                    </label>
+                    <label class="flex items-center gap-2 px-4 py-3 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition">
+                        <input type="radio" name="type" value="child" />
+                        <span class="text-sm text-fg">Kind</span>
+                    </label>
+                </div>
+            </fieldset>
 
-            <select
-                    name="groups"
-                    multiple
-                    class="w-full px-4 py-3 border rounded-lg bg-gray-50 focus:bg-white
-                       focus:ring-2 focus:ring-blue-500 outline-none transition h-48"
-            >
-                {#each data.groups as group}
-                    <option value={group.pk}>
-                        {group.name}
-                    </option>
-                {/each}
-            </select>
+            <fieldset class="space-y-2">
+                <legend class="block text-sm font-semibold text-fg-muted mb-1">Rollen</legend>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {#each data.roles as role (role.id)}
+                        <label
+                            class="flex items-start gap-3 px-4 py-3 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition"
+                        >
+                            <input type="checkbox" name="roles" value={role.id} class="mt-1 rounded-control border-border-strong" />
+                            <span class="min-w-0">
+                                <span class="block text-sm font-semibold text-fg">{role.name}</span>
+                                {#if role.description}
+                                    <span class="block text-xs text-fg-subtle">{role.description}</span>
+                                {/if}
+                            </span>
+                        </label>
+                    {/each}
+                </div>
+            </fieldset>
 
-            <p class="text-xs text-gray-500 mt-1">
-                Halte STRG (Windows/Linux) oder CMD (Mac), um mehrere auszuwählen.
-            </p>
-        </div>
-
-        <!-- ACTION BUTTONS -->
-        <div class="flex items-center gap-4 pt-4">
-            <a
-                    href="/intern/admin/user"
-                    class="px-5 py-3 bg-gray-100 hover:bg-gray-200 text-gray-900
-                       rounded-lg font-medium transition"
-            >
-                Abbrechen
-            </a>
-
-            <button
-                    type="submit"
-                    formaction="?/createUser"
-                    class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg
-                       font-medium transition shadow"
-                    disabled={loading}
-            >
-                {loading ? "Erstelle Benutzer..." : "Erstellen"}
-            </button>
-        </div>
-
-    </form>
-
+            <div class="flex justify-end gap-3 pt-2 flex-wrap">
+                <Button href="/intern/admin/user" variant="secondary">Abbrechen</Button>
+                <Button type="submit" variant="primary" loading={submitting} icon="person-plus">
+                    Anlegen und einladen
+                </Button>
+            </div>
+        </form>
+    </Card>
 </div>
