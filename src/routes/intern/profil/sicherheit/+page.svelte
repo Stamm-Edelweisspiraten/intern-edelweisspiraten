@@ -197,6 +197,21 @@
                     />
                 {/if}
             </div>
+        {:else if !data.hasEncryptionKey}
+            <!--
+                Kein Schluessel: die Einrichtung wuerde beim Absenden scheitern.
+                Statt einen Knopf anzubieten, der in einen Fehler laeuft, steht
+                hier, was dem Server fehlt und wie es zu beheben ist.
+            -->
+            <Alert
+                tone="warning"
+                title="Zwei-Faktor ist auf diesem Server nicht eingerichtet"
+                message="Es fehlt der Verschlüsselungsschlüssel APP_ENC_KEY. Ohne ihn lässt sich das Geheimnis der Authenticator-App nicht sicher ablegen. Wer den Server betreibt, erzeugt ihn mit „openssl rand -base64 32“, setzt ihn als Umgebungsvariable und startet die Anwendung neu."
+            />
+            <p class="text-sm text-fg-subtle mt-3">
+                Der Schlüssel wird einmal erzeugt und danach nie gewechselt: er verschlüsselt
+                auch die bereits hinterlegten Geheimnisse.
+            </p>
         {:else}
             <div class="space-y-4">
                 <p class="text-sm text-fg-muted">
