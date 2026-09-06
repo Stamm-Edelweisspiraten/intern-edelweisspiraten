@@ -19,6 +19,15 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# Laufzeitdaten: hier schreibt der Einrichtungsassistent die Datenbank-
+# Zugangsdaten (data/database.json, Ort ueber DB_CONFIG_FILE einstellbar).
+/data
+database.json
+
+# Ausgabe der Abnahmeskripte (Bildschirmfotos, heruntergeladene Dateien)
+/smoke
+/abnahme
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*

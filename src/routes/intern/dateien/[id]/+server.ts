@@ -4,6 +4,7 @@ import { requirePermission } from "$lib/server/permissionGuard";
 import { matchesPermission } from "$lib/permissions/match";
 import { getDocument, getFolder } from "$lib/server/documentService";
 import { readFile, signedUrlFor } from "$lib/server/fileStore";
+import { downloadHeaders } from "$lib/server/http/download";
 
 /**
  * Ein Dokument abrufen.
@@ -16,6 +17,9 @@ import { readFile, signedUrlFor } from "$lib/server/fileStore";
  * Liegt die Datei im Objektspeicher, wird auf eine kurzlebige Adresse dorthin
  * weitergeleitet: der Inhalt läuft dann nicht durch diesen Server. Sonst wird
  * er wie bisher selbst ausgeliefert.
+ *
+ * `?download=1` erzwingt das Herunterladen -- die Vorschau bindet dieselbe
+ * Adresse ohne den Parameter ein und bekommt dann `inline`.
  */
 export const GET: RequestHandler = async (event) => {
     requirePermission(event, "files.view");
@@ -31,23 +35,32 @@ export const GET: RequestHandler = async (event) => {
 
     if (!folder) throw error(403, "Keine Berechtigung");
 
-    const signed = await signedUrlFor(document.fileId);
-    if (signed) throw redirect(302, signed);
+    const forceDownload = event.url.searchParams.get("download") === "1";
+
+    /**
+     * Beim Objektspeicher entscheidet die vorsignierte Adresse selbst über
+     * Typ und Anzeige (siehe storage/index.ts). Ein erzwungener Download geht
+     * deshalb über die eigene Auslieferung -- die Kopfzeilen sollen dann von
+     * hier kommen und nicht vom Speicher.
+     */
+    if (!forceDownload) {
+        const signed = await signedUrlFor(document.fileId, { filename: document.filename });
+        if (signed) throw redirect(302, signed);
+    }
 
     const stored = await readFile(document.fileId);
     if (!stored) throw error(404, "Datei nicht gefunden");
 
-    const safe = document.filename.replace(/["\\\r\n]/g, "");
-
     return new Response(new Uint8Array(stored.content), {
         status: 200,
-        headers: {
-            "Content-Type": document.contentType || "application/octet-stream",
-            "Content-Disposition": `inline; filename="${safe}"`,
-            "Content-Length": String(stored.content.byteLength),
+        headers: downloadHeaders({
+            contentType: document.contentType,
+            filename: document.filename,
+            length: stored.content.byteLength,
+            forceDownload,
             // Freigegebene Unterlagen gehoeren nicht in einen Zwischenspeicher,
             // den ein spaeterer Besucher desselben Geraets noch findet.
-            "Cache-Control": "private, no-store"
-        }
+            cacheControl: "private, no-store"
+        })
     });
 };

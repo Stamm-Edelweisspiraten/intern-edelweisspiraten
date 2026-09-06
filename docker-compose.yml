@@ -90,20 +90,40 @@ services:
     build: .
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgres://intern:intern@postgres:5432/intern
+      # DATABASE_URL hat Vorrang vor den einzelnen DB_*-Variablen und vor
+      # der im Setup abgelegten Datei. Wer eine fremde Datenbank benutzt,
+      # ersetzt diese Zeile oder setzt stattdessen DB_HOST, DB_NAME, DB_USER,
+      # DB_PASSWORD, DB_PORT und DB_SSL.
+      DATABASE_URL: ${DATABASE_URL:-postgres://intern:intern@postgres:5432/intern}
       # Beide je 32 Byte, base64: openssl rand -base64 32
       SESSION_SECRET: ${SESSION_SECRET}
       MFA_ENC_KEY: ${MFA_ENC_KEY}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+      # Muss mit PUBLIC_APP_URL uebereinstimmen. Ohne diese Angabe
+      # weist adapter-node jeden Formular-POST als CSRF mit 403 ab,
+      # sobald die Anwendung nicht unter genau der Adresse laeuft, die
+      # es aus den Kopfzeilen ableitet.
+      ORIGIN: ${ORIGIN:-${PUBLIC_APP_URL:-http://localhost:3000}}
       # Ohne diese Angaben sieht die Anwendung nur die IP des Proxys, wodurch
       # die Begrenzung der Anmeldeversuche pro IP wirkungslos waere.
       ADDRESS_HEADER: ${ADDRESS_HEADER:-}
       XFF_DEPTH: ${XFF_DEPTH:-}
+      # SMTP laesst sich auch im Adminbereich unter /intern/admin/email
+      # einstellen. Sind SMTP_HOST und SMTP_FROM hier gesetzt, haben sie
+      # Vorrang und die Adminseite zeigt die Werte nur noch an.
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
+      SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
+      # none | starttls | tls. Ohne Angabe aus dem Port abgeleitet.
+      SMTP_ENCRYPTION: ${SMTP_ENCRYPTION:-}
+      # Obergrenze des Anfragekoerpers. adapter-node nimmt sonst 512K an --
+      # jeder Upload ueber dieser Groesse scheiterte mit 413, obwohl die
+      # Oberflaeche 10 MB je Datei zulaesst.
+      BODY_SIZE_LIMIT: ${BODY_SIZE_LIMIT:-12M}
       # Kommagetrennte Herkuenfte, die die REST-API aus einem Browser
       # aufrufen duerfen. Leer bedeutet: kein Zugriff aus fremden Seiten.
       API_CORS_ORIGINS: ${API_CORS_ORIGINS:-}

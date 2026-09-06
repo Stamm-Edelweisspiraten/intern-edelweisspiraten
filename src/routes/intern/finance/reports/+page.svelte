@@ -223,7 +223,7 @@
                 </table>
             </div>
 
-            <MonthlyBarChart months={data.monthly.months} />
+            <MonthlyBarChart months={data.monthly.months} title="" />
         </div>
     </Card>
 
@@ -264,41 +264,46 @@
             subtitle="Ideeller Bereich, Vermögensverwaltung, Zweckbetrieb und wirtschaftlicher Geschäftsbetrieb werden getrennt ausgewiesen."
         >
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-            <div class="min-w-0">
-            <DataTable
-                columns={[
-                    {
-                        key: "sphere",
-                        label: "Bereich",
-                        value: (s) => SPHERE_LABELS[s.sphere]
-                    },
-                    {
-                        key: "income",
-                        label: "Erträge",
-                        align: "right",
-                        value: (s) => formatEuro(s.income)
-                    },
-                    {
-                        key: "expense",
-                        label: "Aufwendungen",
-                        align: "right",
-                        value: (s) => formatEuro(s.expense)
-                    },
-                    {
-                        key: "result",
-                        label: "Ergebnis",
-                        align: "right",
-                        value: (s) => formatEuro(s.result)
-                    }
-                ] satisfies Column<PageData["profit"]["bySphere"][number]>[]}
-                rows={data.profit.bySphere}
-                getKey={(s) => s.sphere}
-                cardTitle={(s) => SPHERE_LABELS[s.sphere]}
-                empty="Keine Bewegungen."
-            />
-            </div>
+                <div class="min-w-0">
+                    <DataTable
+                        columns={[
+                            {
+                                key: "sphere",
+                                label: "Bereich",
+                                value: (s) => SPHERE_LABELS[s.sphere]
+                            },
+                            {
+                                key: "income",
+                                label: "Erträge",
+                                align: "right",
+                                value: (s) => formatEuro(s.income)
+                            },
+                            {
+                                key: "expense",
+                                label: "Aufwendungen",
+                                align: "right",
+                                value: (s) => formatEuro(s.expense)
+                            },
+                            {
+                                key: "result",
+                                label: "Ergebnis",
+                                align: "right",
+                                value: (s) => formatEuro(s.result)
+                            }
+                        ] satisfies Column<PageData["profit"]["bySphere"][number]>[]}
+                        rows={data.profit.bySphere}
+                        getKey={(s) => s.sphere}
+                        cardTitle={(s) => SPHERE_LABELS[s.sphere]}
+                        empty="Keine Bewegungen."
+                    />
+                </div>
 
-                <SphereDonutChart spheres={spheresForChart} />
+                <!--
+                    Der Ring zeigt die Erträge, nicht das Ergebnis -- deshalb
+                    behält er hier eine eigene Überschrift, obwohl die Karte
+                    schon eine trägt.
+                -->
+                <SphereDonutChart spheres={spheresForChart} title="Erträge je Bereich" />
             </div>
         </Card>
     {/if}
@@ -450,17 +455,19 @@
         meta={`Stand ${formatDate(data.aging.at)}`}
     >
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-            <DataTable
-                columns={[
-                    { key: "label", label: "Zeitraum", value: (b) => b.label },
-                    { key: "count", label: "Posten", align: "right", value: (b) => b.count },
-                    { key: "amount", label: "Betrag", align: "right", cell: bucketCell }
-                ] satisfies Column<Bucket>[]}
-                rows={data.aging.buckets}
-                getKey={(b) => b.label}
-                cardTitle={(b) => b.label}
-                empty="Alle Forderungen sind ausgeglichen."
-            />
+            <div class="min-w-0">
+                <DataTable
+                    columns={[
+                        { key: "label", label: "Zeitraum", value: (b) => b.label },
+                        { key: "count", label: "Posten", align: "right", value: (b) => b.count },
+                        { key: "amount", label: "Betrag", align: "right", cell: bucketCell }
+                    ] satisfies Column<Bucket>[]}
+                    rows={data.aging.buckets}
+                    getKey={(b) => b.label}
+                    cardTitle={(b) => b.label}
+                    empty="Alle Forderungen sind ausgeglichen."
+                />
+            </div>
 
             <AgingBarChart buckets={data.aging.buckets} title="" />
         </div>

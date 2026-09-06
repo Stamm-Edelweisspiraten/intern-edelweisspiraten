@@ -37,6 +37,32 @@ begründete Ausnahme im Projekt ist die weiße Fläche hinter dem QR-Code der
 Zwei-Faktor-Einrichtung – ein QR-Code auf dunklem Grund ist von vielen
 Kamera-Apps nicht lesbar.
 
+### Terminfarben sind eine eigene Reihe
+
+Ein Termin trägt eine frei wählbare Farbe (`events.color`). Sie kennzeichnet die
+**Art** des Termins – Gruppenstunde, Fahrt, Elternabend – und ist damit etwas
+anderes als der **Status**, den die semantischen Tokens tragen. Beide Reihen zu
+vermischen ginge schief: ein abgesagter roter Termin wäre von einem roten
+laufenden nicht zu unterscheiden.
+
+Deshalb acht eigene Farben in `src/lib/events/colors.ts`, je drei CSS-Variablen
+in `layout.css`, getrennt für hell und dunkel:
+
+| Variable | Wofür |
+|---|---|
+| `--event-<key>` | Kräftig – Punkte im Kalender, Farbstreifen an der Zeile |
+| `--event-<key>-soft` | Fläche |
+| `--event-<key>-soft-fg` | Schrift darauf, mindestens 4,5:1 |
+
+**Klassennamen werden nie zusammengesetzt.** `bg-event-{key}` findet Tailwind
+beim Bauen nicht und lässt die Regel weg. Die Farbe kommt als Inline-Stil über
+`eventColorVars(key)` und danach `style="background: var(--ev-soft)"` – dasselbe
+Verfahren wie bei `box-shadow: var(--shadow-card)`.
+
+**Farbe ist nie das einzige Unterscheidungsmerkmal.** Die Farbauswahl zeigt zu
+jedem Feld den deutschen Namen, und im Kalender steht neben dem Farbpunkt immer
+der Titel.
+
 ### Graustufen sind neutral
 
 Beide Modi laufen auf einer **neutralen** Graustufenreihe. Der Dunkelmodus lag
@@ -101,6 +127,7 @@ Eine lauffähige Übersicht aller Komponenten in hell und dunkel liegt unter
 | `Alert` | Rückmeldungen, insbesondere `form?.error` und `form?.success` |
 | `FormField` | Label, Feld, Hinweis und Fehler – erzeugt `id`/`for` selbst |
 | `TextInput` | Einzeiliges Eingabefeld |
+| `Textarea` | Mehrzeiliges Eingabefeld. **Kein rohes `<textarea>` mehr** – der Klassenstring stand viermal von Hand in Routen, jedes Mal mit `rounded-xl` und ohne Fehlerzustand |
 | `Select` | Auswahlfeld. **Kein rohes `<select>` mehr** – der Klassenstring war 45-fach kopiert |
 | `RichTextEditor` | Formatierter Text (Quill, lokal eingebunden) |
 | `Modal` | Dialog mit `role="dialog"`, Fokus-Falle, Escape und Scroll-Sperre |
@@ -145,9 +172,31 @@ Drei Regeln, die ohne Ausnahme gelten:
    `series[].color`) – sonst vergibt die Bibliothek eine eigene Palette und
    die Legende zeigt etwas anderes als die Fläche daneben.
 
-Bei schmalen Fenstern brauchen waagerechte Balken festen Platz für ihre
-Beschriftung (`padding.left`) und gekürzte Namen; sonst schneidet die
-Bibliothek sie am Rand ab.
+Alles Gemeinsame steht in `colors.ts` und wird nicht je Diagramm neu
+erfunden:
+
+| Baustein | Wofür |
+|---|---|
+| `CHART_COLORS`, `CHART_SERIES`, `seriesColor()` | Semantische Zuordnung und Reihenfolge mehrerer Reihen |
+| `agingColor()` | Abstufung `warning` → `danger` mit steigender Fälligkeit, über `color-mix` aus den Tokens |
+| `axisEuro()`, `axisEuroCompact()` | Achsenbeschriftung; die gekürzte Fassung erst ab 10.000, weil „1.200 €“ kürzer liest als „1,2 Tsd. €“ |
+| `chartTooltip()`, `tooltipEuro()` | Kurzinfo aus Tokens, damit sie hell wie dunkel lesbar bleibt |
+| `CHART_GRID`, `CHART_AXIS`, `CHART_PADDING` | Dezente Gitterlinien, Achsen und Abstände |
+| `charsPerBand()` | Wie viele Zeichen eine Achsenbeschriftung tragen darf |
+
+**Höhen kommen aus `size`** (`sm` 180, `md` 240, `lg` 300), nicht aus frei
+gewählten Zahlen. `ChartFrame` misst seine Breite selbst und reicht sie an das
+Diagramm weiter; daraus entscheidet `charsPerBand()` für die **ganze** Achse,
+ob voller Name, Kürzel oder Anfangsbuchstabe angezeigt wird. Waagerechte Balken
+berechnen ihren linken Rand aus der längsten tatsächlich gezeigten
+Beschriftung und deckeln ihn bei einem Drittel der Breite — sonst schneidet die
+Bibliothek die Namen am Rand ab. Gekürzt wird immer nur die Achse, nie die
+Daten: die Kurzinfo zeigt den vollen Namen.
+
+Eine Farbe je Balken geht über `c` + `cDomain` + `cRange`, so wie beim Ring.
+Die Reihe darf dann **keine** eigene `color` tragen (`Bars.base` wertet
+`fill ?? series.color ?? cGet(d)` aus, die Reihenfarbe gewänne sonst), und
+`seriesLayout="overlap"` verhindert, dass `"auto"` bei ordinalem `c` stapelt.
 
 ---
 
@@ -265,7 +314,8 @@ demselben Symbol gezeigt (`SHARE_TARGET_LABELS`, `SHARE_TARGET_ICONS` in
 - [ ] Svelte-5-Runes (`$props`, `$state`, `$derived`), kein `export let`, kein `on:click`
 - [ ] `import type { ActionData, PageData } from "./$types"`
 - [ ] Kein `export const csr = false`
-- [ ] Komponenten statt kopierter Klassenstrings, `Select` statt rohem `<select>`
+- [ ] Komponenten statt kopierter Klassenstrings, `Select` statt rohem `<select>`,
+      `Textarea` statt rohem `<textarea>`
 - [ ] Ausschließlich semantische Farb-Tokens
 - [ ] `rounded-card` / `rounded-control` statt `rounded-xl`
 - [ ] Beträge mit `tabular-figures`

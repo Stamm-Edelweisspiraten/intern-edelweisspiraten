@@ -6,6 +6,7 @@ import {
     S3Client
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { contentDisposition, isInlineType } from "$lib/server/http/download";
 import { getStorageConfig, isConfigured, type StorageConfig } from "./settings";
 
 /**
@@ -34,8 +35,13 @@ export interface ObjectStore {
     /**
      * Eine zeitlich begrenzte Adresse, unter der der Browser die Datei direkt
      * beim Speicher holt. `null` heißt: über eine eigene Route ausliefern.
+     *
+     * Der Typ gehört mit dazu: der Speicher liefert unter SEINEM Ursprung
+     * aus, die Kopfzeilen der Anwendung greifen dort nicht. Was der Browser
+     * anzeigen darf und was er herunterladen soll, muss deshalb schon in der
+     * Adresse stehen.
      */
-    signedUrl(key: string, filename: string): Promise<string | null>;
+    signedUrl(key: string, filename: string, contentType?: string): Promise<string | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,20 +134,29 @@ function s3Store(config: StorageConfig): ObjectStore {
             }
         },
 
-        async signedUrl(key, filename) {
+        async signedUrl(key, filename, contentType) {
             /**
              * Der Dateiname wird mitgegeben, damit der Browser beim Speichern
-             * nicht den Objektschlüssel als Namen nimmt. Anführungszeichen im
-             * Namen würden den Kopf zerlegen, deshalb weg damit.
+             * nicht den Objektschlüssel als Namen nimmt. Die Kopfzeile baut
+             * jetzt `contentDisposition()` -- dieselbe Funktion wie in allen
+             * eigenen Routen. Vorher wurde sie hier von Hand zusammengesetzt
+             * und filterte nur Anführungszeichen; Umlaute gingen verloren und
+             * jeder anzeigbare wie nicht anzeigbare Typ wurde `inline`
+             * ausgeliefert.
+             *
+             * `ResponseContentType` ist der zweite Teil: ohne ihn rät der
+             * Speicher den Typ aus der Endung des Schlüssels -- und der
+             * Schlüssel ist eine UUID ohne Endung.
              */
-            const safe = filename.replace(/["\\\r\n]/g, "");
+            const disposition = isInlineType(contentType) ? "inline" : "attachment";
 
             return getSignedUrl(
                 client,
                 new GetObjectCommand({
                     Bucket: config.bucket,
                     Key: key,
-                    ResponseContentDisposition: `inline; filename="${safe}"`
+                    ResponseContentDisposition: contentDisposition(filename, disposition),
+                    ResponseContentType: contentType || "application/octet-stream"
                 }),
                 { expiresIn: 300 }
             );

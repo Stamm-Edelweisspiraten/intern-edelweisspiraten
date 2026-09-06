@@ -117,6 +117,8 @@ const pages = [
     { path: "/intern/dashboard", expect: "Nächste Termine", shot: "dashboard" },
     { path: "/intern/termine", expect: "Termine", shot: "termine-liste" },
     { path: "/intern/termine?ansicht=monat", expect: "Mo", shot: "termine-monat" },
+    { path: "/intern/umfragen", expect: "Umfragen", shot: "umfragen" },
+    { path: "/intern/galerie", expect: "Galerie", shot: "galerie" },
     { path: "/intern/dateien", expect: "Dateien", shot: "dateien" },
     { path: "/intern/profil/kalender", expect: "Kalender abonnieren", shot: "kalender" },
     { path: "/intern/admin/speicher", expect: "Objektspeicher", shot: "speicher" },
@@ -154,6 +156,109 @@ if (await eventLink.count()) {
     const body = await page.locator("body").innerText();
     check("Termindetail zeigt Rückmeldungen", body.includes("Rückmeldung"));
     await page.screenshot({ path: `${OUT}/termin-detail.png`, fullPage: true });
+}
+
+// --- Umfrage und Galerie im Detail -------------------------------------------
+/*
+ * Die Demodaten legen genau eine Umfrage und eine Galerie an. Geprueft wird
+ * hier die Detailseite, weil dort das Formular je Feldtyp entsteht -- ein
+ * Fehler in einem Feldtyp faellt auf der Uebersicht nicht auf.
+ */
+/*
+ * Angesteuert wird ueber die Adresse aus dem Link, nicht per Klick: DataTable
+ * legt Tabelle UND Karten in den Baum und blendet je nach Breite eine der
+ * beiden aus. Ein Klick auf den ersten Treffer der Reihenfolge trifft damit
+ * womoeglich ein unsichtbares Element -- die Adresse ist in beiden Faellen
+ * dieselbe.
+ */
+async function openFirst(listPath, prefix, name) {
+    await page.goto(`${BASE}${listPath}`, { waitUntil: "networkidle" });
+
+    const href = await page
+        .locator(`a[href^="${prefix}"]`)
+        .first()
+        .getAttribute("href")
+        .catch(() => null);
+
+    if (!href) {
+        check(`${name} vorhanden`, false, "kein Eintrag in den Demodaten gefunden");
+        return false;
+    }
+
+    const response = await page.goto(`${BASE}${href}`, { waitUntil: "networkidle" });
+    check(`${name}: Detailseite (${response?.status() ?? 0})`, response?.status() === 200);
+    return true;
+}
+
+if (await openFirst("/intern/umfragen", "/intern/umfragen/", "Umfrage")) {
+    const body = await page.locator("body").innerText();
+    // Die Demoumfrage traegt alle fuenf Feldtypen; die erste Frage steht fuer sie.
+    check("Umfrage zeigt ihre Fragen", body.includes("Wie kommst du zum Zeltplatz"));
+    await page.screenshot({ path: `${OUT}/umfrage-detail.png`, fullPage: true });
+}
+
+if (await openFirst("/intern/galerie", "/intern/galerie/", "Galerie")) {
+    const body = await page.locator("body").innerText();
+    // Leere Galerie: der leere Zustand muss stehen, nicht eine leere Flaeche.
+    check("Galerie zeigt den leeren Zustand", body.includes("Noch keine Bilder"));
+    await page.screenshot({ path: `${OUT}/galerie-detail.png`, fullPage: true });
+
+    /*
+     * Ein Bild ueber das echte Dateifeld hochladen.
+     *
+     * Das ist der einzige Weg, den Vorschaubild-Pfad zu pruefen: die
+     * Verkleinerung entsteht im Browser (canvas -> toBlob) und wird als
+     * zweite Datei mitgeschickt. Ein Test auf der Serverseite kann das nicht
+     * zeigen -- dort kommt das fertige Vorschaubild einfach an.
+     */
+    const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64"
+    );
+
+    const fileInput = page.locator('input[type="file"]').first();
+
+    if (await fileInput.count()) {
+        await fileInput.setInputFiles({
+            name: "smoke.png",
+            mimeType: "image/png",
+            buffer: png
+        });
+        // Der Upload laeuft ueber XHR; abgewartet wird auf die Anzeige.
+        await page
+            .waitForFunction(() => !document.body.innerText.includes("Noch keine Bilder"), {
+                timeout: 15_000
+            })
+            .catch(() => {});
+
+        const shown = await page.locator("body").innerText();
+        check("Bild hochgeladen und angezeigt", !shown.includes("Noch keine Bilder"));
+        await page.screenshot({ path: `${OUT}/galerie-mit-bild.png`, fullPage: true });
+
+        if (process.env.SMOKE_DB_CONTAINER) {
+            const thumb = execFileSync("docker", [
+                "exec",
+                process.env.SMOKE_DB_CONTAINER,
+                "psql",
+                "-U",
+                "intern",
+                "-d",
+                "intern",
+                "-tAc",
+                "select coalesce(thumb_file_id::text, 'keins') from gallery_images limit 1"
+            ])
+                .toString()
+                .trim();
+
+            check(
+                "Vorschaubild im Browser erzeugt",
+                thumb !== "keins" && thumb !== "",
+                "thumb_file_id ist leer -- die Verkleinerung kam nicht an"
+            );
+        }
+    } else {
+        check("Dateifeld der Galerie vorhanden", false, "kein input[type=file] gefunden");
+    }
 }
 
 // --- PDF-Vorlagen über die API ----------------------------------------------

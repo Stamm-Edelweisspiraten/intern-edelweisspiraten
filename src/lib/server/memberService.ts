@@ -429,6 +429,12 @@ export async function deleteMember(id: string, deletedBy?: string): Promise<bool
     // Zuordnungen und Unterlagen verschwinden ueber die Fremdschluessel mit.
     const rows = await db.delete(members).where(eq(members.id, id)).returning({ id: members.id });
 
+    // Der Protokolleintrag stand vorher bedingungslos hier: eine zweite
+    // Anfrage auf dieselbe Kennung -- doppelter Klick, erneutes Absenden --
+    // schrieb einen weiteren "geloescht"-Eintrag, obwohl nichts geloescht
+    // wurde. Das Protokoll wies damit mehr Loeschungen aus, als es gab.
+    if (rows.length === 0) return false;
+
     await addMemberLog({
         memberId: id,
         action: "delete",
@@ -436,7 +442,7 @@ export async function deleteMember(id: string, deletedBy?: string): Promise<bool
         user: deletedBy ?? "system"
     });
 
-    return rows.length > 0;
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -585,11 +591,18 @@ async function generateInviteCode(executor: Executor = db): Promise<string> {
     throw new Error("Es konnte kein freier Einladungscode gefunden werden.");
 }
 
+/**
+ * Vergibt einen frischen Einladungscode.
+ *
+ * War exportiert, aber von keiner Route erreichbar -- ein nach
+ * INVITE_CODE_TTL_DAYS abgelaufener Code liess sich damit gar nicht erneuern.
+ * Angebunden ist sie jetzt an die Sammelaktion der Mitgliederliste.
+ */
 export async function assignInviteCode(memberId: string): Promise<string> {
     if (!isUuid(memberId)) throw new Error("Ungültige Kennung.");
 
     const inviteCode = await generateInviteCode();
-    await db
+    const rows = await db
         .update(members)
         .set({
             inviteCode,
@@ -597,9 +610,25 @@ export async function assignInviteCode(memberId: string): Promise<string> {
             // Vorher: null -- der Code lief nie ab.
             inviteCodeExpiresAt: inviteExpiry()
         })
-        .where(eq(members.id, memberId));
+        .where(eq(members.id, memberId))
+        .returning({ id: members.id });
+
+    // Ohne diese Pruefung meldete die Funktion auch fuer eine unbekannte
+    // Kennung einen Code, der zu keinem Mitglied gehoert.
+    if (rows.length === 0) throw new Error("Mitglied nicht gefunden.");
 
     return inviteCode;
+}
+
+/** Ist der Code eines Mitglieds noch gueltig? */
+export function inviteCodeState(member: Member): "gueltig" | "abgelaufen" | "fehlt" {
+    if (!member.inviteCode) return "fehlt";
+    if (!member.inviteCodeExpiresAt) return "gueltig";
+
+    const expires = new Date(member.inviteCodeExpiresAt);
+    if (Number.isNaN(expires.getTime())) return "gueltig";
+
+    return expires.getTime() > Date.now() ? "gueltig" : "abgelaufen";
 }
 
 export async function getMemberByInviteCode(code: string): Promise<Member | null> {

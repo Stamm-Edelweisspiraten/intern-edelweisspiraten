@@ -139,6 +139,29 @@ function dateOnly(date: Date): string {
     return date.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
+/**
+ * Farbschlüssel des Termins -> CSS-Farbname.
+ *
+ * `COLOR` aus RFC 7986 verlangt einen CSS3-Farbnamen, keinen Hexwert -- die
+ * CSS-Variablen aus `layout.css` sind hier also nicht verwendbar, und ein
+ * Kalenderprogramm könnte sie ohnehin nicht auflösen. Die Zuordnung ist fest
+ * und absichtlich grob: es geht darum, dass ein blauer Termin im Abonnement
+ * blau bleibt, nicht um denselben Farbton.
+ *
+ * `X-APPLE-CALENDAR-COLOR` steht daneben, weil Apple `COLOR` bis heute
+ * ignoriert.
+ */
+const CALENDAR_COLORS: Record<string, string> = {
+    blau: "blue",
+    gruen: "green",
+    rot: "red",
+    orange: "orange",
+    gelb: "yellow",
+    violett: "purple",
+    tuerkis: "teal",
+    grau: "gray"
+};
+
 export interface CalendarOptions {
     /** Erscheint als Kalendername im Programm. */
     name: string;
@@ -190,7 +213,27 @@ export function buildCalendar(events: EventEntry[], options: CalendarOptions): s
 
         lines.push(`SUMMARY:${escapeText(event.title)}`);
         if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);
-        if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`);
+
+        /**
+         * Teilnehmerangaben nur, wenn bei diesem Termin überhaupt zu- und
+         * abgesagt wird. Sonst stünde im Kalender „0 Zusagen“ an einer
+         * Stammesversammlung, die gar keine Rückmeldung kennt.
+         */
+        const total = event.counts.yes + event.counts.no + event.counts.maybe;
+        const attendance =
+            event.responsesEnabled && total > 0
+                ? `Rückmeldungen: ${event.counts.yes} Zusagen, ${event.counts.maybe} Vielleicht, ${event.counts.no} Absagen`
+                : "";
+
+        const description = [event.description, attendance].filter(Boolean).join("\n\n");
+        if (description) lines.push(`DESCRIPTION:${escapeText(description)}`);
+
+        // Die Farbe des Termins wandert ins Abonnement mit.
+        const color = CALENDAR_COLORS[event.color];
+        if (color) {
+            lines.push(`COLOR:${color}`);
+            lines.push(`X-APPLE-CALENDAR-COLOR:${color}`);
+        }
 
         lines.push(`URL:${options.baseUrl}/intern/termine/${event.id}`);
 

@@ -20,6 +20,13 @@
         autocomplete?: HTMLInputElement["autocomplete"];
         inputmode?: "text" | "numeric" | "decimal" | "email" | "tel";
         class?: string;
+        /**
+         * Wird bei jeder Eingabe gerufen -- fuer Anzeigen, die mitlaufen
+         * (Zeichenzaehler, Fortschritt). Dieselbe Machart wie `onchange` beim
+         * `Select`; `bind:value` bleibt der uebliche Weg und ist davon
+         * unberuehrt.
+         */
+        oninput?: (event: Event & { currentTarget: HTMLInputElement }) => void;
     }
 
     let {
@@ -40,6 +47,7 @@
         maxlength,
         autocomplete,
         inputmode,
+        oninput,
         class: extraClass = ""
     }: Props = $props();
 
@@ -74,5 +82,6 @@
     aria-invalid={invalid || undefined}
     aria-describedby={describedBy}
     class={classes}
+    {oninput}
     bind:value
 />

@@ -4,6 +4,7 @@ import { isUuid } from "$lib/server/db/ids";
 import { accounts, financeLogs, journalLines } from "$lib/server/db/schema";
 import type { Cents } from "$lib/money";
 import type { AccountSphere, AccountType, AccountView } from "./types";
+import { isUniqueViolation } from "$lib/server/db/errors";
 
 /**
  * Kontenplan.
@@ -99,7 +100,7 @@ export async function createAccount(
 
         return { ok: true, account: toAccountView(row) };
     } catch (err: unknown) {
-        if ((err as { code?: string })?.code === "23505") {
+        if (isUniqueViolation(err)) {
             return { ok: false, error: `Das Konto ${number} existiert bereits.` };
         }
         throw err;

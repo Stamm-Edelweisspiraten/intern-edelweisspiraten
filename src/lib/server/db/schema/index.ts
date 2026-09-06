@@ -6,6 +6,8 @@ export * from "./auth";
 export * from "./members";
 export * from "./files";
 export * from "./events";
+export * from "./surveys";
+export * from "./gallery";
 export * from "./finance";
 export * from "./kaemmerer";
 export * from "./settings";

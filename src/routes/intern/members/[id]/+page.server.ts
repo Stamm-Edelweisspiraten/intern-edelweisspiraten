@@ -147,8 +147,21 @@ export const actions: Actions = {
             bund: form.get("contributionDues_bund") === "on"
         };
 
-        // --- Gruppen-Array ---
-        let groups: string[] = JSON.parse(String(form.get("groups") ?? "[]"));
+        /**
+         * Gruppen aus dem versteckten Feld.
+         *
+         * Vorher ein rohes JSON.parse: ein manipuliertes oder leeres Feld
+         * erzeugte einen 500er statt einer Meldung -- und ein 500er sieht wie
+         * ein Fehler des Portals aus, nicht wie eine fehlerhafte Eingabe.
+         */
+        let groups: string[];
+        try {
+            const parsed: unknown = JSON.parse(form.get("groups")?.toString() || "[]");
+            if (!Array.isArray(parsed)) throw new Error("kein Array");
+            groups = parsed.map(String).filter(Boolean);
+        } catch {
+            return fail(400, { error: "Die Gruppenauswahl konnte nicht gelesen werden." });
+        }
 
         /**
          * Wer nur fuer bestimmte Gruppen zustaendig ist, darf auch nur diese
@@ -260,19 +273,40 @@ export const actions: Actions = {
 
         await updateMember(id, updatedMember, updatedBy);
 
-        // Verknuepfte Zugaenge, sofern das Formular sie mitschickt.
+        /*
+         * Verknuepfte Zugaenge, sofern das Formular sie mitschickt.
+         *
+         * Wer sie setzt, bestimmt, wer die Daten des Mitglieds sehen darf --
+         * dafuer genuegt members.edit nicht, es braucht zusaetzlich user.edit.
+         * Dieselbe Regel wie in der Action "update-users"; vorher fehlte sie
+         * auf diesem Weg vollstaendig.
+         */
         const userIdsRaw = form.get("userIds")?.toString();
         if (userIdsRaw) {
+            requirePermission(event, "user.edit");
             try {
-                const userIds: string[] = JSON.parse(userIdsRaw);
-                if (Array.isArray(userIds)) await setUsersForMember(id, userIds);
+                const parsed: unknown = JSON.parse(userIdsRaw);
+                if (Array.isArray(parsed)) {
+                    await setUsersForMember(id, parsed.map(String).filter(Boolean));
+                }
             } catch {
-                // Fehlerhafte Eingabe wird uebergangen; die uebrigen Angaben
-                // sind bereits gespeichert.
+                return fail(400, {
+                    error:
+                        "Die Angaben wurden gespeichert, die Zuordnung der Zugänge " +
+                        "konnte aber nicht gelesen werden."
+                });
             }
         }
 
-        throw redirect(303, `/intern/members/${id}`);
+        /*
+         * Beide Actions dieser Seite antworten gleich.
+         *
+         * Vorher endete `update` mit einem 303 und `update-users` mit
+         * `{ success: true }` -- die eine Aenderung war danach zu sehen, die
+         * andere nicht, und die Rueckmeldung erschien nur bei einer von
+         * beiden. Die Seite zieht die Daten ueber `invalidateAll()` nach.
+         */
+        return { success: "Die Änderungen wurden gespeichert." };
     },
 
 
@@ -289,9 +323,10 @@ export const actions: Actions = {
         requirePermissionForAnyGroup(event, "members.delete", target.groups);
 
         const actor = locals.user?.userinfo?.name ?? locals.user?.userinfo?.email ?? "system";
-        await deleteMember(id, actor);
+        const removed = await deleteMember(id, actor);
+        if (!removed) return fail(404, { error: "Mitglied nicht gefunden" });
 
-        throw redirect(303, "/intern/members");
+        throw redirect(303, "/intern/members?hinweis=geloescht");
     },
 
 
@@ -306,7 +341,6 @@ export const actions: Actions = {
         const form = await request.formData();
 
         const memberId = String(form.get("memberId") ?? "");
-        const userIds: string[] = JSON.parse(String(form.get("userIds") ?? "[]"));
 
         const member = await getMember(memberId);
         if (!member) return fail(404, { error: "Mitglied nicht gefunden" });
@@ -314,8 +348,18 @@ export const actions: Actions = {
         requirePermissionForAnyGroup(event, "members.edit", member.groups);
         requirePermission(event, "user.edit");
 
+        // Auch hier ein verstecktes Feld mit JSON -- ohne try ein 500er.
+        let userIds: string[];
+        try {
+            const parsed: unknown = JSON.parse(form.get("userIds")?.toString() || "[]");
+            if (!Array.isArray(parsed)) throw new Error("kein Array");
+            userIds = parsed.map(String).filter(Boolean);
+        } catch {
+            return fail(400, { error: "Die Auswahl konnte nicht gelesen werden." });
+        }
+
         await setUsersForMember(memberId, userIds);
 
-        return { success: true };
+        return { success: "Die verknüpften Zugänge wurden gespeichert." };
     }
 };

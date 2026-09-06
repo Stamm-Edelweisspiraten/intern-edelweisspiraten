@@ -8,11 +8,20 @@
  * Jedes Diagramm steht NEBEN seiner Tabelle, nie statt ihr: ohne JavaScript
  * und für einen Screenreader bleiben die Zahlen vollständig lesbar. Die
  * Diagramme selbst tragen deshalb `aria-hidden` (siehe ChartFrame).
+ *
+ * Die Höhe kommt über `size` ("sm" | "md" | "lg"), nicht als freie Zahl.
  */
-export { default as ChartFrame } from "./ChartFrame.svelte";
+export { default as ChartFrame, CHART_HEIGHTS, type ChartSize } from "./ChartFrame.svelte";
 export { default as MonthlyBarChart } from "./MonthlyBarChart.svelte";
 export { default as BalanceLineChart } from "./BalanceLineChart.svelte";
 export { default as SphereDonutChart } from "./SphereDonutChart.svelte";
 export { default as TopExpensesChart } from "./TopExpensesChart.svelte";
 export { default as AgingBarChart } from "./AgingBarChart.svelte";
-export { CHART_COLORS, CHART_SERIES, seriesColor, axisEuro } from "./colors";
+export {
+    CHART_COLORS,
+    CHART_SERIES,
+    seriesColor,
+    agingColor,
+    axisEuro,
+    axisEuroCompact
+} from "./colors";

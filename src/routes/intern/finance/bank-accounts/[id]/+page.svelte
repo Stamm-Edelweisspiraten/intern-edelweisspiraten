@@ -119,11 +119,18 @@
 
     <!--
         Der Verlauf steht ueber der Tabelle, nicht statt ihr: der
-        Kassenbericht darunter traegt jede Bewegung mit ihrem Bestand.
+        Kassenbericht darunter traegt jede Bewegung mit ihrem Bestand -- das
+        ist die zugaengliche Fassung derselben Zahlen. Neben die Tabelle passt
+        das Diagramm nicht: der Kassenbericht hat sieben Spalten und braucht
+        die volle Breite.
     -->
     {#if data.balanceCourse.length > 1}
-        <Card title="Verlauf" subtitle="Kontostand im gewählten Zeitraum.">
-            <BalanceLineChart entries={data.balanceCourse} />
+        <Card
+            title="Verlauf"
+            subtitle="Kontostand im gewählten Zeitraum – jede Bewegung im Kassenbericht darunter."
+            meta={data.book ? formatEuro(data.book.closingBalance) : undefined}
+        >
+            <BalanceLineChart entries={data.balanceCourse} title="" />
         </Card>
     {/if}
 

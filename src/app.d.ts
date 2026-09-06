@@ -78,6 +78,18 @@ declare global {
 			theme: Theme;
 		}
 
+		/**
+		 * Fehlerform des Projekts.
+		 *
+		 * `id` ist die Korrelationskennung aus dem handleError-Hook: derselbe
+		 * Wert steht im Serverprotokoll und auf der Fehlerseite, damit sich eine
+		 * Meldung ohne Suche nach dem Zeitfenster wiederfinden laesst.
+		 */
+		interface Error {
+			message: string;
+			id?: string;
+		}
+
 		interface PageData {
 			user?: SessionUser | null;
 			permissions?: string[];

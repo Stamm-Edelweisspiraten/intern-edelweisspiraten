@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { RequestHandler } from "./$types";
 import { requireScope } from "$lib/server/api/handle";
 import { notFound, unprocessable } from "$lib/server/api/respond";
+import { downloadHeaders } from "$lib/server/http/download";
 import { getTemplate, PdfNotFoundError, renderPdf } from "$lib/server/pdf/registry";
 
 /**
@@ -33,16 +34,34 @@ export const POST: RequestHandler = async (event) => {
         }
     }
 
+    /*
+     * Basis-Adresse nachtragen, wenn der Aufrufer keine mitschickt.
+     *
+     * Die Einladungsvorlage baut daraus den QR-Code und den Beitrittslink.
+     * Ohne diese Zeile blieb der Link relativ, sobald PUBLIC_APP_URL nicht
+     * gesetzt war -- ein Fremdsystem konnte das gar nicht wissen. Ein
+     * ausdruecklich uebergebener Wert hat weiterhin Vorrang.
+     */
+    if (input && typeof input === "object" && !Array.isArray(input)) {
+        const record = input as Record<string, unknown>;
+        if (record.baseUrl === undefined) record.baseUrl = event.url.origin;
+    }
+
     try {
         const result = await renderPdf(template.name, input);
 
+        // Die API liefert bewusst als attachment: dort speichert ein
+        // Fremdsystem die Datei, waehrend die /intern-Adressen sie im Browser
+        // anzeigen. Kopfzeilen ueber den gemeinsamen Helfer, damit der
+        // Dateiname gefiltert ist und nosniff mitkommt.
         return new Response(new Uint8Array(result.buffer), {
-            headers: {
-                "content-type": "application/pdf",
-                "content-disposition": `attachment; filename="${result.filename}"`,
-                "content-length": String(result.buffer.byteLength),
-                "cache-control": "no-store"
-            }
+            headers: downloadHeaders({
+                contentType: "application/pdf",
+                filename: result.filename,
+                length: result.buffer.byteLength,
+                forceDownload: true,
+                cacheControl: "no-store"
+            })
         });
     } catch (err) {
         if (err instanceof z.ZodError) {

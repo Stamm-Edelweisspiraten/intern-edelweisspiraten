@@ -137,6 +137,35 @@
 
         --shadow-card: 0 1px 2px 0 rgb(24 24 27 / 0.06), 0 1px 3px 0 rgb(24 24 27 / 0.04);
         --shadow-raised: 0 10px 30px -12px rgb(24 24 27 / 0.25);
+
+        /* Terminfarben -- siehe src/lib/events/colors.ts.
+           Eigene Reihe neben den semantischen Tokens: die Farbe kennzeichnet
+           die Art des Termins, die Tokens den Status. Die -soft-fg-Werte
+           liegen auf ihrer -soft-Flaeche jeweils ueber 4.5:1. */
+        --event-blau: #2563eb;
+        --event-blau-soft: #eff6ff;
+        --event-blau-soft-fg: #1d4ed8;
+        --event-gruen: #059669;
+        --event-gruen-soft: #ecfdf5;
+        --event-gruen-soft-fg: #047857;
+        --event-rot: #dc2626;
+        --event-rot-soft: #fef2f2;
+        --event-rot-soft-fg: #b91c1c;
+        --event-orange: #ea580c;
+        --event-orange-soft: #fff7ed;
+        --event-orange-soft-fg: #c2410c;
+        --event-gelb: #ca8a04;
+        --event-gelb-soft: #fefce8;
+        --event-gelb-soft-fg: #a16207;
+        --event-violett: #7c3aed;
+        --event-violett-soft: #f5f3ff;
+        --event-violett-soft-fg: #6d28d9;
+        --event-tuerkis: #0891b2;
+        --event-tuerkis-soft: #ecfeff;
+        --event-tuerkis-soft-fg: #0e7490;
+        --event-grau: #52525b;
+        --event-grau-soft: #f4f4f5;
+        --event-grau-soft-fg: #3f3f46;
     }
 
     .dark {
@@ -183,6 +212,34 @@
 
         --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.4), 0 1px 3px 0 rgb(0 0 0 / 0.3);
         --shadow-raised: 0 10px 30px -12px rgb(0 0 0 / 0.6);
+
+        /* Terminfarben im Dunkelmodus: kraeftige Farbe aufgehellt, Flaeche
+           stark abgedunkelt, Schrift hell -- dieselbe Bauart wie bei den
+           semantischen Tokens darueber. */
+        --event-blau: #3b82f6;
+        --event-blau-soft: #1a2744;
+        --event-blau-soft-fg: #bfdbfe;
+        --event-gruen: #34d399;
+        --event-gruen-soft: #0f2a1f;
+        --event-gruen-soft-fg: #6ee7b7;
+        --event-rot: #f87171;
+        --event-rot-soft: #2e1414;
+        --event-rot-soft-fg: #fca5a5;
+        --event-orange: #fb923c;
+        --event-orange-soft: #2c1808;
+        --event-orange-soft-fg: #fdba74;
+        --event-gelb: #fbbf24;
+        --event-gelb-soft: #2b2008;
+        --event-gelb-soft-fg: #fcd34d;
+        --event-violett: #a78bfa;
+        --event-violett-soft: #221a3d;
+        --event-violett-soft-fg: #ddd6fe;
+        --event-tuerkis: #22d3ee;
+        --event-tuerkis-soft: #0c2830;
+        --event-tuerkis-soft-fg: #a5f3fc;
+        --event-grau: #a1a1aa;
+        --event-grau-soft: #232327;
+        --event-grau-soft-fg: #d4d4d8;
     }
 
     * {

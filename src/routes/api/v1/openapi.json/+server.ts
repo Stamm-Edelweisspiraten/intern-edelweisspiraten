@@ -178,7 +178,13 @@ export const GET: RequestHandler = async (event) => {
                 delete: itemOp("Gruppe löschen", "groups.delete", "Gruppen")
             },
             "/positions": { get: listOp("Ämter auflisten", "admin.view", "Gruppen") },
-            "/users": { get: listOp("Zugänge auflisten", "user.view", "Mitglieder") },
+            "/users": {
+                get: listOp("Zugänge auflisten", "user.view", "Mitglieder"),
+                post: writeOp("Zugang anlegen", "user.create", "Mitglieder")
+            },
+            "/users/{id}": {
+                get: itemOp("Zugang lesen", "user.view", "Mitglieder")
+            },
             "/fiscal-years": {
                 get: listOp("Geschäftsjahre mit Kennzahlen", "finance.view", "Kasse"),
                 post: writeOp("Geschäftsjahr anlegen", "finance.manage", "Kasse")

@@ -67,7 +67,16 @@ function euro(amount: Cents): string {
 // Mitglieder
 // ---------------------------------------------------------------------------
 
-const inviteSchema = z.object({ memberId: uuid });
+/**
+ * Der Beitrittslink im QR-Code braucht eine Grundadresse. Ohne
+ * PUBLIC_APP_URL fiel die Vorlage frueher auf "http://localhost:5173" zurueck
+ * -- der Ausdruck sah richtig aus, der QR-Code fuehrte ins Leere. Die
+ * aufrufende Route reicht deshalb den Ursprung der Anfrage durch.
+ */
+const inviteSchema = z.object({
+    memberId: uuid,
+    baseUrl: z.string().url("Bitte eine gültige Adresse angeben.").optional()
+});
 
 const memberListSchema = z.object({
     /** Ohne Angabe alle Gruppen. */
@@ -789,10 +798,11 @@ const TEMPLATES: PdfTemplate<any>[] = [
             const { getOrganizationSettings } = await import("$lib/server/settingsService");
             const organization = await getOrganizationSettings();
 
-            return createInvitePdf(member, {
-                name: organization.name,
-                city: organization.city
-            });
+            return createInvitePdf(
+                member,
+                { name: organization.name, city: organization.city },
+                { baseUrl: input.baseUrl }
+            );
         }
     },
     {

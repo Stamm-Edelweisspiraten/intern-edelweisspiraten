@@ -12,6 +12,7 @@ import {
 import type { Cents } from "$lib/money";
 import { nextNumber } from "./numbering";
 import type { JournalEntryView, JournalLineView, JournalSource } from "./types";
+import { errorMessageChain } from "$lib/server/db/errors";
 
 /**
  * Buchungssaetze -- die EINE Stelle, an der gebucht wird.
@@ -307,7 +308,9 @@ function reversalDate(year: number, originalDate: Date): Date {
  * zeigen kann. Die Trigger melden sich mit ERRCODE check_violation.
  */
 function describeDbError(err: unknown): string {
-    const message = String((err as { message?: unknown })?.message ?? "");
+    // Die gesamte Kette, nicht nur die aeussere Meldung: Drizzle verpackt den
+    // Fehler, und der Text des Triggers steht an `cause`.
+    const message = errorMessageChain(err);
     if (message.includes("nicht ausgeglichen")) {
         return "Der Buchungssatz ist nicht ausgeglichen.";
     }

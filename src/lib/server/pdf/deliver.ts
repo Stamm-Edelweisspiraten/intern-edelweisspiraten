@@ -1,4 +1,5 @@
 import { error } from "@sveltejs/kit";
+import { downloadHeaders } from "$lib/server/http/download";
 import { PdfNotFoundError, renderPdf } from "./registry";
 
 /**
@@ -22,14 +23,16 @@ export async function deliverPdf(
         const result = await renderPdf(template, input);
         const filename = options.filename ?? result.filename;
 
+        // Kopfzeilen ueber den gemeinsamen Helfer: er filtert den Dateinamen,
+        // haengt die RFC-5987-Fassung fuer Umlaute an und setzt nosniff. Die
+        // Regel stand hier vorher als eigene Zeile -- an drei Stellen im
+        // Projekt unterschiedlich streng.
         return new Response(new Uint8Array(result.buffer), {
-            headers: {
-                "Content-Type": "application/pdf",
-                "Content-Disposition": `inline; filename="${filename.replace(/["\\\r\n]/g, "")}"`,
-                "Content-Length": String(result.buffer.byteLength),
-                // Mitgliederdaten gehoeren nicht in einen Zwischenspeicher.
-                "Cache-Control": "private, no-store"
-            }
+            headers: downloadHeaders({
+                contentType: "application/pdf",
+                filename,
+                length: result.buffer.byteLength
+            })
         });
     } catch (err) {
         if (err instanceof PdfNotFoundError) throw error(404, err.message);

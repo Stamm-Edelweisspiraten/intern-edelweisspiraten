@@ -6,9 +6,22 @@
      * SvelteKit uebergibt an +error.svelte KEINE Props -- die frueheren
      * `export let error` und `export let status` blieben deshalb undefined und
      * die Seite meldete ausnahmslos "Fehler 500".
+     *
+     * Diese Seite ist die einzige Fehlerseite des Projekts. Sie ersetzt die
+     * interne Huelle samt Sidebar -- und damit den einzigen Abmelde-Knopf der
+     * Anwendung. Deshalb traegt sie ein eigenes Abmelde-Formular: ohne das
+     * sass ein Zugang ohne dashboard.view dauerhaft fest, weil jede
+     * angebotene Schaltflaeche ueber /login zurueck auf das Dashboard und
+     * damit erneut in den 403 fuehrte.
      */
     const status = $derived(page.status);
     const message = $derived(page.error?.message ?? "");
+
+    /** Korrelations-ID aus handleError (src/hooks.server.ts). */
+    const correlationId = $derived(page.error?.id ?? "");
+
+    /** Bei 401/403 fuehrt jeder Weg ueber /login zurueck auf das Dashboard. */
+    const isAccessError = $derived(status === 401 || status === 403);
 
     interface Copy {
         icon: string;
@@ -19,14 +32,27 @@
     }
 
     const COPY: Copy = $derived.by(() => {
-        if (status === 401 || status === 403) {
+        if (status === 401) {
+            return {
+                icon: "person-x",
+                eyebrow: "Fehler 401",
+                title: "Deine Sitzung ist abgelaufen",
+                description: "Für diese Seite ist eine gültige Anmeldung nötig.",
+                hints: [
+                    "Melde dich erneut an – danach geht es an der gewohnten Stelle weiter.",
+                    "Sitzungen laufen aus Sicherheitsgründen nach längerer Untätigkeit ab."
+                ]
+            };
+        }
+
+        if (status === 403) {
             return {
                 icon: "shield-lock",
-                eyebrow: `Fehler ${status}`,
+                eyebrow: "Fehler 403",
                 title: "Kein Zugriff auf diesen Bereich",
                 description: "Für diese Seite fehlen deinem Zugang die nötigen Rechte.",
                 hints: [
-                    "Prüfe, ob du mit dem richtigen Zugang angemeldet bist.",
+                    "Prüfe, ob du mit dem richtigen Zugang angemeldet bist – melde dich sonst ab und wechsle den Zugang.",
                     "Brauchst du den Bereich für deine Aufgabe, wende dich an einen Administrator."
                 ]
             };
@@ -52,7 +78,7 @@
             description: "Beim Laden dieser Seite ist etwas schiefgegangen.",
             hints: [
                 "Lade die Seite neu – häufig hilft das bereits.",
-                "Bleibt der Fehler bestehen, melde ihn mit Adresse und Fehlercode beim IT-Team."
+                "Bleibt der Fehler bestehen, melde ihn mit Adresse, Fehlercode und Kennung beim IT-Team."
             ]
         };
     });
@@ -65,7 +91,7 @@
         <Card>
             <div class="text-center space-y-4">
                 <span
-                    class="w-16 h-16 mx-auto inline-flex items-center justify-center rounded-2xl bg-danger-soft text-danger-soft-fg border border-danger-soft-border"
+                    class="w-16 h-16 mx-auto inline-flex items-center justify-center rounded-card bg-danger-soft text-danger-soft-fg border border-danger-soft-border"
                 >
                     <span class={`bi bi-${COPY.icon} text-3xl`} aria-hidden="true"></span>
                 </span>
@@ -80,7 +106,7 @@
                 <p class="text-sm text-fg-muted">{COPY.description}</p>
 
                 {#if message && message !== COPY.title}
-                    <p class="text-sm font-medium text-fg bg-surface-muted border border-border rounded-xl px-4 py-3">
+                    <p class="text-sm font-medium text-fg bg-surface-muted border border-border rounded-card px-4 py-3">
                         {message}
                     </p>
                 {/if}
@@ -92,11 +118,42 @@
                 </ul>
 
                 <div class="flex gap-3 justify-center flex-wrap pt-2">
-                    <Button href="/" variant="secondary" icon="house">Startseite</Button>
-                    <Button href="/intern/dashboard" variant="primary" icon="speedometer2">
-                        Zum Dashboard
-                    </Button>
+                    {#if !isAccessError}
+                        <Button href="/" variant="secondary" icon="house">Startseite</Button>
+                        <Button href="/intern/dashboard" variant="primary" icon="speedometer2">
+                            Zum Dashboard
+                        </Button>
+                    {/if}
+
+                    {#if status === 401}
+                        <Button href="/login" variant="primary" icon="box-arrow-in-right">
+                            Erneut anmelden
+                        </Button>
+                    {/if}
+
+                    <!--
+                        Native POST-Navigation: sie braucht weder den Router
+                        noch geladene Seitendaten und funktioniert deshalb
+                        auch hier. /logout steht in PUBLIC_PREFIXES und haengt
+                        an keiner Berechtigung.
+                    -->
+                    <form method="post" action="/logout">
+                        <Button
+                            type="submit"
+                            variant={status === 401 ? "secondary" : "primary"}
+                            icon="box-arrow-right"
+                        >
+                            Abmelden
+                        </Button>
+                    </form>
                 </div>
+
+                {#if correlationId}
+                    <p class="text-xs text-fg-subtle pt-2">
+                        Kennung für Rückfragen:
+                        <span class="font-mono select-all">{correlationId}</span>
+                    </p>
+                {/if}
             </div>
         </Card>
     </div>

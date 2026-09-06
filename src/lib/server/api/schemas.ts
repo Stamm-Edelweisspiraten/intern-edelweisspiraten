@@ -77,6 +77,31 @@ export const memberCreateSchema = z.object({
 export const memberUpdateSchema = memberCreateSchema.partial();
 
 // ---------------------------------------------------------------------------
+// Zugaenge
+// ---------------------------------------------------------------------------
+
+/**
+ * Einen Zugang anlegen.
+ *
+ * Bewusst OHNE Passwortfeld: der Zugang entsteht als `invited` und bekommt
+ * sein Passwort ueber den Aktivierungslink. Ein Passwort ueber die
+ * Schnittstelle entgegenzunehmen hiesse, es im Protokoll des aufrufenden
+ * Systems stehen zu haben -- und die Web-Oberflaeche kann es auch nicht.
+ *
+ * Aus demselben Grund fehlt `active` beim Status: ohne Passwort koennte sich
+ * ein solcher Zugang ohnehin nicht anmelden.
+ */
+export const userCreateSchema = z.object({
+    name: z.string().min(1, "Name fehlt."),
+    email: z.string().email("Keine gültige E-Mail-Adresse."),
+    type: z.enum(["parent", "child"]).optional(),
+    /** Stammesweite Rollen. Gruppenbezogene werden ueber das Portal gesetzt. */
+    roleIds: z.array(uuid).optional(),
+    memberIds: z.array(uuid).optional(),
+    status: z.enum(["invited", "disabled"]).optional()
+});
+
+// ---------------------------------------------------------------------------
 // Gruppen und Aemter
 // ---------------------------------------------------------------------------
 

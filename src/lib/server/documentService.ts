@@ -12,6 +12,7 @@ import {
     users
 } from "$lib/server/db/schema";
 import { deleteFile, storeFile, MAX_FILE_BYTES } from "$lib/server/fileStore";
+import { checkUpload, extensionOf, isBlockedExtension } from "$lib/server/files/mime";
 import {
     matchesTargets,
     resolveShareTargets,
@@ -55,6 +56,8 @@ export interface FolderNode {
     /** true, wenn die Sichtbarkeit vom Elternordner kommt. */
     inherited: boolean;
     documentCount: number;
+    /** Summe der Dateigroessen in diesem Ordner, ohne Unterordner. */
+    totalBytes: number;
     childCount: number;
     createdAt: Date;
 }
@@ -265,15 +268,22 @@ export async function listFolders(
     const visibleIds = new Set(visible.map((folder) => folder.id));
 
     const [documentCounts, targetNames] = await Promise.all([
+        // Anzahl UND Groesse in einer Abfrage -- die Uebersicht zeigt beides.
         db
-            .select({ folderId: documents.folderId, count: sql<number>`count(*)::int` })
+            .select({
+                folderId: documents.folderId,
+                count: sql<number>`count(*)::int`,
+                bytes: sql<number>`coalesce(sum(${files.size}), 0)::bigint`
+            })
             .from(documents)
+            .innerJoin(files, eq(files.id, documents.fileId))
             .where(inArray(documents.folderId, [...visibleIds]))
             .groupBy(documents.folderId),
         resolveTargetNames(allShares.filter((share) => visibleIds.has(share.folderId)))
     ]);
 
     const counts = new Map(documentCounts.map((row) => [row.folderId, Number(row.count)]));
+    const bytes = new Map(documentCounts.map((row) => [row.folderId, Number(row.bytes)]));
     const byId = new Map(allFolders.map((folder) => [folder.id, folder]));
 
     const childCounts = new Map<string, number>();
@@ -319,6 +329,7 @@ export async function listFolders(
             canWrite: state.canWrite,
             inherited: state.inherited,
             documentCount: counts.get(folder.id) ?? 0,
+            totalBytes: bytes.get(folder.id) ?? 0,
             childCount: childCounts.get(folder.id) ?? 0,
             createdAt: folder.createdAt
         };
@@ -342,8 +353,33 @@ export async function getFolder(
     return all.find((folder) => folder.id === id) ?? null;
 }
 
-export async function listDocuments(folderId: string): Promise<DocumentEntry[]> {
+/** Wonach die Dateiliste sortiert wird. */
+export type DocumentSort = "name" | "size" | "date" | "type";
+export type SortDirection = "asc" | "desc";
+
+export interface ListDocumentOptions {
+    sort?: DocumentSort;
+    direction?: SortDirection;
+}
+
+export async function listDocuments(
+    folderId: string,
+    options: ListDocumentOptions = {}
+): Promise<DocumentEntry[]> {
     if (!isUuid(folderId)) return [];
+
+    /**
+     * Sortiert wird in der Datenbank, nicht im Browser: die Liste ist
+     * vollstaendig, aber ein Ordner mit vielen Dateien soll nicht erst
+     * uebertragen und dann umgeschichtet werden.
+     */
+    const direction = options.direction === "asc" ? asc : desc;
+    const column = {
+        name: documents.title,
+        size: files.size,
+        date: documents.createdAt,
+        type: files.contentType
+    }[options.sort ?? "date"];
 
     const rows = await db
         .select({
@@ -362,7 +398,9 @@ export async function listDocuments(folderId: string): Promise<DocumentEntry[]> 
         .innerJoin(files, eq(files.id, documents.fileId))
         .leftJoin(users, eq(users.id, documents.createdBy))
         .where(eq(documents.folderId, folderId))
-        .orderBy(desc(documents.createdAt));
+        // Der Titel als zweites Kriterium haelt die Reihenfolge stabil, wenn
+        // mehrere Dateien in derselben Sekunde abgelegt wurden.
+        .orderBy(direction(column), asc(documents.title));
 
     return rows.map((row) => ({
         id: row.id,
@@ -555,13 +593,32 @@ export async function setFolderShares(
     });
 }
 
-const ALLOWED_DOCUMENT_TYPES = [
+/**
+ * Was in die Dateiablage darf.
+ *
+ * Neu dazugekommen sind die Formate, die die Vorschau anzeigen kann:
+ * `text/markdown` (gerendert), `application/json` und YAML (als Text) sowie
+ * `image/gif`. Bewusst NICHT dabei ist `image/svg+xml`: ein SVG ist ein
+ * XML-Dokument mit Skriptfaehigkeit. Die eigene Route entschaerft es zwar
+ * ueber `downloadHeaders()`, aber sobald ein Objektspeicher eingerichtet ist,
+ * liefert dieser die Datei unter SEINEM Ursprung aus -- und dort greifen die
+ * eigenen Kopfzeilen nicht mehr.
+ *
+ * Ebenfalls nicht dabei: `text/html`, `application/xhtml+xml`, alles
+ * Ausfuehrbare. Die Endungen dazu stehen in `$lib/server/files/mime`.
+ */
+export const ALLOWED_DOCUMENT_TYPES = [
     "application/pdf",
     "image/png",
     "image/jpeg",
     "image/webp",
+    "image/gif",
     "text/plain",
     "text/csv",
+    "text/markdown",
+    "application/json",
+    "text/yaml",
+    "application/yaml",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.ms-excel",
@@ -576,7 +633,7 @@ export async function addDocument(input: {
     title?: string;
     description?: string;
     createdBy: string | null;
-}): Promise<{ ok: boolean; id?: string; error?: string }> {
+}): Promise<{ ok: boolean; id?: string; error?: string; status?: number }> {
     const file = input.file;
 
     if (
@@ -584,21 +641,30 @@ export async function addDocument(input: {
         file === null ||
         typeof (file as File).arrayBuffer !== "function"
     ) {
-        return { ok: false, error: "Es wurde keine Datei ausgewählt." };
+        return { ok: false, error: "Es wurde keine Datei ausgewählt.", status: 400 };
     }
 
     const upload = file as File;
-    if (upload.size === 0) return { ok: false, error: "Die Datei ist leer." };
+    if (upload.size === 0) return { ok: false, error: "Die Datei ist leer.", status: 400 };
     if (upload.size > MAX_FILE_BYTES) {
-        return { ok: false, error: "Die Datei ist zu groß (höchstens 10 MB)." };
+        return { ok: false, error: "Die Datei ist zu groß (höchstens 10 MB).", status: 413 };
     }
 
-    const contentType = ALLOWED_DOCUMENT_TYPES.includes(upload.type)
-        ? upload.type
-        : "application/octet-stream";
-
     const buffer = Buffer.from(await upload.arrayBuffer());
-    const filename = upload.name || "dokument";
+    const filename = sanitizeFilename(upload.name);
+
+    /**
+     * Der gemeldete Typ wird gegen die ersten Bytes geprueft. Vorher landete
+     * alles Unbekannte still als "application/octet-stream" im Speicher -- eine
+     * .exe war damit eine gueltige Ablage.
+     */
+    const check = checkUpload(
+        { filename, declaredType: upload.type, content: buffer },
+        ALLOWED_DOCUMENT_TYPES
+    );
+
+    if (!check.ok) return { ok: false, error: check.error, status: check.status };
+    const contentType = check.contentType;
 
     const fileId = await storeFile({
         filename,
@@ -642,29 +708,204 @@ export async function deleteDocument(id: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
+// Umbenennen, verschieben, sammeln
+// ---------------------------------------------------------------------------
+
+/**
+ * Wer fragt -- damit die Schreibrechtpruefung IM Dienst liegt und nicht nur
+ * in der aufrufenden Route. Jede Route prueft zusaetzlich ihr eigenes Recht;
+ * hier geht es um die Freigabe des betroffenen Ordners.
+ */
+export interface DocumentAccess {
+    viewer: Viewer;
+    manageAll?: boolean;
+}
+
+/**
+ * Ein Dateiname, wie er in `Content-Disposition` und in der Liste erscheint.
+ *
+ * Pfadanteile fliegen raus -- nicht, weil daraus je ein Pfad gebaut wuerde
+ * (der Objektschluessel entsteht allein aus der UUID), sondern damit der Name
+ * beim Speichern im Browser nicht in ein anderes Verzeichnis zeigt.
+ */
+function sanitizeFilename(value: string | null | undefined): string {
+    const cleaned = (value ?? "")
+        .replace(/[\\/]+/g, "_")
+        .replace(/[\u0000-\u001f\u007f]/g, "")
+        .replace(/^\.+/, "")
+        .trim();
+
+    return cleaned || "dokument";
+}
+
+/** Liefert den Ordner, wenn dort geschrieben werden darf. */
+async function writableFolder(
+    folderId: string,
+    access: DocumentAccess
+): Promise<{ ok: true; folder: FolderNode } | { ok: false; error: string }> {
+    const folder = await getFolder(folderId, access.viewer, { manageAll: access.manageAll });
+    if (!folder) return { ok: false, error: "Der Ordner wurde nicht gefunden." };
+    if (!folder.canWrite) {
+        return { ok: false, error: "In diesem Ordner darfst du nichts verändern." };
+    }
+    return { ok: true, folder };
+}
+
+/**
+ * Titel und Dateiname aendern.
+ *
+ * Die ENDUNG bleibt, wie sie ist. Sonst liesse sich eine abgelegte Textdatei
+ * nachtraeglich in "bericht.html" umbenennen -- der Typ in der Datenbank
+ * bliebe zwar text/plain, aber ein spaeterer Betrachter (und mancher
+ * Objektspeicher) richtet sich nach der Endung.
+ */
+export async function renameDocument(
+    id: string,
+    input: { title?: string; filename?: string },
+    access: DocumentAccess
+): Promise<{ ok: boolean; error?: string }> {
+    if (!isUuid(id)) return { ok: false, error: "Ungültige Kennung." };
+
+    const document = await getDocument(id);
+    if (!document) return { ok: false, error: "Die Datei wurde nicht gefunden." };
+
+    const source = await writableFolder(document.folderId, access);
+    if (!source.ok) return source;
+
+    const title = input.title?.trim();
+    if (input.title !== undefined && !title) {
+        return { ok: false, error: "Der Titel darf nicht leer sein." };
+    }
+
+    let filename: string | undefined;
+    if (input.filename !== undefined) {
+        filename = sanitizeFilename(input.filename);
+
+        if (isBlockedExtension(filename)) {
+            return { ok: false, error: "Diese Dateiendung wird nicht angenommen." };
+        }
+        if (extensionOf(filename) !== extensionOf(document.filename)) {
+            return { ok: false, error: "Die Dateiendung darf nicht geändert werden." };
+        }
+    }
+
+    await withTransaction(async (tx) => {
+        if (title) await tx.update(documents).set({ title }).where(eq(documents.id, id));
+        if (filename) {
+            await tx.update(files).set({ filename }).where(eq(files.id, document.fileId));
+        }
+    });
+
+    return { ok: true };
+}
+
+/**
+ * Eine Datei in einen anderen Ordner legen.
+ *
+ * Geprueft werden BEIDE Seiten: ohne Schreibrecht im Quellordner darf sie
+ * nicht weg, ohne Schreibrecht im Zielordner nicht hin. Nur eine der beiden
+ * Pruefungen waere ein Weg, Dateien in einen fremden Ordner zu schieben oder
+ * aus einem fremden herauszuholen.
+ */
+export async function moveDocument(
+    id: string,
+    targetFolderId: string,
+    access: DocumentAccess
+): Promise<{ ok: boolean; error?: string }> {
+    if (!isUuid(id)) return { ok: false, error: "Ungültige Kennung." };
+    if (!isUuid(targetFolderId)) return { ok: false, error: "Kein Zielordner ausgewählt." };
+
+    const document = await getDocument(id);
+    if (!document) return { ok: false, error: "Die Datei wurde nicht gefunden." };
+
+    if (document.folderId === targetFolderId) return { ok: true };
+
+    const source = await writableFolder(document.folderId, access);
+    if (!source.ok) return source;
+
+    const target = await writableFolder(targetFolderId, access);
+    if (!target.ok) {
+        return { ok: false, error: "In den Zielordner darfst du nichts ablegen." };
+    }
+
+    await db.update(documents).set({ folderId: targetFolderId }).where(eq(documents.id, id));
+    return { ok: true };
+}
+
+/** Wie deleteDocument, aber fuer eine Auswahl -- mit Rechtepruefung je Datei. */
+export async function deleteDocuments(
+    ids: string[],
+    access: DocumentAccess
+): Promise<{ ok: boolean; deleted: number; error?: string }> {
+    let deleted = 0;
+    let refused = 0;
+
+    for (const id of ids) {
+        if (!isUuid(id)) continue;
+
+        const document = await getDocument(id);
+        if (!document) continue;
+
+        const source = await writableFolder(document.folderId, access);
+        if (!source.ok) {
+            refused += 1;
+            continue;
+        }
+
+        if (await deleteDocument(id)) deleted += 1;
+    }
+
+    if (deleted === 0 && refused > 0) {
+        return { ok: false, deleted, error: "Keine der Dateien durfte gelöscht werden." };
+    }
+    if (refused > 0) {
+        return {
+            ok: true,
+            deleted,
+            error: `${refused} Datei(en) wurden übersprungen – dort fehlt das Schreibrecht.`
+        };
+    }
+
+    return { ok: true, deleted };
+}
+
+/** Wie moveDocument, aber fuer eine Auswahl. */
+export async function moveDocuments(
+    ids: string[],
+    targetFolderId: string,
+    access: DocumentAccess
+): Promise<{ ok: boolean; moved: number; error?: string }> {
+    let moved = 0;
+    let refused = 0;
+    let lastError = "";
+
+    for (const id of ids) {
+        const result = await moveDocument(id, targetFolderId, access);
+        if (result.ok) {
+            moved += 1;
+        } else {
+            refused += 1;
+            lastError = result.error ?? "";
+        }
+    }
+
+    if (moved === 0) {
+        return { ok: false, moved, error: lastError || "Es wurde nichts verschoben." };
+    }
+    if (refused > 0) {
+        return { ok: true, moved, error: `${refused} Datei(en) wurden übersprungen.` };
+    }
+
+    return { ok: true, moved };
+}
+
+// ---------------------------------------------------------------------------
 // Auswahllisten fuer die Freigabe
 // ---------------------------------------------------------------------------
 
-/** Alle möglichen Freigabeziele, gruppiert -- für das Formular. */
-export async function listShareOptions(): Promise<{
-    groups: { id: string; name: string }[];
-    positions: { id: string; name: string }[];
-    roles: { id: string; name: string }[];
-    users: { id: string; name: string; email: string }[];
-}> {
-    const [groupRows, positionRows, roleRows, userRows] = await Promise.all([
-        db.select({ id: groups.id, name: groups.name }).from(groups).orderBy(asc(groups.name)),
-        db
-            .select({ id: positions.id, name: positions.name })
-            .from(positions)
-            .orderBy(asc(positions.name)),
-        db.select({ id: roles.id, name: roles.name }).from(roles).orderBy(asc(roles.name)),
-        db
-            .select({ id: users.id, name: users.name, email: users.email })
-            .from(users)
-            .where(eq(users.status, "active"))
-            .orderBy(asc(users.name))
-    ]);
-
-    return { groups: groupRows, positions: positionRows, roles: roleRows, users: userRows };
-}
+/**
+ * Die waehlbaren Freigabeziele stehen jetzt im shareService -- Ordner,
+ * Termine, Umfragen und Galerien brauchen dieselbe Liste. Hier bleibt der
+ * Name als Re-Export stehen, damit bestehende Aufrufer unveraendert bleiben.
+ */
+export { listShareOptions } from "$lib/server/shareService";

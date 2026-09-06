@@ -4,6 +4,7 @@ import { isUuid } from "$lib/server/db/ids";
 import { accounts, bankAccounts, journalEntries, journalLines } from "$lib/server/db/schema";
 import type { Cents } from "$lib/money";
 import type { BankAccountView } from "./types";
+import { isUniqueViolation } from "$lib/server/db/errors";
 
 /**
  * Kassen- und Bankkonten.
@@ -135,7 +136,7 @@ export async function createBankAccount(
 
         return { ok: true, id };
     } catch (err: unknown) {
-        if ((err as { code?: string })?.code === "23505") {
+        if (isUniqueViolation(err)) {
             return {
                 ok: false,
                 error: "Für dieses Sachkonto ist bereits ein Bankkonto eingerichtet."

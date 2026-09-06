@@ -7,6 +7,8 @@ import { createPosition } from "$lib/server/positionService";
 import { getRoleByKey, SYSTEM_ROLE_KEYS } from "$lib/server/roleService";
 import { createFolder, setFolderShares } from "$lib/server/documentService";
 import { createEvent, respond, setEventShares } from "$lib/server/eventService";
+import { createSurvey, setSurveyFields, setSurveyStatus } from "$lib/server/surveyService";
+import { createGallery } from "$lib/server/galleryService";
 import { createArticle } from "$lib/server/kaemmerer/articleService";
 import { createOrder } from "$lib/server/kaemmerer/orderService";
 import { createFiscalYear, getFiscalYearByYear } from "$lib/server/finance/yearService";
@@ -53,6 +55,8 @@ export interface DemoResult {
     transactions: number;
     folders: number;
     events: number;
+    surveys: number;
+    galleries: number;
 }
 
 /** Feste Streuung ohne Zufall, damit jeder Lauf denselben Bestand ergibt. */
@@ -75,7 +79,9 @@ export async function seedDemoData(user = "demo"): Promise<DemoResult> {
             orders: 0,
             transactions: 0,
             folders: 0,
-            events: 0
+            events: 0,
+            surveys: 0,
+            galleries: 0
         };
     }
 
@@ -385,6 +391,83 @@ export async function seedDemoData(user = "demo"): Promise<DemoResult> {
     );
     if (past.ok) events += 1;
 
+    // --- Umfragen ---------------------------------------------------------
+    /**
+     * Eine Umfrage mit ALLEN fuenf Feldtypen, gekoppelt an das Sommerlager --
+     * so zeigt die Demo gleich den Terminbezug mit. Sie wird veroeffentlicht,
+     * denn ein Entwurf waere fuer die meisten Zugaenge unsichtbar und die
+     * Seite saehe leer aus.
+     */
+    let surveys = 0;
+
+    const survey = await createSurvey(
+        {
+            title: "Anmeldung Sommerlager",
+            description:
+                "Damit wir planen koennen: bitte bis zwei Wochen vor Beginn ausfuellen.",
+            eventId: camp.ok ? camp.id : null,
+            audience: "member",
+            closesAt: new Date(Date.now() + 20 * day)
+        },
+        null
+    );
+
+    if (survey.ok && survey.id) {
+        const fields = await setSurveyFields(survey.id, [
+            {
+                type: "single",
+                label: "Wie kommst du zum Zeltplatz?",
+                required: true,
+                options: [
+                    { label: "Mit dem Bus des Stammes" },
+                    { label: "Die Eltern bringen mich" },
+                    { label: "Mit dem Fahrrad" }
+                ]
+            },
+            {
+                type: "multi",
+                label: "Woran moechtest du teilnehmen?",
+                help: "Mehrfachauswahl moeglich.",
+                options: [
+                    { label: "Nachtwanderung" },
+                    { label: "Kanufahrt" },
+                    { label: "Lagerbau" },
+                    { label: "Kochgruppe" }
+                ]
+            },
+            { type: "boolean", label: "Darf dein Kind schwimmen gehen?", required: true },
+            { type: "text", label: "Krankenkasse", help: "Name der Kasse genuegt." },
+            {
+                type: "longtext",
+                label: "Was sollen wir wissen?",
+                help: "Unvertraeglichkeiten, Medikamente, Besonderheiten."
+            }
+        ]);
+
+        if (fields.ok) {
+            await setSurveyStatus(survey.id, "published");
+            surveys += 1;
+        }
+    }
+
+    // --- Galerie ----------------------------------------------------------
+    /**
+     * Eine leere Galerie zum Sommerlager. BEWUSST ohne Bilder: Binaerdaten
+     * gehoeren nicht ins Repository, und ein erfundenes Bild waere ohne
+     * eingerichteten Objektspeicher ohnehin nicht ablegbar.
+     */
+    let galleries = 0;
+
+    const gallery = await createGallery(
+        {
+            title: "Sommerlager",
+            description: "Bilder von der Fahrt -- bitte nur mit Einverstaendnis hochladen.",
+            eventId: camp.ok ? camp.id : null
+        },
+        null
+    );
+    if (gallery.ok) galleries += 1;
+
     const [groupCount] = await db.select({ id: groups.id }).from(groups).where(eq(groups.id, meute.id));
 
     return {
@@ -395,6 +478,8 @@ export async function seedDemoData(user = "demo"): Promise<DemoResult> {
         orders,
         transactions,
         folders,
-        events
+        events,
+        surveys,
+        galleries
     };
 }

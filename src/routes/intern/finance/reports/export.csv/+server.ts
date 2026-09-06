@@ -4,28 +4,21 @@ import { agingReport, balanceSheet, profitAndLoss } from "$lib/server/finance/re
 import { getActiveFiscalYear, listUnarchivedYearIds } from "$lib/server/finance/yearService";
 import { readPeriod } from "$lib/server/finance/period";
 import { SPHERE_LABELS } from "$lib/finance/labels";
+import { csvDocument } from "$lib/server/csv";
+import { downloadHeaders } from "$lib/server/http/download";
 import { formatEuro } from "$lib/money";
 import { formatDate } from "$lib/format";
 
 /**
  * Berichte als CSV.
  *
- * Semikolon als Trenner und eine BOM voran, damit Excel in deutscher
- * Einstellung Spalten und Umlaute korrekt uebernimmt -- dieselbe Konvention
- * wie beim Jahresexport.
+ * Trenner, Anfuehrungszeichen, BOM und CRLF kommen aus $lib/server/csv --
+ * dieselbe Stelle wie beim Jahresexport. Vorher standen die Escaping-Regeln
+ * hier und dort wortgleich doppelt; der Schutz vor CSV-Injection war in beiden
+ * Kopien nicht enthalten.
  */
 
-const SEPARATOR = ";";
-
-function csvCell(value: string | number | null | undefined): string {
-    const text = String(value ?? "");
-    if (/[";\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-    return text;
-}
-
-function csvRow(cells: (string | number | null | undefined)[]): string {
-    return cells.map(csvCell).join(SEPARATOR);
-}
+type Cell = string | number | null | undefined;
 
 const euro = (cents: number) => formatEuro(cents, { withUnit: false });
 
@@ -42,81 +35,71 @@ export const GET: RequestHandler = async (event) => {
         agingReport({ fiscalYearIds: yearIds })
     ]);
 
-    const lines: string[] = [];
+    const rows: Cell[][] = [];
 
-    lines.push(csvRow([`Berichte ${formatDate(profit.from)} bis ${formatDate(profit.to)}`]));
-    lines.push("");
+    rows.push([`Berichte ${formatDate(profit.from)} bis ${formatDate(profit.to)}`]);
+    rows.push([]);
 
-    lines.push(csvRow(["Gewinn- und Verlustrechnung"]));
-    lines.push(csvRow(["Art", "Konto", "Bezeichnung", "Bereich", "Betrag"]));
+    rows.push(["Gewinn- und Verlustrechnung"]);
+    rows.push(["Art", "Konto", "Bezeichnung", "Bereich", "Betrag"]);
     for (const row of profit.income) {
-        lines.push(
-            csvRow(["Ertrag", row.number, row.name, SPHERE_LABELS[row.sphere], euro(row.amount)])
-        );
+        rows.push(["Ertrag", row.number, row.name, SPHERE_LABELS[row.sphere], euro(row.amount)]);
     }
     for (const row of profit.expense) {
-        lines.push(
-            csvRow(["Aufwand", row.number, row.name, SPHERE_LABELS[row.sphere], euro(row.amount)])
-        );
+        rows.push(["Aufwand", row.number, row.name, SPHERE_LABELS[row.sphere], euro(row.amount)]);
     }
-    lines.push("");
-    lines.push(csvRow(["Summe Erträge", "", "", "", euro(profit.incomeTotal)]));
-    lines.push(csvRow(["Summe Aufwendungen", "", "", "", euro(profit.expenseTotal)]));
-    lines.push(csvRow(["Ergebnis", "", "", "", euro(profit.result)]));
+    rows.push([]);
+    rows.push(["Summe Erträge", "", "", "", euro(profit.incomeTotal)]);
+    rows.push(["Summe Aufwendungen", "", "", "", euro(profit.expenseTotal)]);
+    rows.push(["Ergebnis", "", "", "", euro(profit.result)]);
 
-    lines.push("");
-    lines.push(csvRow(["Ergebnis nach Bereichen"]));
-    lines.push(csvRow(["Bereich", "Erträge", "Aufwendungen", "Ergebnis"]));
+    rows.push([]);
+    rows.push(["Ergebnis nach Bereichen"]);
+    rows.push(["Bereich", "Erträge", "Aufwendungen", "Ergebnis"]);
     for (const row of profit.bySphere) {
-        lines.push(
-            csvRow([
-                SPHERE_LABELS[row.sphere],
-                euro(row.income),
-                euro(row.expense),
-                euro(row.result)
-            ])
-        );
+        rows.push([
+            SPHERE_LABELS[row.sphere],
+            euro(row.income),
+            euro(row.expense),
+            euro(row.result)
+        ]);
     }
 
-    lines.push("");
-    lines.push(csvRow([`Vermögensübersicht zum ${formatDate(balance.at)}`]));
-    lines.push(csvRow(["Seite", "Konto", "Bezeichnung", "Betrag"]));
+    rows.push([]);
+    rows.push([`Vermögensübersicht zum ${formatDate(balance.at)}`]);
+    rows.push(["Seite", "Konto", "Bezeichnung", "Betrag"]);
     for (const row of balance.assets) {
-        lines.push(csvRow(["Aktiva", row.number, row.name, euro(row.amount)]));
+        rows.push(["Aktiva", row.number, row.name, euro(row.amount)]);
     }
     for (const row of balance.liabilities) {
-        lines.push(csvRow(["Passiva", row.number, row.name, euro(row.amount)]));
+        rows.push(["Passiva", row.number, row.name, euro(row.amount)]);
     }
     for (const row of balance.equity) {
-        lines.push(csvRow(["Eigenkapital", row.number, row.name, euro(row.amount)]));
+        rows.push(["Eigenkapital", row.number, row.name, euro(row.amount)]);
     }
-    lines.push(csvRow(["Ergebnis", "", "", euro(balance.result)]));
-    lines.push("");
-    lines.push(csvRow(["Summe Aktiva", "", "", euro(balance.assetsTotal)]));
-    lines.push(
-        csvRow([
-            "Summe Passiva",
-            "",
-            "",
-            euro(balance.liabilitiesTotal + balance.equityTotal + balance.result)
-        ])
-    );
+    rows.push(["Ergebnis", "", "", euro(balance.result)]);
+    rows.push([]);
+    rows.push(["Summe Aktiva", "", "", euro(balance.assetsTotal)]);
+    rows.push([
+        "Summe Passiva",
+        "",
+        "",
+        euro(balance.liabilitiesTotal + balance.equityTotal + balance.result)
+    ]);
 
-    lines.push("");
-    lines.push(csvRow([`Fälligkeitsstaffel zum ${formatDate(aging.at)}`]));
-    lines.push(csvRow(["Zeitraum", "Posten", "Betrag"]));
+    rows.push([]);
+    rows.push([`Fälligkeitsstaffel zum ${formatDate(aging.at)}`]);
+    rows.push(["Zeitraum", "Posten", "Betrag"]);
     for (const bucket of aging.buckets) {
-        lines.push(csvRow([bucket.label, bucket.count, euro(bucket.amount)]));
+        rows.push([bucket.label, bucket.count, euro(bucket.amount)]);
     }
-    lines.push(csvRow(["Summe", aging.count, euro(aging.total)]));
+    rows.push(["Summe", aging.count, euro(aging.total)]);
 
-    const body = `﻿${lines.join("\r\n")}\r\n`;
-
-    return new Response(body, {
-        headers: {
-            "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": `attachment; filename="berichte-${period.fromValue}-bis-${period.toValue}.csv"`,
-            "Cache-Control": "no-store"
-        }
+    return new Response(csvDocument(rows), {
+        headers: downloadHeaders({
+            contentType: "text/csv; charset=utf-8",
+            filename: `berichte-${period.fromValue}-bis-${period.toValue}.csv`,
+            forceDownload: true
+        })
     });
 };

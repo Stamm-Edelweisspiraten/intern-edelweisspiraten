@@ -4,6 +4,8 @@ import { requirePermission } from "$lib/server/permissionGuard";
 import { getFiscalYear } from "$lib/server/finance/yearService";
 import { listTransactions } from "$lib/server/finance/transactionService";
 import { listInvoices } from "$lib/server/finance/invoiceService";
+import { csvDocument } from "$lib/server/csv";
+import { downloadHeaders } from "$lib/server/http/download";
 import { formatEuro } from "$lib/money";
 import { formatDate } from "$lib/format";
 
@@ -11,24 +13,13 @@ import { formatDate } from "$lib/format";
  * CSV-Ausgabe eines Geschäftsjahres.
  *
  * Ersetzt die dauerhaft deaktivierte Schaltfläche "Export (soon)".
- * Semikolon als Trenner und eine BOM voran, damit Excel in deutscher
- * Einstellung die Spalten und Umlaute korrekt übernimmt.
+ * Trenner, Anfuehrungszeichen, BOM und CRLF kommen aus $lib/server/csv --
+ * dieselbe Stelle wie beim Berichtsexport.
  */
 
-const SEPARATOR = ";";
+type Cell = string | number | null | undefined;
 
-function csvCell(value: string | number | null | undefined): string {
-    const text = String(value ?? "");
-    // Anführungszeichen verdoppeln; alles einbetten, was den Trenner enthält.
-    if (/[";\n\r]/.test(text)) {
-        return `"${text.replace(/"/g, '""')}"`;
-    }
-    return text;
-}
-
-function csvRow(cells: (string | number | null | undefined)[]): string {
-    return cells.map(csvCell).join(SEPARATOR);
-}
+const euro = (cents: number) => formatEuro(cents, { withUnit: false });
 
 export const GET: RequestHandler = async (event) => {
     // Eigene Berechtigung fuer den Export; sie war bisher deklariert, aber
@@ -43,26 +34,24 @@ export const GET: RequestHandler = async (event) => {
         listInvoices(year.id)
     ]);
 
-    const lines: string[] = [];
+    const rows: Cell[][] = [];
 
-    lines.push(csvRow([`Geschäftsjahr ${year.year}`]));
-    lines.push("");
+    rows.push([`Geschäftsjahr ${year.year}`]);
+    rows.push([]);
 
-    lines.push(csvRow(["Buchungen"]));
-    lines.push(csvRow(["Datum", "Beleg", "Richtung", "Art", "Mitglied", "Konto", "Betrag", "Notiz"]));
+    rows.push(["Buchungen"]);
+    rows.push(["Datum", "Beleg", "Richtung", "Art", "Mitglied", "Konto", "Betrag", "Notiz"]);
     for (const transaction of transactions) {
-        lines.push(
-            csvRow([
-                formatDate(transaction.date),
-                transaction.entryNo,
-                transaction.direction === "in" ? "Einnahme" : "Ausgabe",
-                transaction.kind,
-                transaction.member,
-                transaction.bankAccountName,
-                formatEuro(transaction.amount, { withUnit: false }),
-                transaction.note
-            ])
-        );
+        rows.push([
+            formatDate(transaction.date),
+            transaction.entryNo,
+            transaction.direction === "in" ? "Einnahme" : "Ausgabe",
+            transaction.kind,
+            transaction.member,
+            transaction.bankAccountName,
+            euro(transaction.amount),
+            transaction.note
+        ]);
     }
 
     const income = transactions
@@ -72,40 +61,43 @@ export const GET: RequestHandler = async (event) => {
         .filter((t) => t.direction === "out")
         .reduce((sum, t) => sum + t.amount, 0);
 
-    lines.push("");
-    lines.push(csvRow(["Einnahmen", "", "", "", "", "", formatEuro(income, { withUnit: false })]));
-    lines.push(csvRow(["Ausgaben", "", "", "", "", "", formatEuro(expense, { withUnit: false })]));
-    lines.push(csvRow(["Saldo", "", "", "", "", "", formatEuro(income - expense, { withUnit: false })]));
+    rows.push([]);
+    rows.push(["Einnahmen", "", "", "", "", "", euro(income)]);
+    rows.push(["Ausgaben", "", "", "", "", "", euro(expense)]);
+    rows.push(["Saldo", "", "", "", "", "", euro(income - expense)]);
 
-    lines.push("");
-    lines.push(csvRow(["Rechnungen"]));
-    lines.push(
-        csvRow(["Nummer", "Datum", "Fällig", "Art", "Mitglied", "Betrag", "Bezahlt", "Offen", "Status"])
-    );
+    rows.push([]);
+    rows.push(["Rechnungen"]);
+    rows.push([
+        "Nummer",
+        "Datum",
+        "Fällig",
+        "Art",
+        "Mitglied",
+        "Betrag",
+        "Bezahlt",
+        "Offen",
+        "Status"
+    ]);
     for (const invoice of invoices) {
-        lines.push(
-            csvRow([
-                invoice.number,
-                formatDate(invoice.date),
-                invoice.dueDate ? formatDate(invoice.dueDate) : "",
-                invoice.kind,
-                invoice.member,
-                formatEuro(invoice.amount, { withUnit: false }),
-                formatEuro(invoice.paidAmount, { withUnit: false }),
-                formatEuro(invoice.outstanding, { withUnit: false }),
-                invoice.status
-            ])
-        );
+        rows.push([
+            invoice.number,
+            formatDate(invoice.date),
+            invoice.dueDate ? formatDate(invoice.dueDate) : "",
+            invoice.kind,
+            invoice.member,
+            euro(invoice.amount),
+            euro(invoice.paidAmount),
+            euro(invoice.outstanding),
+            invoice.status
+        ]);
     }
 
-    // BOM voranstellen, sonst zeigt Excel Umlaute falsch an.
-    const body = `﻿${lines.join("\r\n")}\r\n`;
-
-    return new Response(body, {
-        headers: {
-            "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": `attachment; filename="kasse-${year.year}.csv"`,
-            "Cache-Control": "no-store"
-        }
+    return new Response(csvDocument(rows), {
+        headers: downloadHeaders({
+            contentType: "text/csv; charset=utf-8",
+            filename: `kasse-${year.year}.csv`,
+            forceDownload: true
+        })
     });
 };

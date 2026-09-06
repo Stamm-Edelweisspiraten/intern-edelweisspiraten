@@ -35,6 +35,16 @@ export const rateLimitKey = {
     reset: (emailHash: string) => `reset:${emailHash}`,
     invite: (memberId: string, ip: string) => `invite:${memberId}:${ip}`,
     mfa: (sessionId: string) => `mfa:${sessionId}`,
+    /**
+     * Antworten ueber einen oeffentlichen Umfragelink, je Umfrage und Adresse.
+     *
+     * Der eigentliche Schutz ist das Token selbst (32 zufaellige Byte). Diese
+     * Grenze faengt nur das stumpfe Fluten ab, wenn ein Link weitergereicht
+     * wurde. ACHTUNG: hinter einem Reverse Proxy ohne ADDRESS_HEADER/XFF_DEPTH
+     * sieht die Anwendung nur die Adresse des Proxys -- dann faellt die
+     * Begrenzung auf einen einzigen Topf zusammen. Siehe README.
+     */
+    surveyPublic: (surveyId: string, ip: string) => `survey:${surveyId}:${ip}`,
     apiToken: (tokenId: string) => `api:${tokenId}`
 };
 
@@ -142,6 +152,13 @@ export const RATE_LIMITS = {
     passwordResetPerIp: { limit: 10, windowSeconds: 60 * 60 },
     /** Eingabe des Einladungscodes. */
     invite: { limit: 5, windowSeconds: 10 * 60 },
+    /*
+     * Grosszuegiger als eine Anmeldung: hier wird nichts erraten, sondern ein
+     * Formular abgeschickt. Wer sich vertippt, soll nicht nach dem dritten
+     * Versuch ausgesperrt sein -- eine Familie hinter einem Anschluss teilt
+     * sich zudem dieselbe Adresse.
+     */
+    surveyPublic: { limit: 30, windowSeconds: 60 * 60 },
     /** Eingabe des zweiten Faktors. */
     mfa: { limit: 5, windowSeconds: 10 * 60 },
     /** Anfragen je API-Token. */

@@ -2,6 +2,7 @@
     import { page } from "$app/state";
     import {
         Alert,
+        Badge,
         Button,
         Card,
         ConfirmDialog,
@@ -11,6 +12,7 @@
     } from "$lib/components/ui";
     import type { Column } from "$lib/components/ui";
     import { can } from "$lib/can";
+    import { readHint } from "$lib/hints";
     import type { ActionData, PageData } from "./$types";
 
     let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -18,7 +20,17 @@
     type User = PageData["users"][number];
 
     /** Die Action leitet bei Erfolg um; der Cast macht ein fail() trotzdem sichtbar. */
-    const feedback = $derived(form as { error?: string; success?: unknown } | null);
+    const feedback = $derived(form as { error?: string } | null);
+
+    /**
+     * Rueckmeldung aus `?hinweis=`.
+     *
+     * Ein 303 setzt `form` auf null -- der Erfolg des Anlegens war deshalb
+     * hier gar nicht zu sehen: die Seite lud, zeigte nichts, und der zweite
+     * Versuch scheiterte an der bereits vergebenen Adresse.
+     */
+    const hint = $derived(readHint(page.url.searchParams.get("hinweis")));
+
 
     let search = $state("");
     let deleteTarget = $state<User | null>(null);
@@ -46,11 +58,17 @@
         })
     );
 
-    const columns: Column<User>[] = [
-        { key: "name", label: "Name", value: (u) => u.name },
-        { key: "email", label: "E-Mail-Adresse", value: (u) => u.email },
-        { key: "member", label: "Verknüpfte Mitglieder", value: (u) => memberNames(u.memberIds) }
-    ];
+    const STATUS_TONES = {
+        active: "success",
+        invited: "warning",
+        disabled: "danger"
+    } as const;
+
+    const STATUS_LABELS = {
+        active: "Aktiv",
+        invited: "Eingeladen",
+        disabled: "Deaktiviert"
+    } as const;
 
     function askDelete(user: User) {
         deleteTarget = user;
@@ -59,6 +77,10 @@
 </script>
 
 <svelte:head><title>Benutzerverwaltung - Adminbereich</title></svelte:head>
+
+{#snippet statusCell(user: User)}
+    <Badge tone={STATUS_TONES[user.status]} size="xs" label={STATUS_LABELS[user.status]} />
+{/snippet}
 
 <div class="space-y-8">
     <PageHeader
@@ -74,11 +96,11 @@
         {/snippet}
     </PageHeader>
 
+    {#if hint}
+        <Alert tone={hint.tone} message={hint.message} />
+    {/if}
     {#if feedback?.error}
         <Alert tone="danger" message={feedback.error} />
-    {/if}
-    {#if feedback?.success}
-        <Alert tone="success" message="Der Zugang wurde gelöscht." />
     {/if}
 
     <Card title="Benutzer" meta={`${filtered.length} Einträge`} padding="none">
@@ -92,7 +114,16 @@
         {/snippet}
 
         <DataTable
-            {columns}
+            columns={[
+                { key: "name", label: "Name", value: (u) => u.name },
+                { key: "email", label: "E-Mail-Adresse", value: (u) => u.email },
+                { key: "status", label: "Status", cell: statusCell },
+                {
+                    key: "member",
+                    label: "Verknüpfte Mitglieder",
+                    value: (u) => memberNames(u.memberIds)
+                }
+            ] satisfies Column<User>[]}
             rows={filtered}
             getKey={(u) => u.id}
             cardTitle={(u) => u.name}

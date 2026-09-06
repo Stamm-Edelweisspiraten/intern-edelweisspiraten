@@ -1,18 +1,26 @@
-import { fail, redirect } from "@sveltejs/kit";
+import { error, fail, redirect } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
-import { requirePermission } from "$lib/server/permissionGuard";
-import { matchesPermission } from "$lib/permissions/match";
+import {
+    groupsWithPermission,
+    requireGroupsWithPermission,
+    requirePermission
+} from "$lib/server/permissionGuard";
 import {
     cancelEvent,
     createEvent,
     deleteEvent,
     getEvent,
     listEvents,
+    mayManageEvent,
     setEventShares,
     type EventStatus
 } from "$lib/server/eventService";
-import { listShareOptions } from "$lib/server/documentService";
-import type { ShareTargetKind } from "$lib/server/shareService";
+import {
+    groupTargets,
+    listShareOptions,
+    parseShareValues,
+    sharesGrantGroupScope
+} from "$lib/server/shareService";
 
 /**
  * Terminübersicht.
@@ -20,13 +28,13 @@ import type { ShareTargetKind } from "$lib/server/shareService";
  * Zwei Ansichten aus derselben Abfrage: eine Liste (kommend / vergangen) und
  * ein Monatsraster. Das Raster ist ein `grid-cols-7` ohne Bibliothek -- ein
  * Kalender aus sieben Spalten braucht keine.
+ *
+ * `events.manage` gilt stammesweit ODER für einzelne Gruppen. Deshalb steht
+ * hier nirgends mehr ein blankes `requirePermission(..., "events.manage")`:
+ * die Route arbeitet durchweg mit dem Ergebnis von `groupsWithPermission()`
+ * und entscheidet je Termin über seine Freigaben (Design-Blatt §9 -- die
+ * Schaltflächen je Datensatz kommen vom Server, nicht aus `permissions`).
  */
-
-const SHARE_KINDS: ShareTargetKind[] = ["group", "position", "role", "user"];
-
-function isShareKind(value: string): value is ShareTargetKind {
-    return (SHARE_KINDS as string[]).includes(value);
-}
 
 /**
  * Ein Datum aus dem Formular in einen Zeitpunkt.
@@ -56,8 +64,13 @@ function monthWindow(year: number, month: number): { from: Date; to: Date } {
 export const load: PageServerLoad = async (event) => {
     requirePermission(event, "events.view");
 
-    const permissions = event.locals.permissions ?? [];
-    const canManage = matchesPermission(permissions, "events.manage");
+    /**
+     * null = stammesweit, [] = kein Recht, [...] = nur diese Gruppen. Der Wert
+     * geht sowohl in die Abfrage (Entwürfe der eigenen Gruppen sind sichtbar)
+     * als auch in die Schaltflächen je Termin.
+     */
+    const manageGroups = groupsWithPermission(event, "events.manage");
+    const canManageAny = manageGroups === null || manageGroups.length > 0;
 
     const viewer = {
         id: event.locals.user?.id,
@@ -73,16 +86,28 @@ export const load: PageServerLoad = async (event) => {
 
     const window = monthWindow(year, month);
 
+    const scope = { manageAll: manageGroups === null, manageGroups };
+
     const entries =
         view === "monat"
-            ? await listEvents(viewer, { manageAll: canManage, ...window, range: "all" })
+            ? await listEvents(viewer, { ...scope, ...window, range: "all" })
             : await listEvents(viewer, {
-                  manageAll: canManage,
+                  ...scope,
                   range: showPast ? "past" : "upcoming",
                   limit: 100
               });
 
-    const shareOptions = canManage ? await listShareOptions() : null;
+    const options = canManageAny ? await listShareOptions() : null;
+
+    /**
+     * Wer nur für einzelne Gruppen verwalten darf, bekommt auch nur diese zur
+     * Auswahl. Sonst böte das Formular Gruppen an, die die Aktion gleich
+     * darauf abweist.
+     */
+    const shareOptions =
+        options && manageGroups !== null
+            ? { ...options, groups: options.groups.filter((g) => manageGroups.includes(g.id)) }
+            : options;
 
     return {
         events: entries.map((entry) => ({
@@ -94,26 +119,60 @@ export const load: PageServerLoad = async (event) => {
             endsAt: entry.endsAt?.toISOString() ?? null,
             allDay: entry.allDay,
             status: entry.status,
+            responsesEnabled: entry.responsesEnabled,
+            color: entry.color,
+            coverFileId: entry.coverFileId,
             responseDeadline: entry.responseDeadline?.toISOString() ?? null,
             shares: entry.shares,
-            counts: entry.counts
+            counts: entry.counts,
+            // Je Datensatz vom Server entschieden, nicht aus `permissions`.
+            canManage: sharesGrantGroupScope(entry.shares, manageGroups)
         })),
         view,
         showPast,
         month: { year, month: month + 1, from: window.from.toISOString() },
         shareOptions,
-        canManage
+        canManage: canManageAny,
+        /** true, wenn das Recht nur für einzelne Gruppen gilt. */
+        groupBound: manageGroups !== null
     };
 };
 
 export const actions: Actions = {
     create: async (event) => {
-        requirePermission(event, "events.manage");
+        // Wirft bereits, wenn das Recht nirgends vorliegt.
+        const scope = requireGroupsWithPermission(event, "events.manage");
 
         const form = await event.request.formData();
         const startsAt = parseDateTime(String(form.get("startsAt") ?? ""));
 
         if (!startsAt) return fail(400, { error: "Bitte einen Beginn angeben." });
+
+        const shares = parseShareValues(form.getAll("share"));
+
+        /**
+         * Wer `events.manage` nur gruppengebunden hält, muss mindestens eine
+         * dieser Gruppen freigeben: ein Termin ohne Freigabe wäre sonst sofort
+         * ein stammesweiter Termin, den derselbe Benutzer anschließend nicht
+         * mehr bearbeiten dürfte (siehe `sharesGrantGroupScope`).
+         */
+        if (scope !== null) {
+            const chosen = groupTargets(shares);
+
+            if (chosen.some((id) => !scope.includes(id))) {
+                return fail(400, {
+                    error: "Du darfst nur für deine eigenen Gruppen freigeben."
+                });
+            }
+
+            if (!sharesGrantGroupScope(shares, scope)) {
+                return fail(400, {
+                    error: "Bitte mindestens eine Gruppe auswählen, für die du Termine verwalten darfst."
+                });
+            }
+        }
+
+        const responsesEnabled = form.get("responsesEnabled") === "on";
 
         const result = await createEvent(
             {
@@ -124,6 +183,8 @@ export const actions: Actions = {
                 endsAt: parseDateTime(String(form.get("endsAt") ?? "")),
                 allDay: form.get("allDay") === "on",
                 status: (String(form.get("status") ?? "published") as EventStatus) ?? "published",
+                responsesEnabled,
+                color: String(form.get("color") ?? ""),
                 responseDeadline: parseDateTime(String(form.get("responseDeadline") ?? ""))
             },
             event.locals.user?.id ?? null
@@ -133,28 +194,18 @@ export const actions: Actions = {
 
         // Freigaben gleich mitnehmen, damit der Termin nicht kurz für alle
         // sichtbar ist, bevor sie gesetzt werden.
-        const shares = form
-            .getAll("share")
-            .map(String)
-            .map((entry) => {
-                const separator = entry.indexOf(":");
-                if (separator < 0) return null;
-                const kind = entry.slice(0, separator);
-                if (!isShareKind(kind)) return null;
-                return { targetKind: kind, targetId: entry.slice(separator + 1) };
-            })
-            .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-
         if (shares.length > 0) await setEventShares(result.id!, shares);
 
         throw redirect(303, `/intern/termine/${result.id}`);
     },
 
     cancel: async (event) => {
-        requirePermission(event, "events.manage");
+        const scope = requireGroupsWithPermission(event, "events.manage");
 
         const form = await event.request.formData();
         const id = String(form.get("eventId") ?? "");
+
+        if (!(await mayManageEvent(id, scope))) throw error(403, "Keine Berechtigung");
 
         const target = await getEvent(id, {}, { manageAll: true });
         if (!target) return fail(404, { error: "Der Termin wurde nicht gefunden." });
@@ -164,10 +215,14 @@ export const actions: Actions = {
     },
 
     delete: async (event) => {
-        requirePermission(event, "events.manage");
+        const scope = requireGroupsWithPermission(event, "events.manage");
 
         const form = await event.request.formData();
-        await deleteEvent(String(form.get("eventId") ?? ""));
+        const id = String(form.get("eventId") ?? "");
+
+        if (!(await mayManageEvent(id, scope))) throw error(403, "Keine Berechtigung");
+
+        await deleteEvent(id);
 
         throw redirect(303, "/intern/termine");
     }

@@ -1,9 +1,27 @@
 <script lang="ts">
-    import { Alert, Badge, Button, Card, ConfirmDialog, DataTable, FormField, PageHeader, TextInput } from "$lib/components/ui";
+    import { page } from "$app/state";
+    import {
+        Alert, Badge, Button, Card, ConfirmDialog, DataTable,
+        FormField, PageHeader, Select, TextInput
+    } from "$lib/components/ui";
     import type { Column } from "$lib/components/ui";
+    import { readHint } from "$lib/hints";
     import type { ActionData, PageData } from "./$types";
 
     let { data, form }: { data: PageData; form: ActionData } = $props();
+
+    /**
+     * Rueckmeldung aus `?hinweis=`.
+     *
+     * Das Anlegen endet mit einer Weiterleitung hierher, wenn der Versand
+     * scheitert oder gar kein Postausgang eingerichtet ist. Ein 303 setzt
+     * `form` auf null -- ohne diesen Hinweis stand die Seite kommentarlos da.
+     */
+    const hint = $derived(readHint(page.url.searchParams.get("hinweis")));
+
+
+    /** Ein eingeladener Zugang hat noch kein Passwort. */
+    const pendingInvite = $derived(data.user.status === "invited");
 
     let confirmDelete = $state(false);
     let deleteForm = $state<HTMLFormElement | null>(null);
@@ -49,6 +67,17 @@
         invited: "Eingeladen",
         disabled: "Deaktiviert"
     } as const;
+
+    const TYPE_OPTIONS = [
+        { value: "parent", label: "Erwachsen / Eltern" },
+        { value: "child", label: "Kind" }
+    ];
+
+    const STATUS_OPTIONS = [
+        { value: "active", label: "Aktiv" },
+        { value: "invited", label: "Eingeladen" },
+        { value: "disabled", label: "Deaktiviert" }
+    ];
 </script>
 
 <svelte:head><title>{data.user.name} - Benutzer</title></svelte:head>
@@ -79,11 +108,29 @@
         {/snippet}
     </PageHeader>
 
+    {#if hint}
+        <Alert tone={hint.tone} message={hint.message} />
+    {/if}
     {#if form?.error}
         <Alert tone="danger" message={form.error} />
     {/if}
     {#if form?.success}
         <Alert tone="success" message={form.success} />
+    {/if}
+
+    {#if pendingInvite}
+        <Card tone="warning" title="Einladung ausstehend">
+            <p class="text-sm text-fg-muted">
+                Dieser Zugang wurde angelegt, aber noch nicht aktiviert – es ist kein Passwort
+                gesetzt. Solange die Einladung nicht angenommen wurde, ist keine Anmeldung
+                möglich. Der Link ist 14 Tage gültig.
+            </p>
+            <form method="post" action="?/resetPassword" class="flex justify-end mt-4">
+                <Button type="submit" variant="primary" icon="envelope" disabled={!data.canEdit}>
+                    Einladung erneut senden
+                </Button>
+            </form>
+        </Card>
     {/if}
 
     {#if data.user.lockedUntil}
@@ -115,31 +162,28 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField label="Kontoart">
-                    {#snippet children({ id })}
-                        <select
+                    {#snippet children({ id, describedBy })}
+                        <Select
                             {id}
+                            {describedBy}
                             name="type"
+                            value={data.user.type}
                             disabled={!data.canEdit}
-                            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
-                        >
-                            <option value="parent" selected={data.user.type === "parent"}>Erwachsen / Eltern</option>
-                            <option value="child" selected={data.user.type === "child"}>Kind</option>
-                        </select>
+                            options={TYPE_OPTIONS}
+                        />
                     {/snippet}
                 </FormField>
 
                 <FormField label="Status" hint="Ein deaktivierter Zugang wird sofort abgemeldet.">
-                    {#snippet children({ id })}
-                        <select
+                    {#snippet children({ id, describedBy })}
+                        <Select
                             {id}
+                            {describedBy}
                             name="status"
+                            value={data.user.status}
                             disabled={!data.canEdit}
-                            class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
-                        >
-                            <option value="active" selected={data.user.status === "active"}>Aktiv</option>
-                            <option value="invited" selected={data.user.status === "invited"}>Eingeladen</option>
-                            <option value="disabled" selected={data.user.status === "disabled"}>Deaktiviert</option>
-                        </select>
+                            options={STATUS_OPTIONS}
+                        />
                     {/snippet}
                 </FormField>
             </div>
@@ -171,7 +215,7 @@
             <div class="space-y-2">
                 {#each data.roles as role (role.id)}
                     {@const scoped = groupsOf(role.id)}
-                    <div class="px-4 py-3 rounded-xl border border-border space-y-3">
+                    <div class="px-4 py-3 rounded-card border border-border space-y-3">
                         <label class="flex items-start gap-3 cursor-pointer">
                             <input
                                 type="checkbox"
@@ -179,7 +223,7 @@
                                 value={role.id}
                                 checked={orgWide.has(role.id)}
                                 disabled={!data.canEdit}
-                                class="mt-1 rounded border-border-strong"
+                                class="mt-1 rounded-control border-border-strong"
                             />
                             <span class="min-w-0">
                                 <span class="block text-sm font-semibold text-fg">{role.name}</span>
@@ -197,7 +241,7 @@
                                 <div class="flex flex-wrap gap-2">
                                     {#each data.groups as group (group.id)}
                                         <label
-                                            class="flex items-center gap-2 text-xs text-fg px-2.5 py-1.5 rounded-lg border border-border cursor-pointer hover:bg-surface-muted transition"
+                                            class="flex items-center gap-2 text-xs text-fg px-2.5 py-1.5 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition"
                                         >
                                             <input
                                                 type="checkbox"
@@ -205,7 +249,7 @@
                                                 value={group.id}
                                                 checked={scoped.has(group.id)}
                                                 disabled={!data.canEdit}
-                                                class="rounded border-border-strong"
+                                                class="rounded-control border-border-strong"
                                             />
                                             {group.name}
                                         </label>
@@ -234,14 +278,14 @@
         <form method="post" action="?/members" class="space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-72 overflow-y-auto">
                 {#each data.members as member (member.id)}
-                    <label class="flex items-center gap-2 px-3 py-2 rounded-lg border border-border cursor-pointer hover:bg-surface-muted transition">
+                    <label class="flex items-center gap-2 px-3 py-2 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition">
                         <input
                             type="checkbox"
                             name="members"
                             value={member.id}
                             checked={data.user.memberIds.includes(member.id)}
                             disabled={!data.canEdit}
-                            class="rounded border-border-strong"
+                            class="rounded-control border-border-strong"
                         />
                         <span class="text-sm text-fg truncate">{member.name}</span>
                     </label>
@@ -259,8 +303,13 @@
     <Card title="Anmeldung und Sicherheit">
         <div class="flex flex-wrap gap-3">
             <form method="post" action="?/resetPassword">
-                <Button type="submit" variant="secondary" icon="key" disabled={!data.canEdit}>
-                    Link zum Zurücksetzen senden
+                <Button
+                    type="submit"
+                    variant={pendingInvite ? "primary" : "secondary"}
+                    icon={pendingInvite ? "envelope" : "key"}
+                    disabled={!data.canEdit}
+                >
+                    {pendingInvite ? "Einladung erneut senden" : "Link zum Zurücksetzen senden"}
                 </Button>
             </form>
             <form method="post" action="?/resetMfa">

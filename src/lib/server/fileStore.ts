@@ -2,6 +2,7 @@ import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "$lib/server/db";
 import { isUuid } from "$lib/server/db/ids";
 import { files } from "$lib/server/db/schema";
+import { checkUpload } from "$lib/server/files/mime";
 import { getObjectStore, storageKeyFor } from "$lib/server/storage";
 import { getStorageConfig, isConfigured } from "$lib/server/storage/settings";
 
@@ -31,6 +32,7 @@ export interface StoredFileMeta {
 }
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+/** Mitgliedsunterlagen: Aufnahmeantrag und Einwilligung, sonst nichts. */
 const ALLOWED_TYPES = ["application/pdf", "image/png", "image/jpeg"];
 
 function isFile(input: unknown): input is File {
@@ -159,14 +161,19 @@ export async function deleteFile(id?: string | null): Promise<void> {
  * Eine kurzlebige Adresse direkt beim Speicher, falls die Datei dort liegt.
  * `null` heißt: über die eigene Route ausliefern.
  */
-export async function signedUrlFor(id: string): Promise<string | null> {
+export async function signedUrlFor(
+    id: string,
+    options: { filename?: string } = {}
+): Promise<string | null> {
     const meta = await readFileMeta(id);
     if (!meta?.storageKey) return null;
 
     const store = await getObjectStore();
     if (!store) return null;
 
-    return store.signedUrl(meta.storageKey, meta.filename);
+    // Der Typ geht mit: der Speicher liefert unter seinem eigenen Ursprung
+    // aus, dort greift keine Kopfzeile dieser Anwendung mehr.
+    return store.signedUrl(meta.storageKey, options.filename ?? meta.filename, meta.contentType);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,9 +309,22 @@ export async function saveMemberFile(
         throw new Error("Datei zu groß (max 10MB)");
     }
 
-    const contentType = ALLOWED_TYPES.includes(file.type) ? file.type : "application/octet-stream";
     const buffer = Buffer.from(await file.arrayBuffer());
-    const filename = file.name || `${kind}-${Date.now()}.bin`;
+    const filename = file.name || `${kind}-${Date.now()}.pdf`;
+
+    /**
+     * Vorher fiel jeder unerwartete Typ still auf "application/octet-stream"
+     * -- eine .exe unter dem Namen "Einwilligung" landete damit unbeanstandet
+     * in der Ablage. Jetzt wird der gemeldete Typ gegen die ersten Bytes
+     * geprueft und alles Uebrige abgewiesen.
+     */
+    const check = checkUpload(
+        { filename, declaredType: file.type, content: buffer },
+        ALLOWED_TYPES
+    );
+    if (!check.ok) throw new Error(check.error);
+
+    const contentType = check.contentType;
 
     const id = await storeFile({ filename, contentType, content: buffer, uploadedBy: memberId });
 

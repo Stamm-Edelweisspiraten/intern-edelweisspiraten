@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db, withTransaction, type Executor } from "$lib/server/db";
 import { isUuid, onlyUuids } from "$lib/server/db/ids";
+import { isUniqueViolation } from "$lib/server/db/errors";
 import { userMembers, userRoles, users } from "$lib/server/db/schema";
 import { hashPassword } from "$lib/server/auth/password";
 import { getRoleByKey } from "$lib/server/roleService";
@@ -145,10 +146,6 @@ export interface CreateUserResult {
     error?: string;
 }
 
-/** Eindeutiger Index verletzt -- PostgreSQL meldet das als 23505. */
-function isUniqueViolation(err: unknown): boolean {
-    return (err as { code?: string })?.code === "23505";
-}
 
 export async function createUser(input: CreateUserInput): Promise<CreateUserResult> {
     const email = normalizeEmail(input.email);
@@ -182,6 +179,11 @@ export async function createUser(input: CreateUserInput): Promise<CreateUserResu
             await setUserMembers(tx, row.id, memberIds);
             return row.id;
         });
+
+        // Wie in updateUser: Rollen- und Mitgliedszuordnung bestimmen die
+        // aufgeloesten Rechte. Ohne das trug ein frisch angelegter Zugang bis
+        // zum naechsten Cache-Ablauf keine seiner Rollen.
+        invalidatePermissionCache();
 
         const user = await getUser(id);
         return { ok: true, user: user ?? undefined };
@@ -354,6 +356,9 @@ export async function setPassword(
 export async function deleteUser(id: string): Promise<boolean> {
     if (!isUuid(id)) return false;
     const rows = await db.delete(users).where(eq(users.id, id)).returning({ id: users.id });
+    // Der Zwischenspeicher haelt die aufgeloesten Rechte je Zugang; ohne das
+    // beantwortet er Anfragen zu einem geloeschten Zugang weiter.
+    if (rows.length > 0) invalidatePermissionCache();
     return rows.length > 0;
 }
 

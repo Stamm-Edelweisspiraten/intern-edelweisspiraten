@@ -10,6 +10,7 @@ import {
     updateRole
 } from "$lib/server/roleService";
 import { isGroupScopable } from "$lib/permissions";
+import { matchesPermission } from "$lib/permissions/match";
 import { PERMISSION_HINTS, PERMISSION_LABELS, PERMISSION_MODULES } from "$lib/permissions/labels";
 
 /**
@@ -24,6 +25,24 @@ import { PERMISSION_HINTS, PERMISSION_LABELS, PERMISSION_MODULES } from "$lib/pe
  * erforderlich" setzen noch eine Rolle loeschen -- beides gibt es im
  * roleService seit jeher. Der Rechte-Cache wird nicht mehr hier verworfen,
  * sondern im roleService selbst, damit es nicht vergessen werden kann.
+ *
+ * Seit dem Umbau auf Master-Detail steht links die Rollenliste und rechts nur
+ * noch die Rechtematrix der EINEN gewaehlten Rolle -- gestapelte Karten mit je
+ * ueber siebzig Kaestchen waren nicht mehr zu ueberblicken. Zwei Entscheidungen
+ * dahinter:
+ *
+ *   - Die Auswahl steht in der URL (`?rolle=<id>`), nicht nur im Browser.
+ *     Nur so ueberlebt sie den `redirect(303)` nach dem Speichern, laesst sich
+ *     verlinken und funktioniert ohne JavaScript. Ist die Kennung unbekannt
+ *     oder fehlt sie, faellt die Seite auf die erste Rolle zurueck.
+ *   - Der Aussperrschutz in `save` verhindert den Fall, in dem kein Zugang mehr
+ *     das Recht "*" haette: die Rechteverwaltung selbst waere dann fuer
+ *     niemanden mehr erreichbar und liesse sich nur in der Datenbank
+ *     reparieren.
+ *
+ * An der Speichersemantik hat der Umbau nichts geaendert: das Formular sendet
+ * jede angehakte Box, `updateRole` ersetzt die Liste vollstaendig und
+ * normalisiert sie. Bestehende Rechte aendern sich dadurch nicht nebenbei.
  */
 
 /** Die Bloecke der Rechtematrix, fertig beschriftet. */
@@ -50,17 +69,25 @@ export const load: PageServerLoad = async (event) => {
 
     const [roles, counts] = await Promise.all([listRoles(), countUsersPerRole()]);
 
+    const list = roles.map((role) => ({
+        id: role.id,
+        key: role.key,
+        name: role.name,
+        description: role.description ?? "",
+        permissions: role.permissions ?? [],
+        requireMfa: role.requireMfa === true,
+        system: role.system === true,
+        userCount: counts.get(role.id) ?? 0
+    }));
+
+    // Unbekannte oder fehlende Kennung: die erste Rolle, damit rechts nie eine
+    // leere Flaeche steht, solange es ueberhaupt Rollen gibt.
+    const requested = event.url.searchParams.get("rolle");
+    const selectedRoleId = list.find((role) => role.id === requested)?.id ?? list[0]?.id ?? null;
+
     return {
-        roles: roles.map((role) => ({
-            id: role.id,
-            key: role.key,
-            name: role.name,
-            description: role.description ?? "",
-            permissions: role.permissions ?? [],
-            requireMfa: role.requireMfa === true,
-            system: role.system === true,
-            userCount: counts.get(role.id) ?? 0
-        })),
+        roles: list,
+        selectedRoleId,
         modules: permissionModules()
     };
 };
@@ -76,10 +103,45 @@ export const actions: Actions = {
 
         if (!roleId) return fail(400, { error: "Es wurde keine Rolle ausgewählt." });
 
+        const [all, counts] = await Promise.all([listRoles(), countUsersPerRole()]);
+        const role = all.find((entry) => entry.id === roleId);
+        if (!role) return fail(404, { error: "Die Rolle wurde nicht gefunden." });
+
+        /*
+         * Aussperrschutz. Verliert diese Rolle das Recht "*", muss eine ANDERE
+         * Rolle mit "*" noch mindestens einen Zugang tragen -- sonst koennte
+         * hinterher niemand mehr Rechte vergeben.
+         */
+        const losesWildcard =
+            matchesPermission(role.permissions ?? [], "*") && !matchesPermission(permissions, "*");
+
+        if (losesWildcard) {
+            const fallbackExists = all.some(
+                (entry) =>
+                    entry.id !== roleId &&
+                    matchesPermission(entry.permissions ?? [], "*") &&
+                    (counts.get(entry.id) ?? 0) > 0
+            );
+
+            if (!fallbackExists) {
+                return fail(400, {
+                    error:
+                        "Danach hätte kein Zugang mehr uneingeschränkte Rechte und niemand könnte " +
+                        "die Rechteverwaltung noch öffnen. Vergib das Recht „Alles“ zuerst an eine " +
+                        "andere Rolle, die mindestens einem Zugang zugewiesen ist."
+                });
+            }
+        }
+
         const ok = await updateRole(roleId, { permissions, requireMfa });
         if (!ok) return fail(404, { error: "Die Rolle wurde nicht gefunden." });
 
-        throw redirect(303, "/intern/admin/permissions?gespeichert=1");
+        // Die Auswahl bleibt erhalten -- sonst stuende nach dem Speichern
+        // wieder die erste Rolle rechts.
+        throw redirect(
+            303,
+            `/intern/admin/permissions?rolle=${encodeURIComponent(roleId)}&gespeichert=1`
+        );
     },
 
     create: async (event) => {
@@ -101,9 +163,14 @@ export const actions: Actions = {
             return fail(400, { error: `Der Schlüssel „${key}“ ist bereits vergeben.` });
         }
 
-        await createRole({ key, name, description, permissions: [] });
+        const created = await createRole({ key, name, description, permissions: [] });
 
-        throw redirect(303, "/intern/admin/permissions?gespeichert=1");
+        // Direkt auf die neue Rolle: sie hat noch kein einziges Recht, der
+        // naechste Schritt ist also immer die Rechtematrix.
+        throw redirect(
+            303,
+            `/intern/admin/permissions?rolle=${encodeURIComponent(created.id)}&gespeichert=1`
+        );
     },
 
     /**
@@ -120,6 +187,8 @@ export const actions: Actions = {
         const result = await deleteRole(roleId);
         if (!result.ok) return fail(400, { error: result.reason ?? "Löschen nicht möglich." });
 
+        // Ohne rolle-Parameter: die geloeschte Rolle gibt es nicht mehr, die
+        // Seite waehlt beim naechsten Laden wieder die erste.
         throw redirect(303, "/intern/admin/permissions?geloescht=1");
     }
 };

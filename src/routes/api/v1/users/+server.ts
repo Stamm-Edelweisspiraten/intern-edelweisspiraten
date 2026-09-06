@@ -1,30 +1,55 @@
 import type { RequestHandler } from "./$types";
 import { requireScope } from "$lib/server/api/handle";
 import { collection } from "$lib/server/api/pagination";
-import { getAllUsers } from "$lib/server/userService";
+import { conflict, created, parseBody, unprocessable } from "$lib/server/api/respond";
+import { userCreateSchema } from "$lib/server/api/schemas";
+import { toPublicUser } from "$lib/server/api/publicUser";
+import { createUser, getAllUsers } from "$lib/server/userService";
 
-/**
- * Zugaenge -- ausdruecklich nur lesend und ohne Geheimnisse: Passworthash,
- * TOTP-Geheimnis und Wiederherstellungscodes verlassen den Server nicht.
- */
 export const GET: RequestHandler = async (event) => {
     const denied = requireScope(event, "user.view");
     if (denied) return denied;
 
     const users = await getAllUsers();
 
-    return collection(
-        users.map((user) => ({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            status: user.status,
-            type: user.type,
-            roleIds: user.roleIds,
-            memberIds: user.memberIds,
-            mfaEnabled: user.mfaEnabled,
-            lastLoginAt: user.lastLoginAt,
-            createdAt: user.createdAt
-        }))
+    return collection(users.map(toPublicUser));
+};
+
+/**
+ * Einen Zugang anlegen.
+ *
+ * Der Zugang entsteht als `invited` und ohne Passwort. Die Einladung
+ * verschickt diese Route NICHT: ein Fremdsystem legt Zugaenge oft im Voraus
+ * an, und ein Zustellfehler duerfte die Anlage nicht scheitern lassen. Der
+ * Versand erfolgt ueber die Detailseite ("Einladung erneut senden").
+ */
+export const POST: RequestHandler = async (event) => {
+    const denied = requireScope(event, "user.create");
+    if (denied) return denied;
+
+    const body = await parseBody(event, userCreateSchema);
+    if (!body.ok) return body.response!;
+
+    const input = body.data!;
+    const result = await createUser({
+        name: input.name,
+        email: input.email,
+        type: input.type,
+        roleIds: input.roleIds,
+        memberIds: input.memberIds,
+        status: input.status ?? "invited"
+    });
+
+    if (!result.ok || !result.user) {
+        const message = result.error ?? "Der Zugang konnte nicht angelegt werden.";
+        // Die belegte Adresse ist ein Konflikt mit dem Bestand, kein
+        // Eingabefehler -- 409 statt 422.
+        if (message.includes("existiert bereits")) return conflict(message);
+        return unprocessable(message);
+    }
+
+    return created(
+        { data: toPublicUser(result.user) },
+        `${event.url.origin}/api/v1/users/${result.user.id}`
     );
 };

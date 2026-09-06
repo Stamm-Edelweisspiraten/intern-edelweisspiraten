@@ -10,7 +10,7 @@ import {
     uuid
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
-import { members } from "./members";
+import { files, members } from "./members";
 import { shareTarget } from "./files";
 
 /**
@@ -48,6 +48,37 @@ export const events = pgTable(
         /** Ganztägig: die Uhrzeit wird dann nicht angezeigt. */
         allDay: boolean("all_day").notNull().default(false),
         status: eventStatus("status").notNull().default("draft"),
+        /**
+         * Wird bei diesem Termin überhaupt zu- und abgesagt?
+         *
+         * Nicht jeder Termin braucht eine Teilnehmerliste -- eine
+         * Stammesversammlung findet statt, egal wer sich meldet. Ist der
+         * Schalter aus, blendet die Oberfläche Rückmeldung, Frist und
+         * Teilnehmerliste aus, UND `eventService.respond` weist eine
+         * Rückmeldung serverseitig ab.
+         *
+         * Voreinstellung `true`: bestehende Termine sammeln heute
+         * Rückmeldungen. Ein Default von `false` würde bereits abgegebene
+         * Zusagen unsichtbar machen.
+         */
+        responsesEnabled: boolean("responses_enabled").notNull().default(true),
+        /**
+         * Farbe des Termins in Kalender, Liste und Detailansicht.
+         *
+         * Text statt `pgEnum`: eine weitere Farbe soll später ohne Migration
+         * dazukommen dürfen. Die gültigen Werte stehen in
+         * $lib/events/colors.ts; unbekannte Werte werden beim Lesen auf die
+         * Standardfarbe normalisiert, damit ein von Hand gesetzter Wert die
+         * Anzeige nicht bricht.
+         */
+        color: text("color").notNull().default("blau"),
+        /**
+         * Titelbild. ON DELETE SET NULL, nicht CASCADE: ein Termin ohne Bild
+         * ist gültig. Das Objekt im Speicher raeumt `eventService` ab --
+         * beim Austauschen, beim Entfernen und beim Löschen des Termins. Ein
+         * reiner Datenbank-CASCADE wuerde es liegen lassen.
+         */
+        coverFileId: uuid("cover_file_id").references(() => files.id, { onDelete: "set null" }),
         /** Nach dieser Frist ist keine Rückmeldung mehr möglich. */
         responseDeadline: timestamp("response_deadline", { withTimezone: true }),
         createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),

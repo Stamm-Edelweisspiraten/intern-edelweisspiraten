@@ -49,6 +49,8 @@ const DEFAULT_ROLES: RoleInput[] = [
         description: "Zugriff auf den eigenen Bereich und eigene Bestellungen.",
         permissions: [
             "dashboard.view",
+            "surveys.view",
+            "gallery.view",
             "kaemmerer.access",
             "kaemmerer.order.view",
             "kaemmerer.order.create"
@@ -61,6 +63,8 @@ const DEFAULT_ROLES: RoleInput[] = [
         description: "Zugriff auf die Daten der eigenen Kinder.",
         permissions: [
             "dashboard.view",
+            "surveys.view",
+            "gallery.view",
             "kaemmerer.access",
             "kaemmerer.order.view",
             "kaemmerer.order.create"
@@ -71,8 +75,9 @@ const DEFAULT_ROLES: RoleInput[] = [
         key: SYSTEM_ROLE_KEYS.groupLeader,
         name: "Gruppenleitung",
         description:
-            "Mitglieder, Termine und Dateien der eigenen Gruppe. Wird üblicherweise für " +
-            "eine bestimmte Gruppe zugewiesen – dann gelten alle Rechte nur dort.",
+            "Mitglieder, Termine, Umfragen, Galerien und Dateien der eigenen Gruppe. Wird " +
+            "üblicherweise für eine bestimmte Gruppe zugewiesen – dann gelten alle Rechte " +
+            "nur dort.",
         permissions: [
             "dashboard.view",
             "members.view",
@@ -81,6 +86,12 @@ const DEFAULT_ROLES: RoleInput[] = [
             "groups.view",
             "events.view",
             "events.manage",
+            "surveys.view",
+            "surveys.manage",
+            "surveys.results",
+            "gallery.view",
+            "gallery.upload",
+            "gallery.manage",
             "files.view",
             "files.upload",
             "kaemmerer.access",
@@ -93,13 +104,15 @@ const DEFAULT_ROLES: RoleInput[] = [
         key: SYSTEM_ROLE_KEYS.council,
         name: "Stammesführung",
         description:
-            "Stammesweiter Zugriff auf Mitglieder, Gruppen, Termine, Dateien und die " +
-            "Kasse – ohne Systemeinstellungen und Zugangsverwaltung.",
+            "Stammesweiter Zugriff auf Mitglieder, Gruppen, Termine, Umfragen, Galerien, " +
+            "Dateien und die Kasse – ohne Systemeinstellungen und Zugangsverwaltung.",
         permissions: [
             "dashboard.view",
             "members.*",
             "groups.*",
             "events.*",
+            "surveys.*",
+            "gallery.*",
             "files.*",
             "finance.view",
             "finance.export",

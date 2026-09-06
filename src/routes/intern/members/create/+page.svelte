@@ -1,6 +1,8 @@
 <script lang="ts">
     import { enhance } from "$app/forms";
-    import { Alert, Button, Card, FormField, PageHeader, TextInput } from "$lib/components/ui";
+    import {
+        Alert, Button, Card, FormField, PageHeader, Select, TextInput
+    } from "$lib/components/ui";
     import { addToast } from "$lib/toastStore";
     import type { ActionData, PageData } from "./$types";
 
@@ -65,7 +67,7 @@
     }
 
     const inputClass =
-        "w-full px-3 py-2 rounded-lg text-sm bg-surface text-fg border border-border-strong";
+        "w-full px-3 py-2 rounded-control text-sm bg-surface text-fg border border-border-strong";
 </script>
 
 <svelte:head><title>Mitglied anlegen - Intern</title></svelte:head>
@@ -82,8 +84,15 @@
         <Alert tone="danger" message={form.error} />
     {/if}
 
+    <!--
+        Die Action heisst `createMember`; ohne `?/createMember` sucht
+        SvelteKit eine Action namens "default" und antwortet mit 404. Das
+        Formular schickte bisher ohne Angabe ab -- das Anlegen kam damit nie
+        beim Server an.
+    -->
     <form
         method="post"
+        action="?/createMember"
         enctype="multipart/form-data"
         class="space-y-8"
         use:enhance={() => {
@@ -162,21 +171,21 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField label="Stand">
                     {#snippet children({ id })}
-                        <select {id} name="stand" class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm">
-                            {#each STAENDE as stand (stand)}
-                                <option value={stand}>{stand}</option>
-                            {/each}
-                        </select>
+                        <Select
+                            {id}
+                            name="stand"
+                            options={STAENDE.map((stand) => ({ value: stand, label: stand }))}
+                        />
                     {/snippet}
                 </FormField>
 
                 <FormField label="Status">
                     {#snippet children({ id })}
-                        <select {id} name="status" class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm">
-                            {#each STATUS as status (status)}
-                                <option value={status}>{status}</option>
-                            {/each}
-                        </select>
+                        <Select
+                            {id}
+                            name="status"
+                            options={STATUS.map((status) => ({ value: status, label: status }))}
+                        />
                     {/snippet}
                 </FormField>
 
@@ -190,8 +199,8 @@
 
         <Card title="Beiträge" subtitle="Welche Beitragsanteile zahlt dieses Mitglied?">
             <div class="space-y-4">
-                <label class="flex items-start gap-3 px-4 py-3 rounded-xl border border-border cursor-pointer">
-                    <input type="checkbox" name="is_second_member" bind:checked={isSecondMember} class="mt-1 rounded border-border-strong" />
+                <label class="flex items-start gap-3 px-4 py-3 rounded-card border border-border cursor-pointer">
+                    <input type="checkbox" name="is_second_member" bind:checked={isSecondMember} class="mt-1 rounded-control border-border-strong" />
                     <span>
                         <span class="block text-sm font-semibold text-fg">Zweitmitglied</span>
                         <span class="block text-xs text-fg-subtle">
@@ -203,12 +212,12 @@
                 <fieldset class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <legend class="text-sm font-semibold text-fg-muted mb-2">Beitragsanteile</legend>
                     {#each [["stamm", "Stamm"], ["gau", "Gau"], ["landesmark", "Landesmark"], ["bund", "Bund"]] as [key, label] (key)}
-                        <label class="flex items-center gap-2 px-3 py-2 rounded-lg border border-border cursor-pointer hover:bg-surface-muted transition">
+                        <label class="flex items-center gap-2 px-3 py-2 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition">
                             <input
                                 type="checkbox"
                                 name={`dues_${key}`}
                                 bind:checked={dues[key as keyof typeof dues]}
-                                class="rounded border-border-strong"
+                                class="rounded-control border-border-strong"
                             />
                             <span class="text-sm text-fg">{label}</span>
                         </label>
@@ -269,15 +278,16 @@
                 {#each selectedGroups as groupId, index (index)}
                     <div class="flex gap-2 items-center">
                         <label class="sr-only" for={`group-${index}`}>Gruppe {index + 1}</label>
-                        <select
-                            id={`group-${index}`}
-                            bind:value={selectedGroups[index]}
-                            class="flex-1 px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong shadow-sm"
-                        >
-                            {#each data.groups ?? [] as group (group.id)}
-                                <option value={group.id}>{group.name}</option>
-                            {/each}
-                        </select>
+                        <div class="flex-1">
+                            <Select
+                                id={`group-${index}`}
+                                bind:value={selectedGroups[index]}
+                                options={(data.groups ?? []).map((group) => ({
+                                    value: group.id,
+                                    label: group.name
+                                }))}
+                            />
+                        </div>
                         <Button variant="ghost" size="sm" icon="trash" ariaLabel="Gruppe entfernen" onclick={() => removeGroup(index)} />
                     </div>
                 {/each}
@@ -293,8 +303,8 @@
                     <legend class="text-sm font-semibold text-fg-muted mb-2">Veröffentlichung von Bildern</legend>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         {#each [["consent_social", "Soziale Medien"], ["consent_website", "Webseite"], ["consent_print", "Druckerzeugnisse"]] as [name, label] (name)}
-                            <label class="flex items-center gap-2 px-3 py-2 rounded-lg border border-border cursor-pointer hover:bg-surface-muted transition">
-                                <input type="checkbox" {name} class="rounded border-border-strong" />
+                            <label class="flex items-center gap-2 px-3 py-2 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition">
+                                <input type="checkbox" {name} class="rounded-control border-border-strong" />
                                 <span class="text-sm text-fg">{label}</span>
                             </label>
                         {/each}
@@ -309,7 +319,7 @@
                                 type="file"
                                 name="consent_file"
                                 accept=".pdf,image/png,image/jpeg"
-                                class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold"
+                                class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-control file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold"
                             />
                         {/snippet}
                     </FormField>
@@ -321,7 +331,7 @@
                                 type="file"
                                 name="application_file"
                                 accept=".pdf,image/png,image/jpeg"
-                                class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold"
+                                class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-control file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold"
                             />
                         {/snippet}
                     </FormField>

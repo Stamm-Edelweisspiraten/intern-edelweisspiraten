@@ -7,7 +7,18 @@
      * wirkungslos und der Nutzer sah eine Seite, die scheinbar nichts tat.
      */
 
-    type Tone = "info" | "success" | "warning" | "danger";
+    import type { Tone } from "./types";
+
+    /*
+     * Der Tonwert kommt aus ./types und deckt damit dieselben sechs Werte ab
+     * wie Badge, Card und StatTile. Vorher kannte Alert nur vier davon --
+     * jede Stelle, die einen Tonwert weiterreichte (etwa readHint() aus
+     * $lib/hints), musste ihn deshalb von Hand auf die kleinere Liste
+     * abbilden. Drei Seiten hatten dafuer dieselbe Hilfsfunktion kopiert.
+     *
+     * `neutral` und `primary` sind bewusst zurueckhaltend gestaltet: eine
+     * Rueckmeldung ohne Wertung soll nicht wie eine Warnung aussehen.
+     */
 
     interface Props {
         tone?: Tone;
@@ -19,6 +30,8 @@
     let { tone = "info", title, message, children }: Props = $props();
 
     const TONES: Record<Tone, { box: string; icon: string }> = {
+        neutral: { box: "bg-surface-muted border-border text-fg", icon: "info-circle" },
+        primary: { box: "bg-primary-soft border-primary-soft-border text-primary-soft-fg", icon: "info-circle" },
         info: { box: "bg-info-soft border-info-soft-border text-info-soft-fg", icon: "info-circle" },
         success: { box: "bg-success-soft border-success-soft-border text-success-soft-fg", icon: "check-circle" },
         warning: { box: "bg-warning-soft border-warning-soft-border text-warning-soft-fg", icon: "exclamation-triangle" },

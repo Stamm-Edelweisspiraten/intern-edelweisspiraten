@@ -90,6 +90,20 @@
         <Alert tone="danger" message={form.error} />
     {/if}
 
+    <!--
+        Der Erfolgsfall blieb bisher stumm: die Aktion gab {success, sent}
+        zurueck, angezeigt wurde nur form.error. Ein gelungener Versand sah
+        damit genauso aus wie gar keine Reaktion.
+    -->
+    {#if form?.warning}
+        <Alert tone="warning" title="Teilweise versendet" message={form.warning} />
+    {:else if form?.success}
+        <Alert
+            tone="success"
+            message={`${form.sent} ${form.sent === 1 ? "Nachricht wurde" : "Nachrichten wurden"} versendet.`}
+        />
+    {/if}
+
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatTile label="Mitglieder" value={data.members.length} tone="primary" icon="people" />
         <StatTile label="E-Mail-Adressen" value={recipients.length} tone="success" icon="envelope" />

@@ -9,8 +9,8 @@ import { listRoles } from "$lib/server/roleService";
 import { isGroupScopable } from "$lib/permissions";
 import { listSessionsForUser, revokeAllForUser, revokeSessionById } from "$lib/server/auth/session";
 import { issueToken } from "$lib/server/auth/passwordReset";
-import { sendEmail } from "$lib/server/emailService";
-import { passwordResetTemplate } from "$lib/server/emailTemplates/passwordReset";
+import { describeSmtpError, sendEmail } from "$lib/server/emailService";
+import { inviteTemplate, passwordResetTemplate } from "$lib/server/emailTemplates/passwordReset";
 import { getOrganizationSettings } from "$lib/server/settingsService";
 import { isUuid } from "$lib/server/db/ids";
 import { matchesPermission } from "$lib/permissions/match";
@@ -145,34 +145,49 @@ export const actions: Actions = {
         return { success: "Die verknüpften Mitglieder wurden gespeichert." };
     },
 
-    /** Schickt einen Link zum Setzen eines neuen Passworts. */
+    /**
+     * Schickt einen Link zum Setzen eines Passworts.
+     *
+     * Bei einem noch nicht aktivierten Zugang ist das die **Einladung** und
+     * nicht ein Zuruecksetzen: der Zugang hat gar kein Passwort, und die
+     * Einladung gilt 14 Tage statt 2 Stunden. Die Oberflaeche hebt die Schaltflaeche
+     * deshalb hervor, solange der Status `invited` ist.
+     */
     resetPassword: async (event) => {
         requirePermission(event, "user.edit");
 
         const user = await getUser(event.params.id);
         if (!user) return fail(404, { error: "Benutzer nicht gefunden." });
 
+        const invite = user.status === "invited";
+
         try {
-            const { token } = await issueToken(user.id, "reset");
+            const { token } = await issueToken(user.id, invite ? "invite" : "reset");
             const base = env.PUBLIC_APP_URL || event.url.origin;
             const organization = await getOrganizationSettings();
+            const link = `${base}/password/reset/${token}`;
 
             await sendEmail({
                 to: user.email,
-                subject: `Passwort zurücksetzen – ${organization.name}`,
-                html: passwordResetTemplate(
-                    user.name,
-                    `${base}/password/reset/${token}`,
-                    2,
-                    organization.name
-                )
+                subject: invite
+                    ? `Dein Zugang zum internen Bereich – ${organization.name}`
+                    : `Passwort zurücksetzen – ${organization.name}`,
+                html: invite
+                    ? inviteTemplate(user.name, link, 14, organization.name)
+                    : passwordResetTemplate(user.name, link, 2, organization.name)
             });
         } catch (err) {
-            console.error("Passwort-Mail konnte nicht versendet werden:", err);
-            return fail(500, { error: "Die E-Mail konnte nicht versendet werden." });
+            console.error("Einladungs- bzw. Passwortmail fehlgeschlagen:", err);
+            // describeSmtpError nennt den naechsten Schritt statt eines
+            // "ECONNREFUSED 127.0.0.1:587".
+            return fail(500, { error: describeSmtpError(err) });
         }
 
-        return { success: "Ein Link zum Zurücksetzen wurde versendet." };
+        return {
+            success: invite
+                ? "Die Einladung wurde erneut versendet."
+                : "Ein Link zum Zurücksetzen wurde versendet."
+        };
     },
 
     /** Entfernt die Zwei-Faktor-Einrichtung, z.B. bei Geräteverlust. */

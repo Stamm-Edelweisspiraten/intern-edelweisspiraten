@@ -1,7 +1,9 @@
 <script lang="ts">
     import { Badge, Button, Card, DataTable, EmptyState, PageHeader, StatTile } from "$lib/components/ui";
     import type { Column } from "$lib/components/ui";
+    import { AgingBarChart } from "$lib/components/finance/charts";
     import { formatDate } from "$lib/format";
+    import { eventColorVars } from "$lib/events/colors";
     import { formatEuro } from "$lib/money";
     import {
         orderStatusLabel,
@@ -127,6 +129,102 @@
                 {/if}
             </Card>
 
+            <!--
+                Nur fuer die Kasse: `data.aging` kommt vom Server ausschliesslich
+                mit dem Recht `finance.view`. Die Staffel zeigt die Forderungen
+                des ganzen Stammes, nicht die eigenen -- deshalb steht sie in
+                einer eigenen Karte und nicht in der Tabelle darueber.
+
+                Diagramm neben seiner Tabelle: die Betraege stehen links
+                vollstaendig, das Diagramm ist die Zugabe.
+            -->
+            {#if data.aging && data.aging.count > 0}
+                <Card
+                    title="Fälligkeitsstaffel des Stammes"
+                    subtitle="Alle offenen Forderungen der Kasse nach Alter der Fälligkeit."
+                    meta={`Stand ${formatDate(data.aging.at)}`}
+                >
+                    {#snippet actions()}
+                        <Button
+                            href="/intern/finance/outstanding"
+                            variant="ghost"
+                            size="sm"
+                            iconRight="arrow-right"
+                        >
+                            Offene Posten
+                        </Button>
+                    {/snippet}
+
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+                        <div class="min-w-0 overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <caption class="sr-only">
+                                    Offene Forderungen des Stammes nach Alter der Fälligkeit
+                                </caption>
+                                <thead>
+                                    <tr class="border-b border-border text-left">
+                                        <th scope="col" class="py-2 pr-3 font-semibold text-fg-muted">
+                                            Zeitraum
+                                        </th>
+                                        <th
+                                            scope="col"
+                                            class="py-2 px-3 font-semibold text-fg-muted text-right"
+                                        >
+                                            Posten
+                                        </th>
+                                        <th
+                                            scope="col"
+                                            class="py-2 pl-3 font-semibold text-fg-muted text-right"
+                                        >
+                                            Betrag
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {#each data.aging.buckets as bucket (bucket.label)}
+                                        <tr class="border-b border-border last:border-b-0">
+                                            <th
+                                                scope="row"
+                                                class="py-1.5 pr-3 font-normal text-fg text-left"
+                                            >
+                                                {bucket.label}
+                                            </th>
+                                            <td class="py-1.5 px-3 text-right tabular-figures text-fg-muted">
+                                                {bucket.count}
+                                            </td>
+                                            <td
+                                                class={`py-1.5 pl-3 text-right tabular-figures font-semibold ${
+                                                    bucket.fromDays > 60
+                                                        ? "text-danger"
+                                                        : bucket.fromDays > 0
+                                                          ? "text-warning"
+                                                          : "text-fg"
+                                                }`}
+                                            >
+                                                {formatEuro(bucket.amount)}
+                                            </td>
+                                        </tr>
+                                    {/each}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="border-t-2 border-border-strong font-semibold">
+                                        <th scope="row" class="py-2 pr-3 text-left text-fg">Gesamt</th>
+                                        <td class="py-2 px-3 text-right tabular-figures">
+                                            {data.aging.count}
+                                        </td>
+                                        <td class="py-2 pl-3 text-right tabular-figures">
+                                            {formatEuro(data.aging.total)}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <AgingBarChart buckets={data.aging.buckets} title="" size="sm" />
+                    </div>
+                </Card>
+            {/if}
+
             <Card title="Meine offenen Bestellungen" meta={`${data.openOrderCount} offen`} padding="none">
                 {#snippet actions()}
                     <Button href="/intern/kaemmerer/order" variant="secondary" size="sm" icon="bag">
@@ -159,6 +257,53 @@
         </div>
 
         <div class="space-y-6">
+            {#if data.surveys.length > 0}
+                <!--
+                    Nur laufende Umfragen. Die Kachel verschwindet, wenn keine
+                    offen ist -- eine dauerhaft leere Karte auf der Startseite
+                    ist schlechter als gar keine.
+                -->
+                <Card title="Offene Umfragen" subtitle="Warten auf deine Antwort.">
+                    {#snippet actions()}
+                        <Button
+                            href="/intern/umfragen"
+                            variant="ghost"
+                            size="sm"
+                            iconRight="arrow-right"
+                        >
+                            Alle
+                        </Button>
+                    {/snippet}
+
+                    <ul class="space-y-2">
+                        {#each data.surveys as survey (survey.id)}
+                            <li>
+                                <a
+                                    href={`/intern/umfragen/${survey.id}`}
+                                    class="block rounded-card border border-border p-3
+                                           hover:bg-surface-muted transition"
+                                >
+                                    <span class="block text-sm font-semibold text-fg">
+                                        {survey.title}
+                                    </span>
+                                    <span class="block text-xs text-fg-subtle mt-1">
+                                        {#if survey.closesAt}
+                                            Noch bis {formatDate(survey.closesAt)}
+                                        {:else}
+                                            Ohne Frist
+                                        {/if}
+                                        ·
+                                        {survey.responseCount === 1
+                                            ? "1 Antwort"
+                                            : `${survey.responseCount} Antworten`}
+                                    </span>
+                                </a>
+                            </li>
+                        {/each}
+                    </ul>
+                </Card>
+            {/if}
+
             <Card title="Nächste Termine" subtitle="Was ansteht – und wo noch eine Rückmeldung fehlt.">
                 {#snippet actions()}
                     <Button href="/intern/termine" variant="ghost" size="sm" iconRight="arrow-right">
@@ -174,7 +319,9 @@
                             <li>
                                 <a
                                     href={`/intern/termine/${item.id}`}
-                                    class="block rounded-xl border border-border p-3 hover:bg-surface-muted transition"
+                                    class="block rounded-card border border-border border-l-4 p-3
+                                           hover:bg-surface-muted transition"
+                                    style={`${eventColorVars(item.color)} border-left-color: var(--ev)`}
                                 >
                                     <div class="flex items-start justify-between gap-2 flex-wrap">
                                         <span

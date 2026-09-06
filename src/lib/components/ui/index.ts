@@ -17,6 +17,7 @@ export { default as Select } from "./Select.svelte";
 export { default as SkipLink } from "./SkipLink.svelte";
 export { default as StatTile } from "./StatTile.svelte";
 export { default as TextInput } from "./TextInput.svelte";
+export { default as Textarea } from "./Textarea.svelte";
 export { default as ThemeToggle } from "./ThemeToggle.svelte";
 
 export type { Column, Tone } from "./types";

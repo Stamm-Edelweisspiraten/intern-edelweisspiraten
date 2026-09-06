@@ -3,6 +3,7 @@ import { db } from "$lib/server/db";
 import { isUuid } from "$lib/server/db/ids";
 import { accounts, bookingCategories } from "$lib/server/db/schema";
 import type { BookingCategoryView, TransactionDirection } from "./types";
+import { isUniqueViolation } from "$lib/server/db/errors";
 
 /**
  * Buchungsarten der einfachen Erfassungsmaske.
@@ -77,7 +78,7 @@ export async function createCategory(
             .returning({ id: bookingCategories.id });
         return { ok: true, id: row.id };
     } catch (err: unknown) {
-        if ((err as { code?: string })?.code === "23505") {
+        if (isUniqueViolation(err)) {
             return { ok: false, error: `Die Buchungsart „${name}“ existiert bereits.` };
         }
         throw err;

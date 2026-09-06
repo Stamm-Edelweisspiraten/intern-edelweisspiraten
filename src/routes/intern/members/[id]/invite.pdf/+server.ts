@@ -18,9 +18,11 @@ export const GET: RequestHandler = async (event) => {
 
     requirePermissionForAnyGroup(event, "members.view", member.groups);
 
+    // Ohne PUBLIC_APP_URL zaehlt der Ursprung dieser Anfrage -- sonst traegt
+    // der QR-Code eine Adresse, die es in dieser Installation nicht gibt.
     return deliverPdf(
         "invite",
-        { memberId: member.id },
+        { memberId: member.id, baseUrl: event.url.origin },
         { filename: `einladung-${member.lastname || member.id}.pdf` }
     );
 };

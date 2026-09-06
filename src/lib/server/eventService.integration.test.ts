@@ -291,6 +291,178 @@ maybe("Termine", () => {
         expect(result.ok).toBe(false);
     });
 
+    it("weist eine Rückmeldung ab, wenn der Termin keine erfasst", async () => {
+        const { createEvent, respond, listResponses } = await import("$lib/server/eventService");
+
+        const result = await createEvent(
+            {
+                title: `${PREFIX}Ohne Rückmeldung`,
+                startsAt: new Date(Date.now() + 86_400_000),
+                responsesEnabled: false
+            },
+            userId
+        );
+
+        const response = await respond({
+            eventId: result.id!,
+            memberId,
+            response: "yes",
+            respondedBy: userId
+        });
+
+        expect(response.ok).toBe(false);
+        expect(response.error).toBe("Für diesen Termin werden keine Rückmeldungen erfasst.");
+
+        // Das Ausblenden im Formular genügt nicht -- der Server muss halten.
+        expect(await listResponses(result.id!)).toHaveLength(0);
+    });
+
+    it("liefert keine Teilnehmerliste, wenn die Rückmeldung abgeschaltet wird", async () => {
+        const { createEvent, respond, listResponses, updateEvent } = await import(
+            "$lib/server/eventService"
+        );
+
+        const startsAt = new Date(Date.now() + 86_400_000);
+        const result = await createEvent({ title: `${PREFIX}Erst ja`, startsAt }, userId);
+
+        expect(
+            (await respond({ eventId: result.id!, memberId, response: "yes", respondedBy: userId }))
+                .ok
+        ).toBe(true);
+        expect(await listResponses(result.id!)).toHaveLength(1);
+
+        await updateEvent(result.id!, {
+            title: `${PREFIX}Erst ja`,
+            startsAt,
+            responsesEnabled: false
+        });
+
+        // Die alte Zeile steht noch in der Tabelle, gehört aber nicht mehr in
+        // die Anzeige.
+        expect(await listResponses(result.id!)).toHaveLength(0);
+    });
+
+    it("normalisiert die Farbe beim Anlegen und Ändern", async () => {
+        const { createEvent, getEvent, updateEvent } = await import("$lib/server/eventService");
+        const viewer = { id: userId, memberIds: [memberId] };
+        const startsAt = new Date(Date.now() + 86_400_000);
+
+        const unknown = await createEvent(
+            { title: `${PREFIX}Farbe unbekannt`, startsAt, color: "magenta" },
+            userId
+        );
+        expect((await getEvent(unknown.id!, viewer))?.color).toBe("blau");
+
+        const shouty = await createEvent(
+            { title: `${PREFIX}Farbe laut`, startsAt, color: "  ROT " },
+            userId
+        );
+        expect((await getEvent(shouty.id!, viewer))?.color).toBe("rot");
+
+        await updateEvent(shouty.id!, { title: `${PREFIX}Farbe laut`, startsAt, color: "Gruen" });
+        expect((await getEvent(shouty.id!, viewer))?.color).toBe("gruen");
+    });
+
+    it("bindet die Verwaltung an die freigegebenen Gruppen", async () => {
+        const { mayManageEvent } = await import("$lib/server/eventService");
+
+        // Stammesweit: immer ja.
+        expect(await mayManageEvent(meuteOnlyId, null)).toBe(true);
+        expect(await mayManageEvent(openId, null)).toBe(true);
+
+        // Kein Recht: immer nein.
+        expect(await mayManageEvent(meuteOnlyId, [])).toBe(false);
+
+        // Passende Gruppe ja, fremde Gruppe nein.
+        expect(await mayManageEvent(meuteOnlyId, [meuteId])).toBe(true);
+        expect(await mayManageEvent(meuteOnlyId, [sippeId])).toBe(false);
+
+        /**
+         * Bewusst unsymmetrisch: ein Termin ohne jede Freigabe ist für alle
+         * SICHTBAR, aber für eine gruppengebundene Verwaltung nicht
+         * verwaltbar -- sonst dürfte eine Meutenführung die stammesweite
+         * Stammesversammlung ändern.
+         */
+        expect(await mayManageEvent(openId, [meuteId])).toBe(false);
+    });
+
+    it("zeigt einen Entwurf der eigenen Gruppe der zuständigen Verwaltung", async () => {
+        const { createEvent, getEvent, listEvents, setEventShares } = await import(
+            "$lib/server/eventService"
+        );
+
+        const result = await createEvent(
+            {
+                title: `${PREFIX}Entwurf Meute`,
+                startsAt: new Date(Date.now() + 86_400_000),
+                status: "draft"
+            },
+            userId
+        );
+        await setEventShares(result.id!, [{ targetKind: "group", targetId: meuteId }]);
+
+        const viewer = { id: userId, memberIds: [memberId] };
+
+        // Ohne Verwaltungsrecht bleibt der Entwurf unsichtbar.
+        expect((await listEvents(viewer, { range: "upcoming" })).map((e) => e.id)).not.toContain(
+            result.id
+        );
+        expect(await getEvent(result.id!, viewer)).toBeNull();
+
+        // Mit dem Recht für die Meute erscheint er.
+        const managing = await listEvents(viewer, {
+            range: "upcoming",
+            manageGroups: [meuteId]
+        });
+        expect(managing.map((e) => e.id)).toContain(result.id);
+        expect(await getEvent(result.id!, viewer, { manageGroups: [meuteId] })).not.toBeNull();
+
+        // Mit dem Recht für eine fremde Gruppe nicht.
+        const foreign = await listEvents(viewer, {
+            range: "upcoming",
+            manageGroups: [sippeId]
+        });
+        expect(foreign.map((e) => e.id)).not.toContain(result.id);
+    });
+
+    it("löscht mit dem Termin auch sein Titelbild", async () => {
+        const { db } = await import("$lib/server/db");
+        const schema = await import("$lib/server/db/schema");
+        const { eq } = await import("drizzle-orm");
+        const { createEvent, deleteEvent } = await import("$lib/server/eventService");
+        const { storeFile } = await import("$lib/server/fileStore");
+
+        const fileId = await storeFile({
+            filename: `${PREFIX}titelbild.png`,
+            contentType: "image/png",
+            content: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+        });
+
+        const result = await createEvent(
+            {
+                title: `${PREFIX}Mit Bild`,
+                startsAt: new Date(Date.now() + 86_400_000),
+                coverFileId: fileId
+            },
+            userId
+        );
+
+        expect(await db.select().from(schema.files).where(eq(schema.files.id, fileId))).toHaveLength(
+            1
+        );
+
+        expect(await deleteEvent(result.id!)).toBe(true);
+
+        /**
+         * Der Fremdschlüssel steht auf ON DELETE SET NULL und räumt deshalb
+         * nichts ab -- ohne den Schritt in `deleteEvent` bliebe hier eine
+         * verwaiste Zeile samt Objekt im Speicher liegen.
+         */
+        expect(await db.select().from(schema.files).where(eq(schema.files.id, fileId))).toHaveLength(
+            0
+        );
+    });
+
     it("weist eine Frist nach dem Termin ab", async () => {
         const { createEvent } = await import("$lib/server/eventService");
         const start = new Date(Date.now() + 86_400_000);

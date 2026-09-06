@@ -9,17 +9,31 @@
         subtitle?: string;
         eyebrow?: string;
         icon?: string;
+        /**
+         * Breite der Karte. Vorgabe `md` -- Anmeldung, Passwort und
+         * Ersteinrichtung bleiben damit unveraendert. `lg` gibt es fuer die
+         * oeffentliche Umfrageseite: ein Formular mit zwoelf Fragen ist in
+         * einer Anmeldekarte nicht lesbar.
+         */
+        size?: "md" | "lg";
         footer?: Snippet;
         children: Snippet;
     }
 
-    let { title, subtitle, eyebrow = "Intern", icon = "box-arrow-in-right", footer, children }: Props =
-        $props();
+    let {
+        title,
+        subtitle,
+        eyebrow = "Intern",
+        icon = "box-arrow-in-right",
+        size = "md",
+        footer,
+        children
+    }: Props = $props();
 </script>
 
 <div class="min-h-screen w-full flex flex-col bg-surface-muted">
     <main id="hauptinhalt" class="flex-1 flex items-center justify-center p-4 sm:p-6">
-        <div class="w-full max-w-md">
+        <div class={`w-full ${size === "lg" ? "max-w-2xl" : "max-w-md"}`}>
             <div
                 class="bg-surface border border-border rounded-card p-6 sm:p-8 space-y-6"
                 style="box-shadow: var(--shadow-raised);"

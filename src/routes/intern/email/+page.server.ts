@@ -140,7 +140,9 @@ export const actions: Actions = {
             return fail(400, { error: "Keine E-Mail-Adressen in dieser Gruppe." });
         }
 
-        const { sendEmail } = await import("$lib/server/emailService");
+        const { sendEmail, describeSmtpError, SmtpNotConfiguredError } = await import(
+            "$lib/server/emailService"
+        );
         const reply = replyToForm || group?.replyTo || locals.user?.userinfo?.email || "";
         const fromAddress = reply || undefined;
 
@@ -158,18 +160,60 @@ export const actions: Actions = {
             }
         }
 
+        /*
+         * Je Empfaenger einzeln fangen.
+         *
+         * Vorher brach eine einzige abgelehnte Adresse den gesamten Restlauf
+         * ab, und der Absender erfuhr nicht, wie weit der Versand gekommen
+         * war -- bei einem Verteiler ueber mehrere Gruppen ist das der
+         * Unterschied zwischen "nichts passiert" und "die Haelfte hat es
+         * doppelt bekommen", sobald jemand es erneut versucht.
+         */
+        const failed: string[] = [];
+        let sent = 0;
+
         for (const to of emails) {
-            await sendEmail({
-                to,
-                from: fromAddress,
-                subject,
-                text: bodyText || bodyHtml,
-                html: bodyHtml,
-                replyTo: reply || undefined,
-                attachments
-            } as any);
+            try {
+                await sendEmail({
+                    to,
+                    from: fromAddress,
+                    subject,
+                    text: bodyText || bodyHtml,
+                    html: bodyHtml,
+                    replyTo: reply || undefined,
+                    attachments
+                });
+                sent += 1;
+            } catch (err) {
+                // Ohne eingerichteten Versand scheitert jeder weitere
+                // Empfaenger genauso -- dann gleich abbrechen und sagen, was
+                // fehlt, statt hundertmal dieselbe Meldung zu sammeln.
+                if (err instanceof SmtpNotConfiguredError) {
+                    return fail(500, { error: describeSmtpError(err) });
+                }
+
+                console.error(`E-Mail an ${to} fehlgeschlagen:`, err);
+                failed.push(to);
+            }
         }
 
-        return { success: true, sent: emails.size };
+        if (sent === 0) {
+            return fail(500, {
+                error: `Keine der ${emails.size} Nachrichten konnte versendet werden.`
+            });
+        }
+
+        if (failed.length > 0) {
+            return {
+                success: true,
+                sent,
+                failed,
+                warning:
+                    `${sent} von ${emails.size} Nachrichten versendet. ` +
+                    `Nicht zugestellt: ${failed.join(", ")}.`
+            };
+        }
+
+        return { success: true, sent };
     }
 };

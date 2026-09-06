@@ -1,7 +1,16 @@
 <script lang="ts">
     import { LineChart } from "layerchart";
-    import ChartFrame from "./ChartFrame.svelte";
-    import { axisEuro, CHART_COLORS } from "./colors";
+    import ChartFrame, { type ChartSize } from "./ChartFrame.svelte";
+    import {
+        axisEuroCompact,
+        CHART_AXIS,
+        CHART_COLORS,
+        CHART_GRID,
+        CHART_PADDING,
+        chartTooltip,
+        tooltipEuro
+    } from "./colors";
+    import { formatDate } from "$lib/format";
 
     /**
      * Kontostandsverlauf.
@@ -16,11 +25,11 @@
      */
     let {
         entries,
-        height = 240,
+        size = "md",
         title = "Kontostandsverlauf"
     }: {
         entries: { date: string; balance: number }[];
-        height?: number;
+        size?: ChartSize;
         title?: string;
     } = $props();
 
@@ -32,25 +41,45 @@
     );
 
     const isEmpty = $derived(entries.length < 2);
+
+    /** Auf der Achse reicht „01.02.“; das Jahr steht in der Kurzinfo. */
+    const axisDate = (value: Date) =>
+        value.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+
+    const tooltip = chartTooltip({
+        header: (value: Date) => formatDate(value),
+        value: tooltipEuro
+    });
 </script>
 
 <ChartFrame
     {title}
-    {height}
+    {size}
     {isEmpty}
     empty="Für einen Verlauf braucht es mindestens zwei Bewegungen."
 >
-    <LineChart
-        {data}
-        x="date"
-        y="balance"
-        series={[{ key: "balance", label: "Kontostand", color: CHART_COLORS.result }]}
-        props={{
-            yAxis: { format: (value: number) => axisEuro(value * 100) },
-            xAxis: {
-                format: (value: Date) =>
-                    value.toLocaleDateString("de-DE", { month: "short", day: "numeric" })
-            }
-        }}
-    />
+    {#snippet children()}
+        <!--
+            `rule={false}`: keine doppelte Grundlinie. LayerChart zeichnet
+            ueber `rule` eine eigene Linie bei null, und weil die Werteachse
+            bei null beginnt, liegt dort ohnehin schon eine Gitterlinie.
+        -->
+        <LineChart
+            {data}
+            x="date"
+            y="balance"
+            series={[{ key: "balance", label: "Kontostand", color: CHART_COLORS.result }]}
+            grid={{ y: CHART_GRID }}
+            padding={CHART_PADDING}
+            rule={false}
+            props={{
+                yAxis: {
+                    ...CHART_AXIS,
+                    format: (value: number) => axisEuroCompact(value * 100)
+                },
+                xAxis: { ...CHART_AXIS, format: axisDate },
+                tooltip
+            }}
+        />
+    {/snippet}
 </ChartFrame>

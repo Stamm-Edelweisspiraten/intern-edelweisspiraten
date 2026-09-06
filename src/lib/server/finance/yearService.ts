@@ -12,6 +12,7 @@ import {
 import type { Cents } from "$lib/money";
 import { nextNumber } from "./numbering";
 import type { Dues, FiscalYearView, YearSummary } from "./types";
+import { isUniqueViolation } from "$lib/server/db/errors";
 
 /** Geschäftsjahre: anlegen, auflisten, abschließen, archivieren. */
 
@@ -110,7 +111,7 @@ export async function createFiscalYear(
     } catch (err: unknown) {
         // Der eindeutige Index auf year verhindert Doppelanlagen, die vorher
         // moeglich waren -- inklusive widerspruechlicher Beitragssaetze.
-        if ((err as { code?: string })?.code === "23505") {
+        if (isUniqueViolation(err)) {
             return { ok: false, error: `Für ${input.year} existiert bereits ein Geschäftsjahr.` };
         }
         throw err;

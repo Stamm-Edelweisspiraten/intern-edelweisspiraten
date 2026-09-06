@@ -35,6 +35,22 @@ export const ALL_PERMISSIONS = [
     "events.*",
 
     // -----------------------
+    // Umfragen
+    // -----------------------
+    "surveys.view",
+    "surveys.manage",
+    "surveys.results",
+    "surveys.*",
+
+    // -----------------------
+    // Galerie
+    // -----------------------
+    "gallery.view",
+    "gallery.upload",
+    "gallery.manage",
+    "gallery.*",
+
+    // -----------------------
     // Dateien
     // -----------------------
     "files.view",
@@ -123,6 +139,14 @@ export const GROUP_SCOPED_PERMISSIONS = [
     "events.view",
     "events.manage",
     "events.*",
+    "surveys.view",
+    "surveys.manage",
+    "surveys.results",
+    "surveys.*",
+    "gallery.view",
+    "gallery.upload",
+    "gallery.manage",
+    "gallery.*",
     "files.view",
     "files.upload",
     "files.manage",

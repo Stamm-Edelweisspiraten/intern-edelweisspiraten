@@ -1,13 +1,19 @@
 <script lang="ts">
+    import { enhance } from "$app/forms";
+    import { goto, invalidateAll } from "$app/navigation";
     import {
         Alert, Badge, Button, Card, ConfirmDialog,
-        FormField, PageHeader, SearchInput, TextInput
+        FormField, PageHeader, SearchInput, Select, TextInput
     } from "$lib/components/ui";
     import { calculateAge, formatDate, formatDateTime } from "$lib/format";
     import { can } from "$lib/can";
+    import { addToast } from "$lib/toastStore";
     import type { ActionData, PageData } from "./$types";
 
     let { data, form }: { data: PageData; form: ActionData } = $props();
+
+    let savingMember = $state(false);
+    let savingUsers = $state(false);
 
     const STAENDE = [
         "Neuling-Wölfling", "Wölfling", "Neuling-Pfadfinder", "Jungpfadfinder",
@@ -21,6 +27,13 @@
     const canEdit = $derived(data.canEdit);
     const canDelete = $derived(data.canDelete);
     const canViewLog = $derived(data.canViewLog);
+    /**
+     * Wer festlegt, welche Zugaenge ein Mitglied sehen duerfen, aendert
+     * Rechte -- dafuer verlangt die Action zusaetzlich user.edit. Die
+     * Oberflaeche fragte bisher nur members.edit ab und zeigte die
+     * Schaltflaechen auch dem, der beim Speichern 403 bekommt.
+     */
+    const canLinkUsers = $derived(data.canLinkUsers);
     // Der Bescheid rechnet mit den Saetzen des Geschaeftsjahrs -- das ist Kasse.
     const canViewFinance = $derived(can(permissions, "finance.view"));
 
@@ -120,7 +133,7 @@
     }
 
     const inputClass =
-        "w-full px-3 py-2 rounded-lg text-sm bg-surface text-fg border border-border-strong disabled:opacity-60";
+        "w-full px-3 py-2 rounded-control text-sm bg-surface text-fg border border-border-strong disabled:opacity-60";
 
     const fullName = $derived(`${data.member.firstname} ${data.member.lastname}`);
 </script>
@@ -174,7 +187,7 @@
     </PageHeader>
 
     {#if form?.error}<Alert tone="danger" message={form.error} />{/if}
-    {#if form?.success}<Alert tone="success" message="Die Änderungen wurden gespeichert." />{/if}
+    {#if form?.success}<Alert tone="success" message={form.success} />{/if}
 
     {#if data.member.updatedAt}
         <p class="text-sm text-fg-subtle">
@@ -183,7 +196,35 @@
         </p>
     {/if}
 
-    <form method="post" action="?/update" enctype="multipart/form-data" class="space-y-8">
+    <!--
+        Beide Formulare dieser Seite antworten gleich und ziehen die Daten
+        anschliessend nach. Vorher endete `update` mit einer Weiterleitung und
+        `update-users` mit einem Ergebnisobjekt: die eine Aenderung war danach
+        zu sehen, die andere nicht.
+    -->
+    <form
+        method="post"
+        action="?/update"
+        enctype="multipart/form-data"
+        class="space-y-8"
+        use:enhance={() => {
+            savingMember = true;
+            return async ({ result, update }) => {
+                await update({ reset: false });
+                await invalidateAll();
+                savingMember = false;
+
+                if (result.type === "success") {
+                    // Der Wechsel zurueck in die Ansicht verwirft `form` --
+                    // die Bestaetigung kommt deshalb als Kurzmeldung.
+                    addToast("Die Änderungen wurden gespeichert.", "success");
+                    if (editing) {
+                        await goto(`/intern/members/${data.member.id}`, { noScroll: true });
+                    }
+                }
+            };
+        }}
+    >
         <input type="hidden" name="id" value={data.member.id} />
         <input type="hidden" name="groups" value={JSON.stringify(selectedGroups)} />
 
@@ -236,20 +277,24 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField label="Stand">
                     {#snippet children({ id })}
-                        <select {id} name="stand" disabled={readOnly} class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong disabled:opacity-60">
-                            {#each STAENDE as option (option)}
-                                <option value={option} selected={data.member.stand === option}>{option}</option>
-                            {/each}
-                        </select>
+                        <Select
+                            {id}
+                            name="stand"
+                            value={data.member.stand}
+                            disabled={readOnly}
+                            options={STAENDE.map((option) => ({ value: option, label: option }))}
+                        />
                     {/snippet}
                 </FormField>
                 <FormField label="Status">
                     {#snippet children({ id })}
-                        <select {id} name="status" disabled={readOnly} class="w-full px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong disabled:opacity-60">
-                            {#each STATUS as option (option)}
-                                <option value={option} selected={data.member.status === option}>{option}</option>
-                            {/each}
-                        </select>
+                        <Select
+                            {id}
+                            name="status"
+                            value={data.member.status}
+                            disabled={readOnly}
+                            options={STATUS.map((option) => ({ value: option, label: option }))}
+                        />
                     {/snippet}
                 </FormField>
                 <FormField label="Eintrittsdatum">
@@ -262,8 +307,8 @@
 
         <Card title="Beiträge" subtitle="Welche Beitragsanteile zahlt dieses Mitglied?">
             <div class="space-y-4">
-                <label class="flex items-start gap-3 px-4 py-3 rounded-xl border border-border">
-                    <input type="checkbox" name="isSecondMember" bind:checked={isSecondMember} disabled={readOnly} class="mt-1 rounded border-border-strong" />
+                <label class="flex items-start gap-3 px-4 py-3 rounded-card border border-border">
+                    <input type="checkbox" name="isSecondMember" bind:checked={isSecondMember} disabled={readOnly} class="mt-1 rounded-control border-border-strong" />
                     <span>
                         <span class="block text-sm font-semibold text-fg">Zweitmitglied</span>
                         <span class="block text-xs text-fg-subtle">Vermerk auf der Beitragsrechnung.</span>
@@ -273,13 +318,13 @@
                 <fieldset class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <legend class="text-sm font-semibold text-fg-muted mb-2">Beitragsanteile</legend>
                     {#each [["stamm", "Stamm"], ["gau", "Gau"], ["landesmark", "Landesmark"], ["bund", "Bund"]] as [key, label] (key)}
-                        <label class="flex items-center gap-2 px-3 py-2 rounded-lg border border-border">
+                        <label class="flex items-center gap-2 px-3 py-2 rounded-control border border-border">
                             <input
                                 type="checkbox"
                                 name={`contributionDues_${key}`}
                                 bind:checked={dues[key as keyof typeof dues]}
                                 disabled={readOnly}
-                                class="rounded border-border-strong"
+                                class="rounded-control border-border-strong"
                             />
                             <span class="text-sm text-fg">{label}</span>
                         </label>
@@ -345,16 +390,17 @@
                 {#each selectedGroups as groupId, index (index)}
                     <div class="flex gap-2 items-center">
                         <label class="sr-only" for={`group-${index}`}>Gruppe {index + 1}</label>
-                        <select
-                            id={`group-${index}`}
-                            bind:value={selectedGroups[index]}
-                            disabled={readOnly}
-                            class="flex-1 px-4 py-3 rounded-xl text-sm bg-surface text-fg border border-border-strong disabled:opacity-60"
-                        >
-                            {#each data.groups ?? [] as group (group.id)}
-                                <option value={group.id}>{group.name}</option>
-                            {/each}
-                        </select>
+                        <div class="flex-1">
+                            <Select
+                                id={`group-${index}`}
+                                bind:value={selectedGroups[index]}
+                                disabled={readOnly}
+                                options={(data.groups ?? []).map((group) => ({
+                                    value: group.id,
+                                    label: group.name
+                                }))}
+                            />
+                        </div>
                         {#if !readOnly}
                             <Button variant="ghost" size="sm" icon="trash" ariaLabel="Gruppe entfernen" onclick={() => removeGroup(index)} />
                         {/if}
@@ -371,8 +417,8 @@
                 <fieldset class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <legend class="text-sm font-semibold text-fg-muted mb-2">Veröffentlichung von Bildern</legend>
                     {#each [["consent_social", "Soziale Medien", data.member.mediaConsent?.socialMedia ?? false], ["consent_website", "Webseite", data.member.mediaConsent?.website ?? false], ["consent_print", "Druckerzeugnisse", data.member.mediaConsent?.print ?? false]] as [name, label, checked] (name)}
-                        <label class="flex items-center gap-2 px-3 py-2 rounded-lg border border-border">
-                            <input type="checkbox" name={name as string} checked={checked as boolean} disabled={readOnly} class="rounded border-border-strong" />
+                        <label class="flex items-center gap-2 px-3 py-2 rounded-control border border-border">
+                            <input type="checkbox" name={name as string} checked={checked as boolean} disabled={readOnly} class="rounded-control border-border-strong" />
                             <span class="text-sm text-fg">{label}</span>
                         </label>
                     {/each}
@@ -382,13 +428,13 @@
                     <div class="space-y-2">
                         <p class="text-sm font-semibold text-fg-muted">Einwilligungserklärung</p>
                         {#if data.member.consentFile}
-                            <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border">
+                            <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-control border border-border">
                                 <a href={`/intern/members/${data.member.id}/files/consent`} class="text-sm text-primary hover:underline truncate">
                                     {data.member.consentFile.filename}
                                 </a>
                                 {#if !readOnly}
                                     <label class="flex items-center gap-1 text-xs text-danger">
-                                        <input type="checkbox" bind:checked={removeConsent} class="rounded border-border-strong" />
+                                        <input type="checkbox" bind:checked={removeConsent} class="rounded-control border-border-strong" />
                                         entfernen
                                     </label>
                                 {/if}
@@ -398,20 +444,20 @@
                             <p class="text-sm text-fg-subtle">Keine Datei hinterlegt.</p>
                         {/if}
                         {#if !readOnly}
-                            <input type="file" name="consent_file" accept=".pdf,image/png,image/jpeg" class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold" />
+                            <input type="file" name="consent_file" accept=".pdf,image/png,image/jpeg" class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-control file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold" />
                         {/if}
                     </div>
 
                     <div class="space-y-2">
                         <p class="text-sm font-semibold text-fg-muted">Aufnahmeantrag</p>
                         {#if data.member.applicationFile}
-                            <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-border">
+                            <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-control border border-border">
                                 <a href={`/intern/members/${data.member.id}/files/application`} class="text-sm text-primary hover:underline truncate">
                                     {data.member.applicationFile.filename}
                                 </a>
                                 {#if !readOnly}
                                     <label class="flex items-center gap-1 text-xs text-danger">
-                                        <input type="checkbox" bind:checked={removeApplication} class="rounded border-border-strong" />
+                                        <input type="checkbox" bind:checked={removeApplication} class="rounded-control border-border-strong" />
                                         entfernen
                                     </label>
                                 {/if}
@@ -421,7 +467,7 @@
                             <p class="text-sm text-fg-subtle">Keine Datei hinterlegt.</p>
                         {/if}
                         {#if !readOnly}
-                            <input type="file" name="application_file" accept=".pdf,image/png,image/jpeg" class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold" />
+                            <input type="file" name="application_file" accept=".pdf,image/png,image/jpeg" class="w-full text-sm text-fg-muted file:mr-3 file:px-4 file:py-2 file:rounded-control file:border-0 file:bg-primary-soft file:text-primary-soft-fg file:font-semibold" />
                         {/if}
                     </div>
                 </div>
@@ -431,13 +477,27 @@
         {#if !readOnly}
             <div class="flex justify-end gap-3 flex-wrap">
                 <Button href={`/intern/members/${data.member.id}`} variant="secondary">Abbrechen</Button>
-                <Button type="submit" variant="primary" icon="check-lg">Speichern</Button>
+                <Button type="submit" variant="primary" icon="check-lg" loading={savingMember}>
+                    Speichern
+                </Button>
             </div>
         {/if}
     </form>
 
     <Card title="Verknüpfte Zugänge" subtitle="Diese Benutzerkonten dürfen die Daten des Mitglieds sehen.">
-        <form method="post" action="?/update-users" class="space-y-4">
+        <form
+            method="post"
+            action="?/update-users"
+            class="space-y-4"
+            use:enhance={() => {
+                savingUsers = true;
+                return async ({ update }) => {
+                    await update({ reset: false });
+                    await invalidateAll();
+                    savingUsers = false;
+                };
+            }}
+        >
             <input type="hidden" name="memberId" value={data.member.id} />
             <input type="hidden" name="userIds" value={JSON.stringify(memberUserIds)} />
 
@@ -446,12 +506,12 @@
             {:else}
                 <ul class="space-y-2">
                     {#each linkedUsers as user (user.id)}
-                        <li class="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-border">
+                        <li class="flex items-center justify-between gap-3 px-4 py-3 rounded-card border border-border">
                             <span class="min-w-0">
                                 <span class="block text-sm font-semibold text-fg truncate">{user.name}</span>
                                 <span class="block text-xs text-fg-subtle truncate">{user.email}</span>
                             </span>
-                            {#if canEdit}
+                            {#if canLinkUsers}
                                 <Button variant="ghost" size="sm" icon="x-lg" ariaLabel={`${user.name} entfernen`} onclick={() => removeUser(user.id)} />
                             {/if}
                         </li>
@@ -459,16 +519,16 @@
                 </ul>
             {/if}
 
-            {#if canEdit}
+            {#if canLinkUsers}
                 <div class="space-y-2">
                     <SearchInput bind:value={userSearch} placeholder="Zugang suchen..." label="Zugang suchen" class="sm:w-full" />
                     {#if userSearch.trim()}
-                        <ul class="max-h-48 overflow-y-auto space-y-1 border border-border rounded-xl p-2">
+                        <ul class="max-h-48 overflow-y-auto space-y-1 border border-border rounded-card p-2">
                             {#each availableUsers as user (user.id)}
                                 <li>
                                     <button
                                         type="button"
-                                        class="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-muted transition"
+                                        class="w-full text-left px-3 py-2 rounded-control hover:bg-surface-muted transition"
                                         onclick={() => addUser(user.id)}
                                     >
                                         <span class="block text-sm text-fg">{user.name}</span>
@@ -482,7 +542,9 @@
                     {/if}
 
                     <div class="flex justify-end">
-                        <Button type="submit" variant="primary" icon="check-lg">Zuordnung speichern</Button>
+                        <Button type="submit" variant="primary" icon="check-lg" loading={savingUsers}>
+                            Zuordnung speichern
+                        </Button>
                     </div>
                 </div>
             {/if}

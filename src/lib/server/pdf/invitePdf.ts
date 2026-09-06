@@ -15,9 +15,18 @@ export interface InvitePdfOrganization {
     city?: string;
 }
 
+export interface InvitePdfOptions {
+    /**
+     * Grundadresse fuer den Beitrittslink. Vorrang hat weiterhin
+     * PUBLIC_APP_URL; sonst zaehlt der Ursprung der Anfrage.
+     */
+    baseUrl?: string;
+}
+
 export async function createInvitePdf(
     member: Member,
-    organization: InvitePdfOrganization = { name: "Internes Portal" }
+    organization: InvitePdfOrganization = { name: "Internes Portal" },
+    options: InvitePdfOptions = {}
 ) {
     const doc = new PDFDocument({
         size: "A4",
@@ -31,9 +40,15 @@ export async function createInvitePdf(
         doc.on("end", () => resolve(Buffer.concat(chunks)))
     );
 
-    // Vorher war die Produktions-Adresse fest einkodiert -- damit zeigte
-    // der QR-Code aus einer Testumgebung immer auf die Produktion.
-    const baseUrl = env.PUBLIC_APP_URL || "http://localhost:5173";
+    /*
+     * Vorher war die Produktions-Adresse fest einkodiert -- damit zeigte der
+     * QR-Code aus einer Testumgebung immer auf die Produktion. Der zweite
+     * Anlauf fiel auf "http://localhost:5173" zurueck, was in einer
+     * Installation ohne PUBLIC_APP_URL genauso unbrauchbar ist: der Ausdruck
+     * sieht richtig aus, der QR-Code fuehrt aber ins Leere, und es faellt
+     * niemandem auf. Deshalb reicht die Route den Ursprung der Anfrage durch.
+     */
+    const baseUrl = (env.PUBLIC_APP_URL || options.baseUrl || "").replace(/\/+$/, "");
     const joinUrl = `${baseUrl}/join/${member.id}`;
     const baseName = `${member.firstname} ${member.lastname}`;
     const displayName = `${member.firstname} ${member.lastname}${member.fahrtenname ? ` (${member.fahrtenname})` : ""}`;

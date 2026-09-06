@@ -1,4 +1,5 @@
 import { fail, redirect } from "@sveltejs/kit";
+import type { RequestEvent } from "@sveltejs/kit";
 import type { Actions, PageServerLoad } from "./$types";
 import { requirePermission } from "$lib/server/permissionGuard";
 import { matchesPermission } from "$lib/permissions/match";
@@ -6,13 +7,20 @@ import {
     addDocument,
     createFolder,
     deleteDocument,
+    deleteDocuments,
     deleteFolder,
     getFolder,
     listDocuments,
     listFolders,
     listShareOptions,
+    moveDocument,
+    moveDocuments,
+    renameDocument,
     setFolderShares,
-    updateFolder
+    updateFolder,
+    type DocumentAccess,
+    type DocumentSort,
+    type SortDirection
 } from "$lib/server/documentService";
 import type { ShareTargetKind } from "$lib/server/shareService";
 
@@ -30,12 +38,40 @@ import type { ShareTargetKind } from "$lib/server/shareService";
  *   files.manage  -- Ordner anlegen, umbenennen, freigeben, löschen. Wer es
  *                    stammesweit hält, sieht auch alle Ordner.
  *   files.upload  -- hochladen, sofern die Freigabe des Ordners es zulässt.
+ *
+ * Jede Action prüft ihr Recht SELBST -- SvelteKit führt bei Form-Actions kein
+ * load aus. Die Aktionen an Dateien prüfen zusätzlich das Schreibrecht am
+ * betroffenen Ordner; beim Verschieben an Quell- UND Zielordner. Diese
+ * zweite Prüfung liegt im Dienst (documentService), damit sie sich nicht
+ * je Aufrufer unterscheidet.
  */
 
 const SHARE_KINDS: ShareTargetKind[] = ["group", "position", "role", "user"];
+const SORTS: DocumentSort[] = ["name", "size", "date", "type"];
 
 function isShareKind(value: string): value is ShareTargetKind {
     return (SHARE_KINDS as string[]).includes(value);
+}
+
+function isSort(value: string): value is DocumentSort {
+    return (SORTS as string[]).includes(value);
+}
+
+/** Wer fragt -- fuer die Schreibrechtpruefung im Dienst. */
+function accessFor(event: RequestEvent): DocumentAccess {
+    return {
+        viewer: { id: event.locals.user?.id, memberIds: event.locals.user?.memberIds ?? [] },
+        manageAll: matchesPermission(event.locals.permissions ?? [], "files.manage")
+    };
+}
+
+/** Alle Kennungen aus einem Mehrfachfeld, ohne Leereintraege. */
+function idsFrom(form: FormData, field: string): string[] {
+    return form
+        .getAll(field)
+        .flatMap((entry) => String(entry).split(","))
+        .map((entry) => entry.trim())
+        .filter(Boolean);
 }
 
 export const load: PageServerLoad = async (event) => {
@@ -60,8 +96,15 @@ export const load: PageServerLoad = async (event) => {
         folders[0] ??
         null;
 
+    // Sortierung aus der Adresszeile -- so bleibt sie beim Neuladen erhalten
+    // und lässt sich verlinken.
+    const sortParam = event.url.searchParams.get("sortieren") ?? "";
+    const sort: DocumentSort = isSort(sortParam) ? sortParam : "date";
+    const direction: SortDirection =
+        event.url.searchParams.get("richtung") === "asc" ? "asc" : "desc";
+
     const [documents, shareOptions] = await Promise.all([
-        current ? listDocuments(current.id) : Promise.resolve([]),
+        current ? listDocuments(current.id, { sort, direction }) : Promise.resolve([]),
         canManage ? listShareOptions() : Promise.resolve(null)
     ]);
 
@@ -76,6 +119,7 @@ export const load: PageServerLoad = async (event) => {
             canWrite: folder.canWrite,
             inherited: folder.inherited,
             documentCount: folder.documentCount,
+            totalBytes: folder.totalBytes,
             childCount: folder.childCount
         })),
         current: current
@@ -87,7 +131,9 @@ export const load: PageServerLoad = async (event) => {
                   path: current.path,
                   shares: current.shares,
                   canWrite: current.canWrite,
-                  inherited: current.inherited
+                  inherited: current.inherited,
+                  documentCount: current.documentCount,
+                  totalBytes: current.totalBytes
               }
             : null,
         documents: documents.map((document) => ({
@@ -102,7 +148,9 @@ export const load: PageServerLoad = async (event) => {
         })),
         shareOptions,
         canManage,
-        canUpload
+        canUpload,
+        sort,
+        direction
     };
 };
 
@@ -124,6 +172,13 @@ export const actions: Actions = {
         throw redirect(303, `/intern/dateien?ordner=${result.id}`);
     },
 
+    /**
+     * Ordner umbenennen und verschieben.
+     *
+     * Die Action gab es schon, sie wurde aber von keiner Stelle angesprochen
+     * -- die Zyklusprüfung in `updateFolder` lief damit ins Leere. Jetzt hängt
+     * ein Formular daran (Modal "Ordner bearbeiten").
+     */
     updateFolder: async (event) => {
         requirePermission(event, "files.manage");
 
@@ -220,7 +275,7 @@ export const actions: Actions = {
             createdBy: event.locals.user?.id ?? null
         });
 
-        if (!result.ok) return fail(400, { error: result.error });
+        if (!result.ok) return fail(result.status ?? 400, { error: result.error });
         return { success: "Die Datei wurde abgelegt." };
     },
 
@@ -241,5 +296,77 @@ export const actions: Actions = {
 
         await deleteDocument(documentId);
         return { success: "Die Datei wurde gelöscht." };
+    },
+
+    renameDocument: async (event) => {
+        requirePermission(event, "files.upload");
+
+        const form = await event.request.formData();
+        const result = await renameDocument(
+            String(form.get("documentId") ?? ""),
+            {
+                title: String(form.get("title") ?? ""),
+                filename: String(form.get("filename") ?? "")
+            },
+            accessFor(event)
+        );
+
+        if (!result.ok) return fail(400, { error: result.error });
+        return { success: "Die Datei wurde umbenannt." };
+    },
+
+    moveDocument: async (event) => {
+        requirePermission(event, "files.upload");
+
+        const form = await event.request.formData();
+        const result = await moveDocument(
+            String(form.get("documentId") ?? ""),
+            String(form.get("targetFolderId") ?? ""),
+            accessFor(event)
+        );
+
+        if (!result.ok) return fail(400, { error: result.error });
+        return { success: "Die Datei wurde verschoben." };
+    },
+
+    /** Sammel-Löschen. Die Rechteprüfung läuft je Datei über ihren Ordner. */
+    deleteDocuments: async (event) => {
+        requirePermission(event, "files.upload");
+
+        const form = await event.request.formData();
+        const ids = idsFrom(form, "documentIds");
+        if (ids.length === 0) return fail(400, { error: "Es war nichts ausgewählt." });
+
+        const result = await deleteDocuments(ids, accessFor(event));
+        if (!result.ok) return fail(403, { error: result.error });
+
+        return {
+            success: result.error
+                ? `${result.deleted} Datei(en) gelöscht. ${result.error}`
+                : `${result.deleted} Datei(en) wurden gelöscht.`
+        };
+    },
+
+    /** Sammel-Verschieben. Quell- und Zielordner werden je Datei geprüft. */
+    moveDocuments: async (event) => {
+        requirePermission(event, "files.upload");
+
+        const form = await event.request.formData();
+        const ids = idsFrom(form, "documentIds");
+        if (ids.length === 0) return fail(400, { error: "Es war nichts ausgewählt." });
+
+        const result = await moveDocuments(
+            ids,
+            String(form.get("targetFolderId") ?? ""),
+            accessFor(event)
+        );
+
+        if (!result.ok) return fail(403, { error: result.error });
+
+        return {
+            success: result.error
+                ? `${result.moved} Datei(en) verschoben. ${result.error}`
+                : `${result.moved} Datei(en) wurden verschoben.`
+        };
     }
 };

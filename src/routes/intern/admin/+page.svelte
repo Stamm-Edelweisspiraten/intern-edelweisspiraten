@@ -65,6 +65,20 @@
             perms: ["system.settings.view"]
         },
         {
+            name: "E-Mail",
+            href: "/intern/admin/email",
+            description: "SMTP-Zugang für Einladungen und Benachrichtigungen.",
+            icon: "envelope-fill",
+            perms: ["system.settings.view"]
+        },
+        {
+            name: "Datenbank",
+            href: "/intern/admin/datenbank",
+            description: "Verbindung, Herkunft der Konfiguration und Migrationsstand.",
+            icon: "database-fill",
+            perms: ["system.settings.view"]
+        },
+        {
             name: "API-Tokens",
             href: "/intern/admin/api-tokens",
             description: "Zugänge für Fremdsysteme über die REST-Schnittstelle.",

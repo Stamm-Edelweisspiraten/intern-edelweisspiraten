@@ -1,23 +1,19 @@
 import type { PageServerLoad } from "./$types";
-import { error } from "@sveltejs/kit";
-import { can } from "$lib/can";
+import { requireAnyPermission } from "$lib/server/permissionGuard";
 
-const ADMIN_PERMS = [
-    "admin.view",
-    "user.view",
-    "groups.view",
-    "system.settings.view",
-    "admin.*",
-    "*"
-];
+/**
+ * Einstiegsseite der Verwaltung.
+ *
+ * Die Pruefung lief frueher ueber ein eigenes Array und can(). Zwei Eintraege
+ * darin waren wirkungslos: can(perms, "admin.*") fragt, ob die Rechteliste
+ * die ZEICHENKETTE "admin.*" abdeckt -- wer "*" oder "admin.*" besitzt,
+ * erfuellt ohnehin schon "admin.view". Fuer berechtigte Zugaenge aendert sich
+ * durch das Streichen also nichts.
+ */
+const ADMIN_PERMS = ["admin.view", "user.view", "groups.view", "system.settings.view"];
 
-export const load: PageServerLoad = async ({ locals }) => {
-    const perms = locals.permissions ?? [];
+export const load: PageServerLoad = async (event) => {
+    requireAnyPermission(event, ADMIN_PERMS);
 
-    const allowed = ADMIN_PERMS.some((p) => can(perms, p));
-    if (!allowed) {
-        throw error(403, "Keine Berechtigung");
-    }
-
-    return { permissions: perms };
+    return { permissions: event.locals.permissions ?? [] };
 };

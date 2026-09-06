@@ -128,18 +128,54 @@
     </div>
 
     <!--
-        Diagramm UND Zahlen: die Jahressummen stehen als Text darunter, damit
-        die Karte ohne JavaScript und mit einem Screenreader vollständig
-        lesbar bleibt.
+        Diagramm NEBEN seiner Tabelle, nicht statt ihr: die Monatswerte stehen
+        vollständig links daneben, damit die Karte ohne JavaScript und mit
+        einem Screenreader lesbar bleibt. Die Jahressummen folgen darunter.
     -->
     <Card
         title={`Verlauf ${data.monthly.year}`}
         subtitle="Erträge und Aufwendungen je Monat."
         meta={formatEuro(data.monthly.result)}
     >
-        <MonthlyBarChart months={data.monthly.months} title="" />
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+            <div class="min-w-0 overflow-x-auto">
+                <table class="w-full text-sm">
+                    <caption class="sr-only">
+                        Erträge und Aufwendungen je Monat des Jahres {data.monthly.year}
+                    </caption>
+                    <thead>
+                        <tr class="border-b border-border text-left">
+                            <th scope="col" class="py-2 pr-3 font-semibold text-fg-muted">Monat</th>
+                            <th scope="col" class="py-2 px-3 font-semibold text-fg-muted text-right">
+                                Erträge
+                            </th>
+                            <th scope="col" class="py-2 pl-3 font-semibold text-fg-muted text-right">
+                                Aufwendungen
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {#each data.monthly.months as month (month.month)}
+                            <tr class="border-b border-border last:border-b-0">
+                                <th scope="row" class="py-1.5 pr-3 font-normal text-fg text-left">
+                                    {month.label}
+                                </th>
+                                <td class="py-1.5 px-3 text-right tabular-figures text-fg">
+                                    {month.income ? formatEuro(month.income) : "–"}
+                                </td>
+                                <td class="py-1.5 pl-3 text-right tabular-figures text-fg">
+                                    {month.expense ? formatEuro(month.expense) : "–"}
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
 
-        <dl class="grid grid-cols-3 gap-4 mt-4 text-sm">
+            <MonthlyBarChart months={data.monthly.months} title="" />
+        </div>
+
+        <dl class="grid grid-cols-3 gap-4 mt-6 text-sm">
             <div>
                 <dt class="text-fg-subtle">Erträge</dt>
                 <dd class="font-semibold tabular-figures text-success">
@@ -161,7 +197,7 @@
         </dl>
 
         <p class="text-xs text-fg-subtle mt-3">
-            Die Monatswerte im Einzelnen stehen unter
+            Ergebnis je Monat, Bereiche und Fälligkeitsstaffel stehen unter
             <a class="underline" href="/intern/finance/reports">Berichte</a>.
         </p>
     </Card>

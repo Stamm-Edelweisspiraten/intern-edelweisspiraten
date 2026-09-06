@@ -1,7 +1,7 @@
 <script lang="ts">
     import { PieChart } from "layerchart";
-    import ChartFrame from "./ChartFrame.svelte";
-    import { seriesColor } from "./colors";
+    import ChartFrame, { type ChartSize } from "./ChartFrame.svelte";
+    import { chartTooltip, seriesColor, tooltipEuro } from "./colors";
     import { formatEuro } from "$lib/money";
 
     /**
@@ -20,11 +20,11 @@
      */
     let {
         spheres,
-        height = 240,
+        size = "md",
         title = "Erträge nach steuerlichen Bereichen"
     }: {
         spheres: { sphere: string; label: string; income: number }[];
-        height?: number;
+        size?: ChartSize;
         title?: string;
     } = $props();
 
@@ -40,11 +40,16 @@
     );
 
     const isEmpty = $derived(data.length === 0);
+
+    const total = $derived(spheres.reduce((sum, entry) => sum + Math.max(entry.income, 0), 0));
+
+    const tooltip = chartTooltip({ value: tooltipEuro });
 </script>
 
 <ChartFrame
     {title}
-    {height}
+    {size}
+    meta={isEmpty ? undefined : `${formatEuro(total)} Erträge`}
     {isEmpty}
     empty="Im Zeitraum wurden keine Erträge gebucht."
 >
@@ -53,27 +58,32 @@
             <span class="inline-flex items-center gap-1.5">
                 <span class="w-3 h-3 rounded-sm" style={`background: ${entry.color}`}></span>
                 {entry.label}
-                <span class="text-fg-subtle tabular-nums">
+                <span class="text-fg-subtle tabular-figures">
                     {formatEuro(Math.round(entry.value * 100))}
                 </span>
             </span>
         {/each}
     {/snippet}
 
-    <!--
-        `c` und `cRange` statt einer Farbe je Datensatz: sonst vergibt
-        LayerChart eine eigene Palette, und die Beschriftung daneben zeigte
-        andere Farben als der Ring. Die Reihenfolge von `cRange` entspricht
-        der Reihenfolge der Daten, deshalb stimmt beides überein.
-    -->
-    <PieChart
-        {data}
-        key="key"
-        label="label"
-        value="value"
-        c="key"
-        cRange={data.map((entry) => entry.color)}
-        innerRadius={-40}
-        cornerRadius={2}
-    />
+    {#snippet children()}
+        <!--
+            `c` und `cRange` statt einer Farbe je Datensatz: sonst vergibt
+            LayerChart eine eigene Palette, und die Beschriftung daneben zeigte
+            andere Farben als der Ring. Die Reihenfolge von `cRange` entspricht
+            der Reihenfolge der Daten, deshalb stimmt beides überein.
+        -->
+        <PieChart
+            {data}
+            key="key"
+            label="label"
+            value="value"
+            c="key"
+            cRange={data.map((entry) => entry.color)}
+            innerRadius={-40}
+            cornerRadius={2}
+            padAngle={0.02}
+            padding={{ top: 4, bottom: 4 }}
+            props={{ tooltip }}
+        />
+    {/snippet}
 </ChartFrame>

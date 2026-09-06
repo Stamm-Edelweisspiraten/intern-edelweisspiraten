@@ -38,6 +38,10 @@ maybe("Demodaten", () => {
         const { db } = await import("$lib/server/db");
         const schema = await import("$lib/server/db/schema");
 
+        // Vor den Terminen: beide zeigen mit ON DELETE SET NULL dorthin, und
+        // eine Galerie haelt ausserdem Dateien fest (ON DELETE RESTRICT).
+        await db.delete(schema.surveys);
+        await db.delete(schema.galleries);
         await db.delete(schema.events);
         await db.delete(schema.folders);
         await db.delete(schema.orders);
@@ -52,7 +56,7 @@ maybe("Demodaten", () => {
         await db.delete(schema.groups);
     });
 
-    it("legt Gruppen, Mitglieder, Ordner und Termine an", async () => {
+    it("legt Gruppen, Mitglieder, Ordner, Termine, Umfragen und Galerien an", async () => {
         if (hadData) {
             // Eine gefüllte Datenbank wird nicht angetastet -- genau das ist
             // die Schutzregel von seedDemoData.
@@ -73,7 +77,43 @@ maybe("Demodaten", () => {
         expect(result.members).toBeGreaterThan(0);
         expect(result.folders).toBe(2);
         expect(result.events).toBe(3);
+        expect(result.surveys).toBe(1);
+        expect(result.galleries).toBe(1);
         expect(result.transactions).toBeGreaterThan(0);
+    });
+
+    /**
+     * Die Demoumfrage soll alle fuenf Feldtypen zeigen -- sonst sieht man auf
+     * der Seite nur Textfelder und haelt das fuer den Funktionsumfang.
+     */
+    it("legt die Demoumfrage veroeffentlicht und mit allen Feldtypen an", async () => {
+        if (hadData) return;
+
+        const { db } = await import("$lib/server/db");
+        const schema = await import("$lib/server/db/schema");
+
+        const [survey] = await db.select().from(schema.surveys).limit(1);
+        expect(survey).toBeTruthy();
+        expect(survey.status).toBe("published");
+        // An den Termin gekoppelt -- der haeufigste Fall.
+        expect(survey.eventId).not.toBeNull();
+
+        const { eq } = await import("drizzle-orm");
+        const fields = await db
+            .select()
+            .from(schema.surveyFields)
+            .where(eq(schema.surveyFields.surveyId, survey.id));
+
+        expect(new Set(fields.map((field) => field.type))).toEqual(
+            new Set(["text", "longtext", "single", "multi", "boolean"])
+        );
+
+        // Auswahlfelder ohne Optionen liessen sich gar nicht veroeffentlichen.
+        for (const field of fields) {
+            if (field.type === "single" || field.type === "multi") {
+                expect(field.options.length).toBeGreaterThan(1);
+            }
+        }
     });
 
     it("gibt das Amt der Meutenführung die Rolle Gruppenleitung", async () => {

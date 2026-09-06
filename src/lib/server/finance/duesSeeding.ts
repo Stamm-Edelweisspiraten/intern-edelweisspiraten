@@ -10,6 +10,7 @@ import { createInvoice } from "./invoiceService";
 import { getFiscalYear } from "./yearService";
 import { getCategoryByName } from "./categoryService";
 import { KIND_DUES } from "./types";
+import { isUniqueViolation } from "$lib/server/db/errors";
 
 /**
  * Anlegen der Jahresbeiträge.
@@ -136,7 +137,7 @@ export async function seedYearlyDues(fiscalYearId: string, user: string): Promis
             created += 1;
         } catch (err: unknown) {
             // 23505 = der eindeutige Index hat eine Doppelanlage verhindert.
-            if ((err as { code?: string })?.code !== "23505") {
+            if (!isUniqueViolation(err)) {
                 console.error("Beitrag konnte nicht angelegt werden:", entry.member, err);
             }
         }

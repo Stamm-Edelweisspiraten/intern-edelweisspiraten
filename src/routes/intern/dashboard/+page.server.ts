@@ -1,10 +1,13 @@
 import type { PageServerLoad } from "./$types";
-import { requirePermission } from "$lib/server/permissionGuard";
+import { groupsWithPermission, requirePermission } from "$lib/server/permissionGuard";
 import { getAllMembers } from "$lib/server/memberService";
 import { getAllGroups } from "$lib/server/groupService";
 import { computeOutstanding } from "$lib/server/finance/invoiceService";
+import { agingReport } from "$lib/server/finance/reportService";
+import { listFiscalYears } from "$lib/server/finance/yearService";
 import { listOrdersForMembers } from "$lib/server/kaemmerer/orderService";
 import { listEvents, getOwnResponses } from "$lib/server/eventService";
+import { listSurveys } from "$lib/server/surveyService";
 import { matchesPermission } from "$lib/permissions/match";
 import { sumCents } from "$lib/money";
 
@@ -29,25 +32,73 @@ export const load: PageServerLoad = async (event) => {
 
     const canSeeEvents = matchesPermission(event.locals.permissions ?? [], "events.view");
 
-    const [members, groups, invoiceLists, ownOrders, upcomingEvents] = await Promise.all([
-        getAllMembers(),
-        getAllGroups(),
-        Promise.all(memberIds.map((memberId) => computeOutstanding({ memberId }))),
-        listOrdersForMembers(memberIds),
-        canSeeEvents
-            ? listEvents(
-                  { id: event.locals.user?.id, memberIds },
-                  {
-                      manageAll: matchesPermission(
-                          event.locals.permissions ?? [],
-                          "events.manage"
-                      ),
-                      range: "upcoming",
-                      limit: 5
-                  }
-              )
-            : Promise.resolve([])
-    ]);
+    /**
+     * Die Faelligkeitsstaffel zeigt die offenen Forderungen des ganzen
+     * Stammes, nicht die eigenen. Sie haengt deshalb an genau dem Recht, das
+     * auch die Seite "Offene Posten" der Kasse verlangt: `finance.view`. Wer
+     * es nicht hat, bekommt die Zahlen gar nicht erst geschickt.
+     */
+    const canSeeFinance = matchesPermission(event.locals.permissions ?? [], "finance.view");
+
+    /**
+     * Umfragen zaehlen grosszuegiger als die uebrigen Kacheln: `surveys.view`
+     * kann auch gruppengebunden vorliegen, und wer nur fuer seine Meute
+     * antworten darf, soll die offene Umfrage trotzdem auf der Startseite
+     * sehen. Was er wirklich sieht, entscheidet `listSurveys` ueber die
+     * Freigaben -- die Kachel raet nichts.
+     */
+    const surveyGroups = groupsWithPermission(event, "surveys.view");
+    const surveyManage = groupsWithPermission(event, "surveys.manage");
+    const canSeeSurveys = surveyGroups === null || surveyGroups.length > 0;
+
+    const [
+        members,
+        groups,
+        invoiceLists,
+        ownOrders,
+        upcomingEvents,
+        fiscalYears,
+        openSurveys
+    ] = await Promise.all([
+            getAllMembers(),
+            getAllGroups(),
+            Promise.all(memberIds.map((memberId) => computeOutstanding({ memberId }))),
+            listOrdersForMembers(memberIds),
+            canSeeEvents
+                ? listEvents(
+                      { id: event.locals.user?.id, memberIds },
+                      {
+                          manageAll: matchesPermission(
+                              event.locals.permissions ?? [],
+                              "events.manage"
+                          ),
+                          range: "upcoming",
+                          limit: 5
+                      }
+                  )
+                : Promise.resolve([]),
+            canSeeFinance ? listFiscalYears() : Promise.resolve([]),
+            canSeeSurveys
+                ? listSurveys(
+                      { id: event.locals.user?.id, memberIds },
+                      {
+                          manageAll: surveyManage === null,
+                          manageGroups: surveyManage,
+                          status: "published"
+                      }
+                  )
+                : Promise.resolve([])
+        ]);
+
+    // Dieselbe Staffel wie in den Berichten und bei den offenen Posten der
+    // Kasse: ueber alle nicht archivierten Geschaeftsjahre.
+    const aging = canSeeFinance
+        ? await agingReport({
+              fiscalYearIds: fiscalYears
+                  .filter((year) => year.status !== "archived")
+                  .map((year) => year.id)
+          })
+        : null;
 
     /**
      * Zu jedem kommenden Termin: fehlt noch eine Rueckmeldung fuer eines der
@@ -125,6 +176,7 @@ export const load: PageServerLoad = async (event) => {
 
     return {
         userName,
+        aging,
         birthdays: upcoming,
         events: upcomingEvents.map((entry) => ({
             id: entry.id,
@@ -134,8 +186,26 @@ export const load: PageServerLoad = async (event) => {
             allDay: entry.allDay,
             cancelled: entry.status === "cancelled",
             /** Wie viele der eigenen Mitglieder noch nicht zurueckgemeldet haben. */
-            openResponses: openByEvent.get(entry.id) ?? 0
+            openResponses: openByEvent.get(entry.id) ?? 0,
+            /** Farbe des Termins -- dieselbe wie in Liste und Monatsraster. */
+            color: entry.color
         })),
+        /*
+         * Nur laufende Umfragen: ein Entwurf ist nicht zu beantworten, und
+         * eine geschlossene gehoert nicht mehr auf die Startseite. Die Frist
+         * wird hier geprueft, weil `listSurveys` sie bewusst nicht filtert --
+         * die Uebersicht zeigt auch abgelaufene an.
+         */
+        surveys: openSurveys
+            .filter((entry) => !entry.closesAt || entry.closesAt.getTime() > Date.now())
+            .filter((entry) => !entry.opensAt || entry.opensAt.getTime() <= Date.now())
+            .slice(0, 5)
+            .map((entry) => ({
+                id: entry.id,
+                title: entry.title,
+                closesAt: entry.closesAt?.toISOString() ?? null,
+                responseCount: entry.responseCount
+            })),
         hasLinkedMembers: memberIds.length > 0,
         outstandingTotal: sumCents(openInvoices.map((invoice) => invoice.outstanding)),
         outstandingCount: openInvoices.length,

@@ -3,6 +3,7 @@
     import OutstandingTable from "$lib/components/finance/OutstandingTable.svelte";
     import { AgingBarChart } from "$lib/components/finance/charts";
     import { formatEuro } from "$lib/money";
+    import { formatDate } from "$lib/format";
     import type { ActionData, PageData } from "./$types";
 
     let { data, form }: { data: PageData; form: ActionData } = $props();
@@ -49,7 +50,11 @@
         Rueckstaende sind.
     -->
     {#if data.invoices.length > 0}
-        <Card title="Fälligkeitsstaffel" subtitle="Offene Forderungen nach Alter.">
+        <Card
+            title="Fälligkeitsstaffel"
+            subtitle="Offene Forderungen nach Alter der Fälligkeit."
+            meta={`Stand ${formatDate(data.aging.at)}`}
+        >
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
                 <div class="min-w-0 overflow-x-auto">
                     <table class="w-full text-sm">

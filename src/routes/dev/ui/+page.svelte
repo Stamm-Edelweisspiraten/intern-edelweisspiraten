@@ -13,9 +13,15 @@
         SearchInput,
         Select,
         StatTile,
+        Textarea,
         TextInput
     } from "$lib/components/ui";
     import type { Column } from "$lib/components/ui";
+    import {
+        DEFAULT_EVENT_COLOR,
+        EVENT_COLORS,
+        eventColorVars
+    } from "$lib/events/colors";
     import {
         AgingBarChart,
         BalanceLineChart,
@@ -114,6 +120,8 @@
     let modalOpen = $state(false);
     let confirmOpen = $state(false);
     let textValue = $state("");
+    let longValue = $state("");
+    let eventColor = $state(DEFAULT_EVENT_COLOR);
     let selectValue = $state("");
     let theme = $state<Theme>("system");
 
@@ -186,6 +194,54 @@
         </div>
     </Card>
 
+    <Card
+        title="Terminfarben"
+        subtitle="Eigene Reihe neben den semantischen Tokens – die Farbe kennzeichnet die Art, nicht den Status"
+    >
+        <fieldset class="space-y-3">
+            <legend class="sr-only">Farbe des Termins</legend>
+            <div class="flex flex-wrap gap-2">
+                {#each EVENT_COLORS as color (color.key)}
+                    <label
+                        class="flex items-center gap-2 px-3 py-2 rounded-control border cursor-pointer text-sm
+                               {eventColor === color.key
+                            ? 'border-primary'
+                            : 'border-border hover:bg-surface-muted'}"
+                        style={eventColorVars(color.key)}
+                    >
+                        <input
+                            type="radio"
+                            name="dev-event-color"
+                            value={color.key}
+                            bind:group={eventColor}
+                            class="sr-only"
+                        />
+                        <span
+                            class="inline-block size-4 rounded-control border border-border"
+                            style="background: var(--ev)"
+                            aria-hidden="true"
+                        ></span>
+                        <span class="text-fg">{color.name}</span>
+                        {#if eventColor === color.key}
+                            <i class="bi bi-check-lg text-primary" aria-hidden="true"></i>
+                        {/if}
+                    </label>
+                {/each}
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+                {#each EVENT_COLORS as color (color.key)}
+                    <span
+                        class="px-3 py-1 rounded-control text-sm"
+                        style="{eventColorVars(color.key)} background: var(--ev-soft); color: var(--ev-soft-fg)"
+                    >
+                        {color.name}
+                    </span>
+                {/each}
+            </div>
+        </fieldset>
+    </Card>
+
     <Card title="Formularfelder" subtitle="Label und Feld sind korrekt verknüpft">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField label="Vorname" required>
@@ -206,6 +262,22 @@
             <FormField label="Suche">
                 {#snippet children()}
                     <SearchInput bind:value={search} class="sm:w-full" />
+                {/snippet}
+            </FormField>
+            <FormField label="Beschreibung" hint="Ersetzt das roh gebaute textarea.">
+                {#snippet children({ id, describedBy })}
+                    <Textarea
+                        {id}
+                        {describedBy}
+                        bind:value={longValue}
+                        rows={3}
+                        placeholder="Ein paar Sätze zum Termin."
+                    />
+                {/snippet}
+            </FormField>
+            <FormField label="Beschreibung mit Fehler" error="Bitte etwas eingeben.">
+                {#snippet children({ id, describedBy, invalid })}
+                    <Textarea {id} {describedBy} {invalid} rows={3} />
                 {/snippet}
             </FormField>
             <FormField label="Auswahl" hint="Ersetzt das roh gebaute select.">

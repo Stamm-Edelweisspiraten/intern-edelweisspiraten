@@ -65,11 +65,11 @@
             <fieldset class="space-y-2">
                 <legend class="block text-sm font-semibold text-fg-muted mb-1">Kontoart</legend>
                 <div class="flex gap-3 flex-wrap">
-                    <label class="flex items-center gap-2 px-4 py-3 rounded-xl border border-border cursor-pointer hover:bg-surface-muted transition">
+                    <label class="flex items-center gap-2 px-4 py-3 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition">
                         <input type="radio" name="type" value="parent" checked />
                         <span class="text-sm text-fg">Erwachsen / Eltern</span>
                     </label>
-                    <label class="flex items-center gap-2 px-4 py-3 rounded-xl border border-border cursor-pointer hover:bg-surface-muted transition">
+                    <label class="flex items-center gap-2 px-4 py-3 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition">
                         <input type="radio" name="type" value="child" />
                         <span class="text-sm text-fg">Kind</span>
                     </label>
@@ -81,9 +81,9 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {#each data.roles as role (role.id)}
                         <label
-                            class="flex items-start gap-3 px-4 py-3 rounded-xl border border-border cursor-pointer hover:bg-surface-muted transition"
+                            class="flex items-start gap-3 px-4 py-3 rounded-control border border-border cursor-pointer hover:bg-surface-muted transition"
                         >
-                            <input type="checkbox" name="roles" value={role.id} class="mt-1 rounded border-border-strong" />
+                            <input type="checkbox" name="roles" value={role.id} class="mt-1 rounded-control border-border-strong" />
                             <span class="min-w-0">
                                 <span class="block text-sm font-semibold text-fg">{role.name}</span>
                                 {#if role.description}
